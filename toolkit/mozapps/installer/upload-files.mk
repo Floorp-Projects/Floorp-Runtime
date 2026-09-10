@@ -31,45 +31,6 @@ ifeq ($(MOZ_PKG_FORMAT),APK)
 MAKE_PACKAGE = true
 endif
 
-NO_PKG_FILES += \
-	core \
-	bsdecho \
-	js \
-	js-config \
-	jscpucfg \
-	nsinstall \
-	viewer \
-	TestGtkEmbed \
-	elf-dynstr-gc \
-	mangle* \
-	maptsv* \
-	mfc* \
-	msdump* \
-	msmap* \
-	nm2tsv* \
-	nsinstall* \
-	res/samples \
-	res/throbber \
-	shlibsign* \
-	certutil* \
-	pk12util* \
-	BadCertAndPinningServer* \
-	DelegatedCredentialsServer* \
-	EncryptedClientHelloServer* \
-	FaultyServer* \
-	OCSPStaplingServer* \
-	SanctionsTestServer* \
-	GenerateOCSPResponse* \
-	chrome/chrome.rdf \
-	chrome/app-chrome.manifest \
-	chrome/overlayinfo \
-	components/compreg.dat \
-	components/xpti.dat \
-	content_unit_tests \
-	necko_unit_tests \
-	*.dSYM \
-	$(NULL)
-
 # If a manifest has not been supplied, the following
 # files should be excluded from the package too
 ifndef MOZ_PKG_MANIFEST
@@ -80,24 +41,10 @@ ifdef MOZ_DMD
   NO_PKG_FILES += SmokeDMD
 endif
 
-DEFINES += -DDLL_PREFIX=$(DLL_PREFIX) -DDLL_SUFFIX=$(DLL_SUFFIX) -DBIN_SUFFIX=$(BIN_SUFFIX)
-
-ifeq (cocoa,$(MOZ_WIDGET_TOOLKIT))
-  DEFINES += -DDIR_MACOS=Contents/MacOS/ -DDIR_RESOURCES=Contents/Resources/
-else
-  DEFINES += -DDIR_MACOS= -DDIR_RESOURCES=
-endif
-
-ifdef MOZ_FOLD_LIBS
-  DEFINES += -DMOZ_FOLD_LIBS=1
-endif
+DEFINES += $(PACKAGE_TOOLKIT_DEFINES)
 
 ifndef MOZ_PACKAGER_FORMAT
   MOZ_PACKAGER_FORMAT = $(error MOZ_PACKAGER_FORMAT is not set)
-endif
-
-ifneq (android,$(MOZ_WIDGET_TOOLKIT))
-  JAR_COMPRESSION ?= none
 endif
 
 ifeq ($(OS_TARGET), WINNT)
@@ -176,6 +123,11 @@ endif
 
 ifdef MOZ_STUB_INSTALLER
   UPLOAD_FILES += $(call QUOTED_WILDCARD,$(DIST)/$(PKG_PATH)$(PKG_STUB_BASENAME).exe)
+endif
+
+ifdef MOZ_APPSERVICES_IN_TREE
+# Upload `libmegazord.so` artifacts for use in artifact builds.
+UPLOAD_FILES += $(call QUOTED_WILDCARD,$(DIST)/$(PKG_PATH)$(LIBMEGAZORD_SO_ARTIFACTS_ARCHIVE_BASENAME).zip)
 endif
 
 # Upload `.xpt` artifacts for use in artifact builds.

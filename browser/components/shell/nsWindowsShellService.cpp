@@ -3017,7 +3017,3 @@ nsWindowsShellService::EnumerateInstallShortcuts(
   promise.forget(aPromise);
   return NS_OK;
 }
-
-nsWindowsShellService::nsWindowsShellService() {}
-
-nsWindowsShellService::~nsWindowsShellService() {}

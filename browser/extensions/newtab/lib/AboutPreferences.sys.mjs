@@ -479,6 +479,14 @@ export class AboutPreferences {
         type: "bool",
       },
       {
+        id: "browser.newtabpage.activity-stream.widgets.system.recentSearches.enabled",
+        type: "bool",
+      },
+      {
+        id: "browser.newtabpage.activity-stream.widgets.recentSearches.enabled",
+        type: "bool",
+      },
+      {
         id: "browser.newtabpage.activity-stream.feeds.topsites",
         type: "bool",
       },
@@ -1456,6 +1464,18 @@ export class AboutPreferences {
       visible: widgetToggleVisible("pictureOfTheDay"),
     });
 
+    Preferences.addSetting({
+      id: "recentSearchesEnabled",
+      pref: "browser.newtabpage.activity-stream.widgets.system.recentSearches.enabled",
+    });
+
+    Preferences.addSetting({
+      id: "recentSearches",
+      pref: "browser.newtabpage.activity-stream.widgets.recentSearches.enabled",
+      deps: ["recentSearchesEnabled"],
+      visible: widgetToggleVisible("recentSearches"),
+    });
+
     // Shortcuts
     Preferences.addSetting({
       id: "shortcuts",
@@ -1684,6 +1704,10 @@ export class AboutPreferences {
             {
               id: "pictureOfTheDay",
               l10nId: "home-prefs-picture-header",
+            },
+            {
+              id: "recentSearches",
+              l10nId: "home-prefs-recent-searches-header",
             },
             ...(novaEnabled && widgetsSystemEnabled ? [weatherItem] : []),
           ],
