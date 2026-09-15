@@ -1,0 +1,26 @@
+diff --git a/uriloader/exthandler/tests/moz.build b/uriloader/exthandler/tests/moz.build
+index a41eceefce4..48db8acdbe8 100644
+--- a/uriloader/exthandler/tests/moz.build
++++ b/uriloader/exthandler/tests/moz.build
+@@ -23,7 +23,7 @@ GeckoSimplePrograms(
+     linkage=None,
+ )
+ 
+-if CONFIG["COMPILE_ENVIRONMENT"]:
++if CONFIG["COMPILE_ENVIRONMENT"] and CONFIG["MOZ_PGO"] != "1":
+     TEST_HARNESS_FILES.xpcshell.uriloader.exthandler.tests.unit += [
+         "!WriteArgument%s" % CONFIG["BIN_SUFFIX"]
+     ]
+diff --git a/xpcom/tests/moz.build b/xpcom/tests/moz.build
+index 2e52409e64d..40d38b39ea5 100644
+--- a/xpcom/tests/moz.build
++++ b/xpcom/tests/moz.build
+@@ -34,7 +34,7 @@ if CONFIG["MOZ_ASAN"] or CONFIG["MOZ_UBSAN"] or CONFIG["MOZ_TSAN"]:
+ 
+ XPCSHELL_TESTS_MANIFESTS += ["unit/xpcshell.toml"]
+ 
+-if CONFIG["COMPILE_ENVIRONMENT"]:
++if CONFIG["COMPILE_ENVIRONMENT"] and CONFIG["MOZ_PGO"] != "1":
+     TEST_HARNESS_FILES.xpcshell.xpcom.tests.unit += [
+         "!%s%s" % (f, CONFIG["BIN_SUFFIX"]) for f in test_progs
+     ]
