@@ -22,40 +22,6 @@ use crate::util::{MaxRect, ScaleOffset};
 use crate::visibility::{DrawState, PrimitiveDrawHeader, FrameVisibilityContext};
 pub use crate::picture_composite_mode::get_surface_rects;
 
-/// Walk the filter chain rooted at `task_id` and make every task in it that
-/// samples `src_task_id` depend on `dep_task_id` as well.
-///
-/// The tasks that sample the chain's source sit at the *start* of the chain, not
-/// at the root (which is its output), so making the root alone depend on
-/// `dep_task_id` is not enough. How many there are depends on the chain:
-///  - Blur: one, the vertical blur - or the first downscale, for a blur large
-///    enough that `new_blur` scales it down first.
-///  - Drop-shadow: one. Every shadow blurs from the same source task, but only
-///    the last chain is reachable from the root, and all of the shadow quads
-///    sample that one task.
-///  - SVG filter graph: potentially several, since any node in the graph may
-///    take SourceGraphic as an input.
-///
-/// Filter chains are small and acyclic, so a plain recursive walk is enough.
-fn order_readers_after(
-    rg_builder: &mut RenderTaskGraphBuilder,
-    task_id: RenderTaskId,
-    src_task_id: RenderTaskId,
-    dep_task_id: RenderTaskId,
-) {
-    let children = rg_builder.get_task(task_id).children.clone();
-
-    if children.contains(&src_task_id) {
-        rg_builder.add_dependency(task_id, dep_task_id);
-    }
-
-    for child_id in children {
-        if child_id != src_task_id {
-            order_readers_after(rg_builder, child_id, src_task_id, dep_task_id);
-        }
-    }
-}
-
 /// Fetch the raster spatial node of a picture render task (used to relate the
 /// raster spaces of a resolve target and the surface(s) it reads back from).
 fn raster_spatial_node(
@@ -203,6 +169,14 @@ pub struct SurfaceInfo {
     pub allow_snapping: bool,
     /// If true, the scissor rect must be set when drawing this surface
     pub force_scissor_rect: bool,
+    /// For an SVGFEGraph surface, the mapping from the space the filter
+    /// subregions are authored in (the filtered element's spatial node) to this
+    /// surface's spatial node. Non-identity for backdrop filters, whose graph
+    /// composites in backdrop-root space; it is a full scale+offset because an
+    /// intervening reference frame may scale (e.g. pdf.js scales its text
+    /// spans), so a translation alone is not enough. All SVGFE coverage paths
+    /// map the subregions through this so they line up with the geometry.
+    pub svgfe_source_map: ScaleOffset,
 }
 
 impl SurfaceInfo {
@@ -250,6 +224,7 @@ impl SurfaceInfo {
             local_scale,
             allow_snapping,
             force_scissor_rect,
+            svgfe_source_map: ScaleOffset::identity(),
             // TODO: At the moment all culling is done in the root device space but
             // but the plan is to move it to raster space.
             culling_rect: global_culling_rect.cast_unit(),
@@ -860,15 +835,14 @@ impl SurfaceBuilder {
                                 );
 
                                 // If the parent is a chained surface (e.g. a CSS blur or drop-shadow
-                                // filter), the tasks in that chain sample the same texture that
-                                // new_task_id draws the post-backdrop-capture content into. They must
-                                // run after new_task_id, otherwise those primitives are missing from
-                                // the filter output.
+                                // filter), its filter pass (root_task_id) reads from the same texture
+                                // as parent_task_id. Ensure it executes after new_task_id has written
+                                // post-backdrop-capture content (e.g. backdrop-filter children) to
+                                // that texture, otherwise those primitives will be missing from the
+                                // filter output.
                                 if let Some(root_task_id) = *parent_root_task_id {
-                                    order_readers_after(
-                                        rg_builder,
+                                    rg_builder.add_dependency(
                                         root_task_id,
-                                        *parent_task_id,
                                         new_task_id,
                                     );
                                 }

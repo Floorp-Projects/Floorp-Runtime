@@ -112,16 +112,8 @@
   <string name="home_screen_shortcut_open_new_private_tab_2">یئنی گیزلی تاغ</string>
   <!-- Shortcut action to open Passwords screen -->
   <string name="home_screen_shortcut_passwords">رمز‌لر</string>
-  <!--
-    Recent Tabs
-
-    Header text for jumping back into the recent tab in the home screen
-  -->
-  <string name="recent_tabs_header">دالیا قاییت</string>
   <!-- Button text for showing all the tabs in the tabs tray -->
   <string name="recent_tabs_show_all">هامیسینی گؤستر</string>
-  <!-- Content description for the button which navigates the user to show all recent tabs in the tabs tray. -->
-  <string name="recent_tabs_show_all_content_description_2">بوتون سون تاغلاری گؤستر دویمه‌سی</string>
   <!-- Text for button in synced tab card that opens synced tabs tray -->
   <string name="recent_tabs_see_all_synced_tabs_button_text">بوتون دؤنگل اولموش تاغلارا باخین</string>
   <!-- Accessibility description for device icon used for recent synced tab -->
@@ -339,8 +331,6 @@
   <string name="preferences_add_private_browsing_shortcut">گیزلی مورور شورتکاتینی آرتیر</string>
   <!-- Preference for enabling "HTTPS-Only" mode -->
   <string name="preferences_https_only_title">یالنیز HTTPS حالتی</string>
-  <!-- Preference for removing cookie/consent banners from sites automatically in private mode. See reduce_cookie_banner_summary for additional context. -->
-  <string name="preferences_cookie_banner_reduction_private_mode">گیزلی موروردا کوکی بنر مسدود ائلینی</string>
   <!-- Description of the preference to enable "HTTPS-Only" mode. -->
   <string name="preferences_https_only_summary">داها چوْخ گوونلیک اوچون HTTPS رمزله‌مه پروْتوکولوُندان ایستیفاده ائده‌رک سایتلارا اوْتوماتیک قوْشوُلماغا چالیْشیر.</string>
   <!-- Summary of https only preference if https only is set to off -->
@@ -471,8 +461,6 @@
   <string name="customize_addon_collection_user_hint">مجموعه صاحیبی (قوللانیجیْ آیدی‌سی)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">اوزانتیْ مجموعه‌سی دییشدیریلدی. دییشمه‌لری یئرینه سالماق اوچون اپ‌دن چیخیلیر…</string>
-  <!-- Header text for jumping back into the recent tab in customize the home screen -->
-  <string name="customize_toggle_jump_back_in">قاباقکی تاغ‌لارا قاییت</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">بوکمارک‌لار</string>
   <!--
@@ -1422,12 +1410,8 @@
   <string name="add_to_homescreen_cancel">لغو</string>
   <!-- Add button text for the Add to Homescreen dialog -->
   <string name="add_to_homescreen_add">اکله</string>
-  <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
-  <string name="add_to_homescreen_continue">سایتا ادامه وئر</string>
   <!-- Placeholder text for the TextView in the Add to Homescreen dialog -->
   <string name="add_to_homescreen_text_placeholder">شورتکات آدیْ</string>
-  <!-- Describes the add to homescreen functionality -->
-  <string name="add_to_homescreen_description_2">You can easily add this website to your device’s Home screen to have instant access and browse faster with an app-like experience.</string>
   <!-- Preference for managing the settings for logins and passwords in Fenix -->
   <string name="preferences_passwords_logins_and_passwords_2">رمز‌لر</string>
   <!-- Preference for managing the saving of logins and passwords in Fenix -->

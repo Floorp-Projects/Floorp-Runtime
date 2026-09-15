@@ -41,12 +41,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewLightDark
-import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import mozilla.components.compose.base.LinkText
@@ -86,10 +89,11 @@ fun MarketingDataOnboardingPage(
     ) {
         val verticalPadding = if (state.isSmallDevice) 0.dp else FirefoxTheme.layout.space.static300
         Column(
-            modifier = Modifier.padding(
-                horizontal = FirefoxTheme.layout.space.static200,
-                vertical = verticalPadding,
-            ),
+            modifier =
+                Modifier.padding(
+                    horizontal = FirefoxTheme.layout.space.static200,
+                    vertical = verticalPadding,
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (state.isSmallDevice) {
@@ -100,27 +104,20 @@ fun MarketingDataOnboardingPage(
 
             var checkboxChecked by remember { mutableStateOf(true) }
 
-            Box(
-                modifier = Modifier
-                    .weight(CONTENT_WEIGHT)
-                    .fillMaxWidth(),
-            ) {
+            Box(modifier = Modifier.weight(CONTENT_WEIGHT).fillMaxWidth()) {
                 val scrollState = rememberScrollState()
 
-                CompositionLocalProvider(
-                    LocalOverscrollFactory provides null,
-                ) {
+                CompositionLocalProvider(LocalOverscrollFactory provides null) {
                     val startPadding = 20.dp
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(start = startPadding, end = FirefoxTheme.layout.space.static400),
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(start = startPadding, end = FirefoxTheme.layout.space.static400),
                         verticalArrangement = Arrangement.spacedBy(36.dp),
                     ) {
-                        val title = getTitleForVariant(state)
                         Text(
-                            text = title,
+                            text = state.title,
                             textAlign = TextAlign.Start,
                             style = FirefoxTheme.typography.headline6,
                         )
@@ -198,16 +195,15 @@ fun MarketingDataOnboardingPage(
     }
 }
 
-/**
- * We are temporarily adjusting the image size for treatment c only.
- */
+/** We are temporarily adjusting the image size for treatment c only. */
 @Composable
 private fun imageHeightForTreatment(data: OnboardingMarketingData): Dp {
-    val imageHeight = if (data.marketingCardVariant == MarketingCardVariant.TREATMENT_C) {
-        MARKETING_CONTENT_IMAGE_HEIGHT_TREATMENT_C
-    } else {
-        MARKETING_CONTENT_IMAGE_HEIGHT
-    }
+    val imageHeight =
+        if (data.marketingCardVariant == MarketingCardVariant.TREATMENT_C) {
+            MARKETING_CONTENT_IMAGE_HEIGHT_TREATMENT_C
+        } else {
+            MARKETING_CONTENT_IMAGE_HEIGHT
+        }
     return imageHeight
 }
 
@@ -220,8 +216,7 @@ private fun SecondaryButton(
 ) {
     when (state.marketingData?.marketingCardVariant) {
         MarketingCardVariant.DEFAULT,
-        null,
-            -> Unit
+        null -> Unit
 
         else -> SecondaryButtonOutline(action, state, onMarketingDataSkipClick, modifier)
     }
@@ -229,24 +224,14 @@ private fun SecondaryButton(
 
 @Composable
 private fun getImageResourceForVariant(state: OnboardingPageState): Int {
-    val imageResource = state.marketingData?.let {
-        imageResourceForVariant(
-            defaultImageResource = state.imageRes,
-            marketingCardVariant = it.marketingCardVariant,
-        )
-    } ?: state.imageRes
+    val imageResource =
+        state.marketingData?.let {
+            imageResourceForVariant(
+                defaultImageResource = state.imageRes,
+                marketingCardVariant = it.marketingCardVariant,
+            )
+        } ?: state.imageRes
     return imageResource
-}
-
-@Composable
-private fun getTitleForVariant(state: OnboardingPageState): String {
-    val title = state.marketingData?.let {
-        titleCopyForVariant(
-            defaultString = state.title,
-            marketingCardVariant = it.marketingCardVariant,
-        )
-    } ?: state.title
-    return title
 }
 
 @Composable
@@ -256,27 +241,30 @@ private fun PrimaryButton(
     checkboxChecked: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val buttonText = state.marketingData?.let {
-        primaryButtonCopyForVariant(
-            defaultString = state.primaryButton.text,
-            marketingCardVariant = it.marketingCardVariant,
-        )
-    } ?: state.primaryButton.text
+    val buttonText =
+        state.marketingData?.let {
+            primaryButtonCopyForVariant(
+                defaultString = state.primaryButton.text,
+                marketingCardVariant = it.marketingCardVariant,
+            )
+        } ?: state.primaryButton.text
 
     if (state.marketingData?.marketingCardVariant == MarketingCardVariant.DEFAULT) {
         FilledButton(
             text = buttonText,
-            modifier = modifier.semantics {
-                testTag = state.title + "onboarding_card.positive_button"
-            },
+            modifier =
+                modifier.semantics {
+                    testTag = state.title + "onboarding_card.positive_button"
+                },
             onClick = { onMarketingDataContinueClick(checkboxChecked) },
         )
     } else {
         FilledButton(
             text = buttonText,
-            modifier = modifier.semantics {
-                testTag = state.title + "onboarding_card.positive_button"
-            },
+            modifier =
+                modifier.semantics {
+                    testTag = state.title + "onboarding_card.positive_button"
+                },
             icon = painterResource(id = R.drawable.ic_favourite_filled),
             iconModifier = Modifier.size(16.dp),
             iconTint = PhotonColors.Red50,
@@ -292,18 +280,20 @@ private fun SecondaryButtonOutline(
     onMarketingDataSkipClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val buttonText = state.marketingData?.let {
-        secondaryButtonCopyForVariant(
-            defaultString = action.text,
-            marketingCardVariant = it.marketingCardVariant,
-        )
-    } ?: action.text
+    val buttonText =
+        state.marketingData?.let {
+            secondaryButtonCopyForVariant(
+                defaultString = action.text,
+                marketingCardVariant = it.marketingCardVariant,
+            )
+        } ?: action.text
 
     OutlinedButton(
         text = buttonText,
-        modifier = modifier.semantics {
-            testTag = state.title + "onboarding_card.negative_button"
-        },
+        modifier =
+            modifier.semantics {
+                testTag = state.title + "onboarding_card.negative_button"
+            },
         onClick = { onMarketingDataSkipClick() },
     )
 }
@@ -350,13 +340,10 @@ private fun DefaultContent(
             onValueChange = {
                 onMarketingOptInToggle.invoke(!checkboxChecked)
             },
-        ),
+        )
     ) {
         Checkbox(
-            modifier = Modifier
-                .align(Alignment.Top)
-                .offset(y = (-12).dp, x = (-12).dp)
-                .clearAndSetSemantics {},
+            modifier = Modifier.align(Alignment.Top).offset(y = (-12).dp, x = (-12).dp).clearAndSetSemantics {},
             checked = checkboxChecked,
             onCheckedChange = {
                 onMarketingOptInToggle.invoke(!checkboxChecked)
@@ -365,13 +352,14 @@ private fun DefaultContent(
 
         LinkText(
             text = marketingData.bodyOneText.updateFirstPlaceholder(marketingData.bodyOneLinkText),
-            linkTextStates = listOf(
-                LinkTextState(
-                    text = marketingData.bodyOneLinkText,
-                    url = "",
-                    onClick = { onMarketingDataLearnMoreClick() },
+            linkTextStates =
+                listOf(
+                    LinkTextState(
+                        text = marketingData.bodyOneLinkText,
+                        url = "",
+                        onClick = { onMarketingDataLearnMoreClick() },
+                    )
                 ),
-            ),
             linkTextDecoration = TextDecoration.Underline,
             style = FirefoxTheme.typography.body2,
             textAlign = TextAlign.Start,
@@ -384,19 +372,19 @@ private fun TreatmentCContent(
     marketingData: OnboardingMarketingData,
     onMarketingDataLearnMoreClick: () -> Unit,
 ) {
-    val bodyCopyRes = bodyCopyForVariant(marketingData.marketingCardVariant)
-    val bodyCopy = stringResource(bodyCopyRes)
-    val linkCopy = stringResource(R.string.nova_onboarding_marketing_body_link_text_1)
+    val lineOne = marketingData.bodyOneText
+    val lineOneLink = marketingData.bodyOneLinkText
 
     LinkText(
-        text = bodyCopy.updateFirstPlaceholder(linkCopy),
-        linkTextStates = listOf(
-            LinkTextState(
-                text = linkCopy,
-                url = "",
-                onClick = { onMarketingDataLearnMoreClick() },
+        text = lineOne.updateFirstPlaceholder(lineOneLink),
+        linkTextStates =
+            listOf(
+                LinkTextState(
+                    text = lineOneLink,
+                    url = "",
+                    onClick = { onMarketingDataLearnMoreClick() },
+                )
             ),
-        ),
         linkTextDecoration = TextDecoration.Underline,
         style = FirefoxTheme.typography.body2,
         textAlign = TextAlign.Start,
@@ -404,75 +392,58 @@ private fun TreatmentCContent(
 
     Spacer(Modifier.height(16.dp))
 
-    Text(
-        text = stringResource(R.string.nova_onboarding_marketing_body_line_two),
-        style = FirefoxTheme.typography.body2,
-        textAlign = TextAlign.Start,
-    )
-    Text(
-        text = stringResource(R.string.nova_onboarding_marketing_body_line_three),
-        fontWeight = FontWeight.Bold,
-        style = FirefoxTheme.typography.body2,
-        textAlign = TextAlign.Start,
-    )
+    val lineTwo = marketingData.bodyTwoText
+    val lineThree = marketingData.bodyThreeText
+
+    if (!lineTwo.isNullOrBlank() && !lineThree.isNullOrBlank()) {
+        Text(
+            text = buildTextWithBoldedEnding(lineTwo, lineThree),
+            style = FirefoxTheme.typography.body2,
+            textAlign = TextAlign.Start,
+        )
+    }
+}
+
+private fun buildTextWithBoldedEnding(
+    firstLine: String,
+    secondLine: String,
+): AnnotatedString = buildAnnotatedString {
+    append(firstLine)
+    append(' ')
+    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+        append(secondLine)
+    }
 }
 
 @Composable
 private fun primaryButtonCopyForVariant(
     defaultString: String,
     marketingCardVariant: MarketingCardVariant,
-) = when (marketingCardVariant) {
-    MarketingCardVariant.DEFAULT -> defaultString
+) =
+    when (marketingCardVariant) {
+        MarketingCardVariant.DEFAULT -> defaultString
 
-    MarketingCardVariant.TREATMENT_C ->
-        stringResource(R.string.nova_onboarding_marketing_primary_button_text_3)
-}
+        MarketingCardVariant.TREATMENT_C -> stringResource(R.string.nova_onboarding_marketing_primary_button_text_3)
+    }
 
 @Composable
 private fun secondaryButtonCopyForVariant(
     defaultString: String,
     marketingCardVariant: MarketingCardVariant,
-) = when (marketingCardVariant) {
-    MarketingCardVariant.DEFAULT -> defaultString
-    MarketingCardVariant.TREATMENT_C,
-        -> stringResource(R.string.nova_onboarding_marketing_secondary_button_text_2)
-}
+) =
+    when (marketingCardVariant) {
+        MarketingCardVariant.DEFAULT -> defaultString
+        MarketingCardVariant.TREATMENT_C -> stringResource(R.string.nova_onboarding_marketing_secondary_button_text_2)
+    }
 
 private fun imageResourceForVariant(
     defaultImageResource: Int,
     marketingCardVariant: MarketingCardVariant,
-) = when (marketingCardVariant) {
-    MarketingCardVariant.DEFAULT -> defaultImageResource
-    MarketingCardVariant.TREATMENT_C,
-        -> R.drawable.ic_kit_heart
-}
-
-@Composable
-private fun titleCopyForVariant(
-    defaultString: String,
-    marketingCardVariant: MarketingCardVariant,
-) = when (marketingCardVariant) {
-    MarketingCardVariant.DEFAULT -> defaultString
-    MarketingCardVariant.TREATMENT_C,
-        -> stringResource(R.string.onboarding_marketing_redesign_title)
-}
-
-private fun bodyCopyForVariant(marketingCardVariant: MarketingCardVariant) =
+) =
     when (marketingCardVariant) {
-        MarketingCardVariant.DEFAULT -> R.string.nova_onboarding_marketing_body_2
-        MarketingCardVariant.TREATMENT_C -> R.string.nova_onboarding_marketing_body_7
+        MarketingCardVariant.DEFAULT -> defaultImageResource
+        MarketingCardVariant.TREATMENT_C -> R.drawable.ic_kit_heart
     }
-
-private class BodyResourcePreviewProvider : PreviewParameterProvider<MarketingCardVariant> {
-    override val values = sequenceOf(
-        MarketingCardVariant.DEFAULT,
-        MarketingCardVariant.TREATMENT_C,
-    )
-
-    override fun getDisplayName(index: Int): String {
-        return values.elementAt(index).name
-    }
-}
 
 // Uncomment @FlexibleWindowLightDarkPreview below to review changes across multiple screen sizes.
 // @FlexibleWindowLightDarkPreview
@@ -480,36 +451,141 @@ private class BodyResourcePreviewProvider : PreviewParameterProvider<MarketingCa
 // Use @PreviewLightDark by default for preview rendering performance and easier preview navigation.
 @PreviewLightDark
 @Composable
-private fun MarketingDataOnboardingPagePreview(
-    @PreviewParameter(BodyResourcePreviewProvider::class) variant: MarketingCardVariant,
-) {
+private fun MarketingDataOnboardingPagePreviewDefault() {
     FirefoxTheme {
         MarketingDataOnboardingPage(
-            state = OnboardingPageState(
-                imageRes = R.drawable.nova_onboarding_marketing,
-                title = stringResource(id = R.string.nova_onboarding_marketing_title),
-                description = "", // NB: not used
-                primaryButton = Action(
-                    text = stringResource(id = R.string.nova_onboarding_continue_button),
-                    onClick = {},
+            state =
+                OnboardingPageState(
+                    imageRes = R.drawable.nova_onboarding_marketing,
+                    title = stringResource(id = R.string.nova_onboarding_marketing_title),
+                    description = "", // NB: not used
+                    primaryButton =
+                        Action(
+                            text = stringResource(id = R.string.nova_onboarding_continue_button),
+                            onClick = {},
+                        ),
+                    secondaryButton =
+                        Action(
+                            text = stringResource(id = R.string.nova_onboarding_marketing_secondary_button_text),
+                            onClick = {},
+                        ),
+                    marketingData =
+                        OnboardingMarketingData(
+                            marketingCardVariant = MarketingCardVariant.DEFAULT,
+                            bodyOneText = stringResource(id = R.string.nova_onboarding_marketing_body),
+                            bodyOneLinkText = stringResource(id = R.string.nova_onboarding_marketing_body_link_text),
+                        ),
                 ),
-                secondaryButton = Action(
-                    text = "", // NB: value should be set in the secondaryButtonCopyForVariant function
-                    onClick = {},
-                ),
-                marketingData = OnboardingMarketingData(
-                    marketingCardVariant = variant,
-                    bodyOneText = stringResource(id = R.string.nova_onboarding_marketing_body),
-                    bodyOneLinkText = stringResource(id = R.string.nova_onboarding_marketing_body_link_text),
-                    bodyTwoText = "", // NB: not used
-                ),
-            ),
             onMarketingDataLearnMoreClick = {},
             onMarketingOptInToggle = {},
             onMarketingDataContinueClick = {},
             onMarketingDataSkipClick = {},
         )
     }
+}
+
+/* Treatment C previews */
+
+@Composable
+private fun MarketingDataOnboardingPageTreatmentCPreview(
+    title: String,
+    bodyOneText: String,
+    bodyOneLinkText: String,
+    bodyTwoText: String,
+    bodyThreeText: String,
+) {
+    FirefoxTheme {
+        MarketingDataOnboardingPage(
+            state =
+                OnboardingPageState(
+                    imageRes = R.drawable.nova_onboarding_marketing,
+                    title = title,
+                    description = "", // NB: not used
+                    primaryButton =
+                        Action(
+                            text = stringResource(id = R.string.nova_onboarding_continue_button),
+                            onClick = {},
+                        ),
+                    secondaryButton =
+                        Action(
+                            text = stringResource(id = R.string.nova_onboarding_marketing_secondary_button_text),
+                            onClick = {},
+                        ),
+                    marketingData =
+                        OnboardingMarketingData(
+                            marketingCardVariant = MarketingCardVariant.TREATMENT_C,
+                            bodyOneText = bodyOneText,
+                            bodyOneLinkText = bodyOneLinkText,
+                            bodyTwoText = bodyTwoText,
+                            bodyThreeText = bodyThreeText,
+                        ),
+                ),
+            onMarketingDataLearnMoreClick = {},
+            onMarketingOptInToggle = {},
+            onMarketingDataContinueClick = {},
+            onMarketingDataSkipClick = {},
+        )
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun MarketingDataOnboardingPagePreviewTreatmentCEnglish() {
+    MarketingDataOnboardingPageTreatmentCPreview(
+        title = stringResource(R.string.onboarding_marketing_redesign_title),
+        bodyOneText = stringResource(R.string.nova_onboarding_marketing_body_7),
+        bodyOneLinkText = stringResource(R.string.nova_onboarding_marketing_body_link_text_1),
+        bodyTwoText = stringResource(R.string.nova_onboarding_marketing_body_line_two),
+        bodyThreeText = stringResource(R.string.nova_onboarding_marketing_body_line_three),
+    )
+}
+
+/* The below locales use tailored copy outside on translations that will be provided by Nimbus */
+
+@Preview(name = "es", locale = "es")
+@Composable
+private fun MarketingDataOnboardingPagePreviewTreatmentCSpanish() {
+    MarketingDataOnboardingPageTreatmentCPreview(
+        title = "Ayude a Firefox a crecer",
+        bodyOneText =
+            "Firefox puede llegar a más personas si permite que Mozilla indique a la plataforma desde la que " +
+                $$"llegó que usted usa Firefox. %1$s",
+        bodyOneLinkText = "Más información",
+        bodyTwoText = "Firefox es independiente y defiende una web abierta y libre de monopolios tecnológicos.",
+        bodyThreeText = "Su permiso ayuda a que más personas elijan Firefox.",
+    )
+}
+
+@Preview(name = "fr", locale = "fr")
+@Composable
+private fun MarketingDataOnboardingPagePreviewTreatmentCFrench() {
+    MarketingDataOnboardingPageTreatmentCPreview(
+        title = "Soutenez Firefox",
+        bodyOneText =
+            "Aidez-nous à faire découvrir Firefox à encore plus de personnes. Autorisez Mozilla à informer " +
+                $$"la plateforme par laquelle vous êtes arrivé que vous utilisez Firefox. %1$s",
+        bodyOneLinkText = "En savoir plus",
+        bodyTwoText =
+            "Firefox est indépendant et défend un Web ouvert, plutôt que de le laisser aux mains des " +
+                "géants de la tech.",
+        bodyThreeText = "Votre soutien nous aide à renforcer Firefox.",
+    )
+}
+
+@Preview(name = "de", locale = "de")
+@Composable
+private fun MarketingDataOnboardingPagePreviewTreatmentCGerman() {
+    MarketingDataOnboardingPageTreatmentCPreview(
+        title = "Deine Hilfe für Firefox",
+        bodyOneText =
+            "Hilf uns, noch mehr Menschen für Firefox zu gewinnen. Erlaube Mozilla, der Plattform, " +
+                $$"über die du zu uns gekommen bist, mitzuteilen, dass du Firefox nutzt. %1$s",
+        bodyOneLinkText = "Mehr erfahren",
+        bodyTwoText =
+            "Firefox ist unabhängig und setzt sich für ein offenes Web ein, statt es den " +
+                "Tech-Giganten zu überlassen.",
+        bodyThreeText = "Mit deiner Zustimmung hilfst du uns dabei und stärkst Firefox.",
+    )
 }
 
 private fun String.updateFirstPlaceholder(text: String) = replace($$"%1$s", text)

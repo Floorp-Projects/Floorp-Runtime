@@ -114,16 +114,8 @@
   <string name="home_screen_shortcut_open_new_private_tab_2">නව පෞද්. පටිත්ත</string>
   <!-- Shortcut action to open Passwords screen -->
   <string name="home_screen_shortcut_passwords">මුරපද</string>
-  <!--
-    Recent Tabs
-
-    Header text for jumping back into the recent tab in the home screen
-  -->
-  <string name="recent_tabs_header">ආපසු පනින්න</string>
   <!-- Button text for showing all the tabs in the tabs tray -->
   <string name="recent_tabs_show_all">සියල්ල පෙන්වන්න</string>
-  <!-- Content description for the button which navigates the user to show all recent tabs in the tabs tray. -->
-  <string name="recent_tabs_show_all_content_description_2">සියළු මෑත පටිති බොත්තම පෙන්වන්න</string>
   <!-- Text for button in synced tab card that opens synced tabs tray -->
   <string name="recent_tabs_see_all_synced_tabs_button_text">සියළු සමමුහූර්ත පටිති බලන්න</string>
   <!-- Accessibility description for device icon used for recent synced tab -->
@@ -372,8 +364,6 @@
   <string name="preferences_add_private_browsing_shortcut">පෞද්. පිරික්සුම් කෙටිමඟක් යොදන්න</string>
   <!-- Preference for enabling "HTTPS-Only" mode -->
   <string name="preferences_https_only_title">HTTPS-පමණි ප්‍රකාරය</string>
-  <!-- Preference for removing cookie/consent banners from sites automatically in private mode. See reduce_cookie_banner_summary for additional context. -->
-  <string name="preferences_cookie_banner_reduction_private_mode">පෞද්. පිරික්සීමෙහි දත්තකඩ පතාක අවහිරය</string>
   <!-- Description of the preference to enable "HTTPS-Only" mode. -->
   <string name="preferences_https_only_summary">ඉහළ ආරක්‍ෂාවක් සඳහා HTTPS සංකේතන කෙටුම්පත භාවිතයෙන් අඩවි වෙත ස්වයංක්‍රීයව සම්බන්ධ වීමට තැත් කරයි.</string>
   <!-- Summary of https only preference if https only is set to off -->
@@ -500,8 +490,6 @@
   <string name="customize_addon_collection_hint">එකතුවෙහි නම</string>
   <!-- Hint displayed on input field for custom collection user ID -->
   <string name="customize_addon_collection_user_hint">එකතුවේ හිමිකරු (පරිශ්‍රීලක හැඳු.)</string>
-  <!-- Header text for jumping back into the recent tab in customize the home screen -->
-  <string name="customize_toggle_jump_back_in">ආපසු පනින්න</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">පොත්යොමු</string>
   <!--
@@ -1485,12 +1473,8 @@
   <string name="add_to_homescreen_cancel">අවලංගු</string>
   <!-- Add button text for the Add to Homescreen dialog -->
   <string name="add_to_homescreen_add">එකතු</string>
-  <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
-  <string name="add_to_homescreen_continue">අඩවියට යන්න</string>
   <!-- Placeholder text for the TextView in the Add to Homescreen dialog -->
   <string name="add_to_homescreen_text_placeholder">කෙටිමඟ නාමය</string>
-  <!-- Describes the add to homescreen functionality -->
-  <string name="add_to_homescreen_description_2">ඔබට ක්‍ෂණික ප්‍රවේශයක් ලබා ගැනීමට සහ යෙදුමක වැනි අත්දැකීමක් සමඟින් වේගයෙන් පිරික්සීමට මෙම අඩවිය ඔබගේ උපාංගයේ මුල් තිරයට පහසුවෙන් එක් කළ හැකිය.</string>
   <!-- Preference for managing the settings for logins and passwords in Fenix -->
   <string name="preferences_passwords_logins_and_passwords_2">මුරපද</string>
   <!-- Preference for managing the saving of logins and passwords in Fenix -->
