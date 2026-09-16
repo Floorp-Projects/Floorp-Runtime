@@ -34,7 +34,7 @@ if CONFIG["MOZ_ASAN"] or CONFIG["MOZ_UBSAN"] or CONFIG["MOZ_TSAN"]:
 
 XPCSHELL_TESTS_MANIFESTS += ["unit/xpcshell.toml"]
 
-if CONFIG["COMPILE_ENVIRONMENT"] and CONFIG["MOZ_PGO"] != "1":
+if CONFIG["COMPILE_ENVIRONMENT"]:
     TEST_HARNESS_FILES.xpcshell.xpcom.tests.unit += [
         "!%s%s" % (f, CONFIG["BIN_SUFFIX"]) for f in test_progs
     ]
