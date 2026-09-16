@@ -23,7 +23,7 @@ GeckoSimplePrograms(
     linkage=None,
 )
 
-if CONFIG["COMPILE_ENVIRONMENT"] and CONFIG["MOZ_PGO"] != "1":
+if CONFIG["COMPILE_ENVIRONMENT"]:
     TEST_HARNESS_FILES.xpcshell.uriloader.exthandler.tests.unit += [
         "!WriteArgument%s" % CONFIG["BIN_SUFFIX"]
     ]
