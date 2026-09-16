@@ -55,7 +55,7 @@ features:
               secondary-button-label: nova_onboarding_marketing_secondary_button_text
               extra-data:
                 marketing-data:
-                  body-line-one-text: nova_onboarding_marketing_body
+                  body-line-one-text: nova_onboarding_marketing_body_2
                   body-line-one-link-text: nova_onboarding_marketing_body_link_text
 
   continuous-onboarding:
@@ -74,10 +74,10 @@ objects:
     description: An object to describe a user facing onboarding card.
     fields:
       card-type:
-        type: OnboardingCardType
+        type: Option<OnboardingCardType>
         description: The type of the card.
-        # This should never be defaulted.
-        default: default-browser
+        # A missing or unrecognized card type defaults to null. A card with a null type is discarded.
+        default: null
       enabled:
         type: Boolean
         description: If true, this card is shown to the user.
@@ -242,6 +242,10 @@ objects:
       body-line-two-text:
         type: Text
         description: The text for line two of the body.
+        default: ""
+      body-line-three-text:
+        type: Text
+        description: The text for line three of the body.
         default: ""
 
 enums:

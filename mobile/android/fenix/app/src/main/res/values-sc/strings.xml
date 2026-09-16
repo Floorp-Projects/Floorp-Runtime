@@ -145,16 +145,8 @@
   <string name="home_screen_shortcut_passwords">Craes</string>
   <!-- Shortcut action to open uninstall survey -->
   <string name="home_screen_shortcut_uninstall_survey">Disinstallare, pro ite?</string>
-  <!--
-    Recent Tabs
-
-    Header text for jumping back into the recent tab in the home screen
-  -->
-  <string name="recent_tabs_header">Torra a s’ischeda</string>
   <!-- Button text for showing all the tabs in the tabs tray -->
   <string name="recent_tabs_show_all">Ammustra totu</string>
-  <!-- Content description for the button which navigates the user to show all recent tabs in the tabs tray. -->
-  <string name="recent_tabs_show_all_content_description_2">Ammustra su butone de totu is ischedas reghentes</string>
   <!-- Text for button in synced tab card that opens synced tabs tray -->
   <string name="recent_tabs_see_all_synced_tabs_button_text">Ammustra totu is ischedas sincronizadas</string>
   <!-- Accessibility description for device icon used for recent synced tab -->
@@ -667,8 +659,6 @@
   <string name="preferences_https_only_title">Modalidade «isceti HTTPS»</string>
   <!-- Preference title for using the screen lock to hide tabs in private browsing -->
   <string name="preferences_pbm_lock_screen_title">Imprea su blocu de ischermu pro cuare ischedas in sa navigatzione privada</string>
-  <!-- Preference for removing cookie/consent banners from sites automatically in private mode. See reduce_cookie_banner_summary for additional context. -->
-  <string name="preferences_cookie_banner_reduction_private_mode">Blocu de is avisos de testimòngios in sa navigatzione privada</string>
   <!-- Summary of https only preference if https only is set to off -->
   <string name="preferences_https_only_off">Disativadu</string>
   <!-- Summary of https only preference if https only is set to on in all tabs -->
@@ -856,8 +846,6 @@
     Title for the customize home screen section with privacy report.
   -->
   <string name="customize_toggle_privacy_report">Informe de riservadesa</string>
-  <!-- Header text for jumping back into the recent tab in customize the home screen -->
-  <string name="customize_toggle_jump_back_in">Torra a s’ischeda</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Sinnalibros</string>
   <!--
@@ -873,8 +861,6 @@
   <string name="customize_wallpapers">Isfundos de ischermu</string>
   <!-- Label for the menu item that opens the customize homepage settings screen. -->
   <string name="browser_menu_customize_homepage">Personaliza sa pàgina printzipale</string>
-  <!-- Label for the menu item that opens the wallpaper settings screen. -->
-  <string name="browser_menu_change_wallpaper">Modifica s’isfundu</string>
   <!-- Title for the customize home screen section with sponsored shortcuts. -->
   <string name="customize_toggle_contile">Curtzadòrgios patrotzinados</string>
   <!--
@@ -1697,8 +1683,6 @@
   <string name="webcompat_reporter_preview_report">Anteprima de informe</string>
   <!-- The title shown at the top of the WebCompat Report preview panel. This appears after the user taps the “Preview” button before sending a report. -->
   <string name="webcompat_reporter_preview_bottom_sheet_header">Anteprima de informe</string>
-  <!-- Label for the “Send” button shown in the WebCompat Report preview panel, which the user taps to submit the report. -->
-  <string name="webcompat_reporter_preview_bottom_sheet_send">Imbia</string>
   <!--
     These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site.
 
@@ -2443,8 +2427,6 @@
   <string name="add_to_homescreen_cancel">Annulla</string>
   <!-- Add button text for the Add to Homescreen dialog -->
   <string name="add_to_homescreen_add">Agiunghe</string>
-  <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
-  <string name="add_to_homescreen_continue">Sighi a su situ</string>
   <!-- Placeholder text for the TextView in the Add to Homescreen dialog -->
   <string name="add_to_homescreen_text_placeholder">Nòmine de su curtzadòrgiu</string>
   <!-- Preference for managing the settings for logins and passwords in Fenix -->
@@ -2587,7 +2569,7 @@
   <string name="ip_protection_navigate_back_button_content_description">Nàviga a coa</string>
   <!-- Headline for the browser VPN promo card. %s is the name of the app (for example "Firefox"). -->
   <string name="ip_protection_promo_headline">VPN integrada de %s</string>
-  <!-- Body text for the browser VPN promo card . %s is a learn more link using ip_protection_learn_more as text. -->
+  <!-- Body text for the browser VPN settings header, shown when no promo is running. %s is a learn more link using ip_protection_learn_more as text. -->
   <string name="ip_protection_promo_body_2">Nàviga in una manera galu prus segura cuende sa positzione tua, fintzas cando impreas retes Wi-FI pùblicas. %s</string>
   <!-- Link text that opens additional information about the browser VPN -->
   <string name="ip_protection_learn_more">Àteras informatziones</string>
@@ -2617,10 +2599,6 @@
   <string name="ip_protection_locations_title">Sèbera sa positzione de sa VPN</string>
   <!-- Content description for the browser VPN location selection screen top bar back button -->
   <string name="ip_protection_locations_navigate_back_button_content_description">Nàviga a coa</string>
-  <!-- Title for the card shown to the user when we are unable to fetch server locations -->
-  <string name="ip_protection_location_unavailable_title" tools:ignore="UnusedResources">Sa positzione pretzedente no est a disponimentu</string>
-  <!-- Description for the card shown to the user when we are unable to fetch server locations -->
-  <string name="ip_protection_location_unavailable_recommended_description" tools:ignore="UnusedResources">Connessione istabilidade cun sa positzione cussigiada.</string>
   <!--
     Autofill
 

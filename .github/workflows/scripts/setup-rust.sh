@@ -13,8 +13,8 @@ PGO_ARTIFACT_NAME="$3"
 
 echo "Setting up Rust for platform=$PLATFORM, arch=$ARCH, pgo_artifact=$PGO_ARTIFACT_NAME"
 
-# Install and use the Rust version aligned with Firefox 153
-RUST_VERSION="1.94.1"
+# Install and use the Rust version aligned with Firefox 156
+RUST_VERSION="1.95.0"
 rustup toolchain install "$RUST_VERSION"
 rustup default "$RUST_VERSION"
 

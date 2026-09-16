@@ -117,7 +117,6 @@
 #  include "detect_win32k_conflicts.h"
 #  include "mozilla/PreXULSkeletonUI.h"
 #  include "mozilla/DllPrefetchExperimentRegistryInfo.h"
-#  include "mozilla/WindowsBCryptInitialization.h"
 #  include "mozilla/WindowsDllBlocklist.h"
 #  include "mozilla/WindowsMsctfInitialization.h"
 #  include "mozilla/WindowsOleAut32Initialization.h"
@@ -4112,7 +4111,7 @@ class XREMain {
   int XRE_mainInit(bool* aExitFlag, AppRunnerTelemFlags& appRunnerTelemFlags);
   int XRE_mainStartup(bool* aExitFlag,
                       AppRunnerTelemFlags& appRunnerTelemFlags);
-  nsresult XRE_mainRun();
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY nsresult XRE_mainRun();
 
   bool CheckLastStartupWasCrash();
 
@@ -4618,6 +4617,8 @@ int XREMain::XRE_mainInit(bool* aExitFlag,
     nsDependentCString releaseChannel(MOZ_STRINGIFY(MOZ_UPDATE_CHANNEL));
     CrashReporter::RecordAnnotationNSCString(
         CrashReporter::Annotation::ReleaseChannel, releaseChannel);
+
+    CrashReporter::RecordPlatformAnnotations();
 
 #ifdef XP_WIN
     nsAutoString appInitDLLs;
@@ -5817,7 +5818,7 @@ int XREMain::XRE_mainStartup(bool* aExitFlag,
 }
 
 #if defined(MOZ_SANDBOX)
-void AddSandboxAnnotations() {
+void AddSandboxAnnotations() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
   CrashReporter::RecordAnnotationU32(
       CrashReporter::Annotation::ContentSandboxLevel,
       GetEffectiveContentSandboxLevel());
@@ -5877,6 +5878,9 @@ nsresult XREMain::XRE_mainRun() {
 
     rv = mScopedXPCOM->SetWindowCreator(mNativeApp);
     NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
+
+    // Record platform annotations which need XPCOM initialized.
+    CrashReporter::RecordXPCOMPlatformAnnotations();
 
     // tell the crash reporter to also send the release channel
     nsCOMPtr<nsIPrefService> prefs =
@@ -6028,8 +6032,9 @@ nsresult XREMain::XRE_mainRun() {
           initializedJSContext = true;
         }
 
-        nsresult backupCreated =
-            ProfileResetCleanup(mProfileSvc, gResetOldProfile);
+        const RefPtr<nsToolkitProfileService> profileSvc = mProfileSvc;
+        const nsCOMPtr<nsIToolkitProfile> oldProfile = gResetOldProfile;
+        nsresult backupCreated = ProfileResetCleanup(profileSvc, oldProfile);
         if (NS_FAILED(backupCreated)) {
           NS_WARNING("Could not cleanup the profile that was reset");
         }
@@ -6339,6 +6344,13 @@ nsresult XREMain::XRE_mainRun() {
   // the `nsICommandLineRunner` anymore.
   cmdLine = nullptr;
 
+#ifdef ACCESSIBILITY
+  // If accessibility.force_disabled is force enabled, start accessibility
+  // now rather than waiting for something to request it. This is the one
+  // place we can do this reliably on every platform.
+  a11y::MaybeStartForceEnabled();
+#endif
+
   {
     rv = appStartup->Run();
     if (NS_FAILED(rv)) {
@@ -6508,11 +6520,6 @@ int XREMain::XRE_main(int argc, char* argv[], const BootstrapConfig& aConfig) {
 #  if defined(MOZ_SANDBOX)
   mAppData->sandboxBrokerServices = aConfig.sandboxBrokerServices;
 #  endif  // defined(MOZ_SANDBOX)
-
-  {
-    DebugOnly<bool> result = WindowsBCryptInitialization();
-    MOZ_ASSERT(result);
-  }
 
 #  if defined(_M_IX86) || defined(_M_X64)
   {

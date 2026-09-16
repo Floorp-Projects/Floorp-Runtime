@@ -137,16 +137,8 @@
   <string name="home_screen_shortcut_open_new_private_tab_2">Taba prìobhaideach ùr</string>
   <!-- Shortcut action to open Passwords screen -->
   <string name="home_screen_shortcut_passwords">Faclan-faire</string>
-  <!--
-    Recent Tabs
-
-    Header text for jumping back into the recent tab in the home screen
-  -->
-  <string name="recent_tabs_header">Till gu far an robh thu</string>
   <!-- Button text for showing all the tabs in the tabs tray -->
   <string name="recent_tabs_show_all">Seall na h-uile</string>
-  <!-- Content description for the button which navigates the user to show all recent tabs in the tabs tray. -->
-  <string name="recent_tabs_show_all_content_description_2">Am putan airson gach taba a bha fosgailte o chionn goirid a shealltainn</string>
   <!-- Text for button in synced tab card that opens synced tabs tray -->
   <string name="recent_tabs_see_all_synced_tabs_button_text">Seall gach taba sioncronaichte</string>
   <!-- Accessibility description for device icon used for recent synced tab -->
@@ -638,8 +630,6 @@
   <string name="preferences_pbm_lock_screen_title">Cleachd glas na sgrìn airson tabaichean a chur am falach ann am brabhsadh prìobhaideach</string>
   <!-- Informs the user how to access the tabs when "Use screen lock to hide tabs in private browsing" is enabled -->
   <string name="preferences_pbm_lock_screen_summary_3">Coimhead air tabaichean le lorg do mheòir, PIN no d’ aodann. Ma chuireas tu seo air, bacaidh seo glacadh agus co-roinneadh na sgrìn cuideachd.</string>
-  <!-- Preference for removing cookie/consent banners from sites automatically in private mode. See reduce_cookie_banner_summary for additional context. -->
-  <string name="preferences_cookie_banner_reduction_private_mode">Blocaiche bratach bhriosgaidean ann am brabhsadh prìobhaideach</string>
   <!-- Description of the preference to enable "HTTPS-Only" mode. -->
   <string name="preferences_https_only_summary">Nì seo oidhirp leis fhèin ceangal a dhèanamh ri làraichean le pròtacal crioptachadh HTTPS airson tèarainteachd a bharrachd.</string>
   <!-- Summary of https only preference if https only is set to off -->
@@ -827,8 +817,6 @@
     Title for the customize home screen section with privacy report.
   -->
   <string name="customize_toggle_privacy_report">Aithisg na prìobhaideachd</string>
-  <!-- Header text for jumping back into the recent tab in customize the home screen -->
-  <string name="customize_toggle_jump_back_in">Till gu far an robh thu</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Comharran-lìn</string>
   <!--
@@ -1636,8 +1624,6 @@
   <string name="webcompat_reporter_preview_report">Ro-seall an aithisg</string>
   <!-- The title shown at the top of the WebCompat Report preview panel. This appears after the user taps the “Preview” button before sending a report. -->
   <string name="webcompat_reporter_preview_bottom_sheet_header">Ro-shealladh na h-aithisge</string>
-  <!-- Label for the “Send” button shown in the WebCompat Report preview panel, which the user taps to submit the report. -->
-  <string name="webcompat_reporter_preview_bottom_sheet_send">Cuir</string>
   <!--
     These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site.
 
@@ -2441,12 +2427,8 @@
   <string name="add_to_homescreen_cancel">Sguir dheth</string>
   <!-- Add button text for the Add to Homescreen dialog -->
   <string name="add_to_homescreen_add">Cuir ris</string>
-  <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
-  <string name="add_to_homescreen_continue">Lean air adhart gun làrach-lìn</string>
   <!-- Placeholder text for the TextView in the Add to Homescreen dialog -->
   <string name="add_to_homescreen_text_placeholder">Ainm na h-ath-ghoirid</string>
-  <!-- Describes the add to homescreen functionality -->
-  <string name="add_to_homescreen_description_2">Tha e furasta an duilleag seo a chur ri duilleag-dhachaigh an uidheim agad airson greim fhaighinn air gu luath.</string>
   <!-- Preference for managing the settings for logins and passwords in Fenix -->
   <string name="preferences_passwords_logins_and_passwords_2">Faclan-faire</string>
   <!-- Preference for managing the saving of logins and passwords in Fenix -->

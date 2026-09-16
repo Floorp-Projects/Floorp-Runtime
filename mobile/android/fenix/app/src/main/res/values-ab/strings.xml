@@ -112,16 +112,8 @@
   <string name="home_screen_shortcut_open_new_private_tab_2">Ахатә абӷьыц ҿыц</string>
   <!-- Shortcut action to open Passwords screen -->
   <string name="home_screen_shortcut_passwords">Амаӡажәақәа</string>
-  <!--
-    Recent Tabs
-
-    Header text for jumping back into the recent tab in the home screen
-  -->
-  <string name="recent_tabs_header">Ухынҳәы</string>
   <!-- Button text for showing all the tabs in the tabs tray -->
   <string name="recent_tabs_show_all">Зегьы аарԥштәуп</string>
-  <!-- Content description for the button which navigates the user to show all recent tabs in the tabs tray. -->
-  <string name="recent_tabs_show_all_content_description_2">Иаарԥштәуп аҵыхәтәантәи абларҭақәа зегьы апытҟәыр</string>
   <!-- Text for button in synced tab card that opens synced tabs tray -->
   <string name="recent_tabs_see_all_synced_tabs_button_text">Аԥсҭҳәа абларҭақәа зегьы</string>
   <!-- Accessibility description for device icon used for recent synced tab -->
@@ -355,8 +347,6 @@
   <string name="preferences_add_private_browsing_shortcut">Ихатәу алаԥшхгара аҿацә ацҵатәуп</string>
   <!-- Preference for enabling "HTTPS-Only" mode -->
   <string name="preferences_https_only_title">”HTTPS мацара” арежим</string>
-  <!-- Preference for removing cookie/consent banners from sites automatically in private mode. See reduce_cookie_banner_summary for additional context. -->
-  <string name="preferences_cookie_banner_reduction_private_mode">Акукиқәа рдырраҭара аблокатор хатә ԥшаараҿы</string>
   <!-- Description of the preference to enable "HTTPS-Only" mode. -->
   <string name="preferences_https_only_summary">Ашәарҭадара аизырҳаразы HTTPS ашифртә протокол ахархәарала автоматла асаитқәа рыҽрыдҳәалара аҽазышәара.</string>
   <!-- Summary of https only preference if https only is set to off -->
@@ -487,8 +477,6 @@
   <string name="customize_addon_collection_user_hint">Аизга зтәу (ахархәаҩ иID)</string>
   <!-- Toast shown after confirming the custom extension collection configuration -->
   <string name="toast_customize_extension_collection_done">Анарҭбаара аизга ԥсахуп. Аԥсахрақәа рхархәаразы апликациа аҭыҵра…</string>
-  <!-- Header text for jumping back into the recent tab in customize the home screen -->
-  <string name="customize_toggle_jump_back_in">Ухынҳәы</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Адыргақәа</string>
   <!--
@@ -1470,12 +1458,8 @@
   <string name="add_to_homescreen_cancel">Аԥыхра</string>
   <!-- Add button text for the Add to Homescreen dialog -->
   <string name="add_to_homescreen_add">Ацҵара</string>
-  <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
-  <string name="add_to_homescreen_continue">Асаит ахь ахынҳәра</string>
   <!-- Placeholder text for the TextView in the Add to Homescreen dialog -->
   <string name="add_to_homescreen_text_placeholder">Аҿацә ахьӡ</string>
-  <!-- Describes the add to homescreen functionality -->
-  <string name="add_to_homescreen_description_2">Иаразнактәи анеиразы ари асаит шәхыхәҭа ахатә екран иацшәҵар шәылшоит.</string>
   <!-- Preference for managing the settings for logins and passwords in Fenix -->
   <string name="preferences_passwords_logins_and_passwords_2">Амаӡажәақәа</string>
   <!-- Preference for managing the saving of logins and passwords in Fenix -->

@@ -118,16 +118,8 @@
   <string name="home_screen_shortcut_open_new_private_tab_2">Hilpekîna veşartî ya nû</string>
   <!-- Shortcut action to open Passwords screen -->
   <string name="home_screen_shortcut_passwords">Şîfre</string>
-  <!--
-    Recent Tabs
-
-    Header text for jumping back into the recent tab in the home screen
-  -->
-  <string name="recent_tabs_header">vegere</string>
   <!-- Button text for showing all the tabs in the tabs tray -->
   <string name="recent_tabs_show_all">Gişî nîşan bide</string>
-  <!-- Content description for the button which navigates the user to show all recent tabs in the tabs tray. -->
-  <string name="recent_tabs_show_all_content_description_2">Bişkoka hemû hilpekînên kevn nîşan bide</string>
   <!-- Text for button in synced tab card that opens synced tabs tray -->
   <string name="recent_tabs_see_all_synced_tabs_button_text">Hemû hilpekînên senkronîzekirî bibîne</string>
   <!-- Accessibility description for device icon used for recent synced tab -->
@@ -523,8 +515,6 @@
   <string name="customize_addon_collection_hint">Navê koleksiyonê</string>
   <!-- Hint displayed on input field for custom collection user ID -->
   <string name="customize_addon_collection_user_hint">Xwediyê koleksiyonê (nasnameya bikarhêner)</string>
-  <!-- Header text for jumping back into the recent tab in customize the home screen -->
-  <string name="customize_toggle_jump_back_in">vegere</string>
   <!-- Title for the customize home screen section with bookmarks. -->
   <string name="customize_toggle_bookmarks">Favorî</string>
   <!--
@@ -1580,12 +1570,8 @@
   <string name="add_to_homescreen_cancel">Betal bike</string>
   <!-- Add button text for the Add to Homescreen dialog -->
   <string name="add_to_homescreen_add">Tevlî bike</string>
-  <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
-  <string name="add_to_homescreen_continue">Li malperê berdewam bike</string>
   <!-- Placeholder text for the TextView in the Add to Homescreen dialog -->
   <string name="add_to_homescreen_text_placeholder">Navê kurterêyê</string>
-  <!-- Describes the add to homescreen functionality -->
-  <string name="add_to_homescreen_description_2">Tu dikarî vê malperê bi hêsanî li ekrana Destpêkê ya cîhaza xwe zêde bikî ku ji wir zûtir bigihîjî wê û wê wekî sepanekê bi kar bînî.</string>
   <!-- Preference for managing the settings for logins and passwords in Fenix -->
   <string name="preferences_passwords_logins_and_passwords_2">Şîfre</string>
   <!-- Preference option for asking to save passwords in Fenix -->

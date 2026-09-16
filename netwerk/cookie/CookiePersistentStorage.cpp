@@ -16,7 +16,6 @@
 #include "mozStorageHelper.h"
 #include "mozilla/AppShutdown.h"
 #include "mozilla/Components.h"
-#include "mozilla/ErrorNames.h"
 #include "mozilla/FileUtils.h"
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/ScopeExit.h"
@@ -32,13 +31,6 @@
 #include "prprf.h"
 
 constexpr auto COOKIES_SCHEMA_VERSION = 17;
-
-// Maximum size of the write-ahead log before sqlite checkpoints it, and the
-// extra amount it is allowed to grow before being truncated back. Both values
-// are taken from Places, see DATABASE_MAX_WAL_BYTES and
-// DATABASE_JOURNAL_OVERHEAD_BYTES in toolkit/components/places/Database.cpp.
-constexpr int32_t COOKIES_MAX_WAL_BYTES = 2048000;
-constexpr int32_t COOKIES_JOURNAL_OVERHEAD_BYTES = 2048000;
 
 // parameter indexes; see |Read|
 constexpr auto IDX_NAME = 0;
@@ -1023,10 +1015,6 @@ CookiePersistentStorage::OpenDBResult CookiePersistentStorage::TryInitDB(
         mCookieFile, mozIStorageService::CONNECTION_DEFAULT,
         getter_AddRefs(mSyncConn));
     if (NS_FAILED(rv)) {
-      const char* errorName = mozilla::GetStaticErrorName(rv);
-      glean::network_cookies::open_error
-          .Get(nsDependentCString(errorName ? errorName : "unknown"))
-          .Add(1);
       if (rv == NS_ERROR_FILE_NO_DEVICE_SPACE ||
           rv == NS_ERROR_FILE_ACCESS_DENIED) {
         return RESULT_FAILURE;
@@ -2266,15 +2254,18 @@ nsresult CookiePersistentStorage::InitDBConnInternal() {
     pageSize = 0;
   }
 
+  uint32_t maxWalBytes = StaticPrefs::network_cookie_db_maxWalBytes();
+
   if (pageSize > 0) {
     nsAutoCString checkpointPragma("PRAGMA wal_autocheckpoint = ");
-    checkpointPragma.AppendInt(COOKIES_MAX_WAL_BYTES / pageSize);
+    checkpointPragma.AppendInt(maxWalBytes / pageSize);
     mDBConn->ExecuteSimpleSQL(checkpointPragma);
   }
 
   nsAutoCString journalSizePragma("PRAGMA journal_size_limit = ");
-  journalSizePragma.AppendInt(COOKIES_MAX_WAL_BYTES +
-                              COOKIES_JOURNAL_OVERHEAD_BYTES);
+  journalSizePragma.AppendInt(
+      uint64_t(maxWalBytes) +
+      StaticPrefs::network_cookie_db_journalOverheadBytes());
   mDBConn->ExecuteSimpleSQL(journalSizePragma);
 
   // cache frequently used statements (for insertion, deletion, and updating)
