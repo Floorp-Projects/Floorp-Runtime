@@ -5,6 +5,7 @@
 #filter substitution
 /*.app/***
 /certutil
+/floorp-app-shim
 #if defined(MOZ_GECKODRIVER)
 /geckodriver
 #endif

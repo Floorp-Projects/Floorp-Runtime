@@ -72,6 +72,16 @@ function canQuitApplication(aData, aSource) {
 }
 
 function goQuitApplication(event) {
+  if (navigator.platform.startsWith("Mac")) {
+    const handled = Cc["@mozilla.org/supports-PRBool;1"].createInstance(
+      Ci.nsISupportsPRBool
+    );
+    Services.obs.notifyObservers(handled, "floorp-browser-quit-requested");
+    if (handled.data) {
+      return false;
+    }
+  }
+
   // We can't know for sure if the user used a shortcut to trigger quit.
   // Proxy by means of checking for the shortcut modifier.
   let isMac = navigator.platform.startsWith("Mac");

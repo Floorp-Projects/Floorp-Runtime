@@ -79,6 +79,7 @@
 #endif
 #ifdef XP_MACOSX
 @BINPATH@/XUL
+@BINPATH@/floorp-app-shim
 #else
 @BINPATH@/@DLL_PREFIX@xul@DLL_SUFFIX@
 #endif
