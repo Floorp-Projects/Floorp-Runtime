@@ -274,12 +274,53 @@ bool NativeLayerRootCA::AreOffMainThreadCommitsSuspended() {
   return mOffMainThreadCommitsSuspended;
 }
 
+void NativeLayerRootCA::SetPresentationSink(NativeLayerPresentationSink* aSink) {
+  MutexAutoLock lock(mMutex);
+  mPresentationSink = aSink;
+}
+
 bool NativeLayerRootCA::CommitToScreen() {
   MutexAutoLock lock(mMutex);
 
   if (!NS_IsMainThread() && mOffMainThreadCommitsSuspended) {
     mCommitPending = true;
     return false;
+  }
+
+  if (mPresentationSink) {
+    nsTArray<NativeLayerPresentation> presentations;
+    for (const auto& layer : mSublayers) {
+      MutexAutoLock layerLock(layer->mMutex);
+      CFTypeRefPtr<IOSurfaceRef> surface = layer->mSurfaceToPresent;
+      auto size = layer->mSize;
+      auto displayRect = layer->mDisplayRect;
+      bool flipped = layer->mSurfaceIsFlipped;
+      if (!surface && layer->mSurfaceHandler) {
+        if (auto front = layer->mSurfaceHandler->FrontSurface()) {
+          surface = front->mSurface;
+        }
+        size = layer->mSurfaceHandler->Size();
+        displayRect = layer->mSurfaceHandler->DisplayRect();
+        flipped = layer->mSurfaceHandler->SurfaceIsFlipped();
+      } else if (!surface && layer->mTextureHost) {
+        surface = layer->mTextureHost->GetSurface()->GetIOSurfaceRef();
+      }
+      RefPtr<NativeLayerSurface> pinned;
+      if (surface) {
+        pinned = new NativeLayerSurface(surface.get());
+      }
+      presentations.AppendElement(NativeLayerPresentation{
+          reinterpret_cast<uintptr_t>(layer.get()), std::move(pinned), size,
+          layer->mPosition, layer->mTransform, displayRect, layer->mClipRect,
+          layer->mRoundedClipRect, layer->mColor, layer->mSamplingFilter,
+          flipped, layer->mIsOpaque, layer->mIsDRM, layer->mIsHDR});
+    }
+    bool accepted = mPresentationSink->Present(std::move(presentations), mBackingScale);
+    mCommitPending = !accepted;
+    if (accepted) {
+      mMutatedOnscreenLayerStructure = false;
+    }
+    return accepted;
   }
 
   CommitRepresentation(WhichRepresentation::ONSCREEN, mOnscreenRootCALayer,

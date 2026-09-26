@@ -177,3 +177,24 @@ SPHINX_TREES["/widget/cocoa"] = "docs"
 
 if CONFIG["MOZ_BUILD_APP"] == "browser":
     DEFINES["MOZ_BUILD_APP_IS_BROWSER"] = True
+
+# App Shim sources use ARC independently of the existing Cocoa widget code.
+app_shim_arc_sources = [
+    "appshim/BundleTransaction.mm",
+    "appshim/MachTransport.mm",
+    "appshim/MacWebAppPresentation.mm",
+    "appshim/MacWebAppService.mm",
+    "appshim/MacWebAppWidget.mm",
+    "appshim/PeerIdentity.mm",
+    "appshim/Protocol.mm",
+    "appshim/Session.mm",
+]
+SOURCES += app_shim_arc_sources
+for source in app_shim_arc_sources:
+    SOURCES[source].flags += ["-fobjc-arc"]
+SOURCES += ["appshim/MacWebAppInput.mm"]
+LOCAL_INCLUDES += ["/widget/cocoa/appshim"]
+OS_LIBS += ["-framework Security"]
+
+DIRS += ["appshim/shim"]
+EXPORTS.mozilla.widget += ["appshim/MacWebAppWidget.h"]

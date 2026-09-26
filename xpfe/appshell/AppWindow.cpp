@@ -7,6 +7,9 @@
 
 // Local includes
 #include "AppWindow.h"
+#ifdef XP_MACOSX
+#  include "mozilla/widget/MacWebAppWidget.h"
+#endif
 #include <algorithm>
 
 // Helper classes
@@ -182,8 +185,20 @@ nsresult AppWindow::Initialize(nsIAppWindow* aParent, nsIAppWindow* aOpener,
   DesktopIntRect deskRect(initialPos,
                           DesktopIntSize(aInitialWidth, aInitialHeight));
 
+  // Preserve the native application's ownership for opener-created windows.
+#ifdef XP_MACOSX
+  nsCOMPtr<nsIBaseWindow> related = do_QueryInterface(aParent ? aParent : aOpener);
+  if (related) {
+    nsCOMPtr<nsIWidget> owner = related->GetMainWidget();
+    if (owner && owner->IsMacWebAppWidget()) {
+      mWindow = static_cast<mozilla::widget::MacWebAppWidget*>(owner.get())->CreateMacWebAppWindow();
+    }
+  }
+#endif
   // Create top level window
-  if (gfxPlatform::IsHeadless()) {
+  if (mWindow) {
+    // A remote native owner supplied the widget above.
+  } else if (gfxPlatform::IsHeadless()) {
     mWindow = nsIWidget::CreateHeadlessWidget();
   } else {
     mWindow = nsIWidget::CreateTopLevelWindow();

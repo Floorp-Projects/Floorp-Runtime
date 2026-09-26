@@ -20,6 +20,9 @@ void NativeMenuSupport::CreateNativeMenuBar(nsIWidget* aParent,
   if (aMenuBarElement) {
     aMenuBarElement->SetBoolAttr(nsGkAtoms::native, true);
   }
+  if (aParent->IsMacWebAppWidget()) {
+    return;
+  }
 
   // Create the menubar and give it to the parent window. The parent takes
   // ownership.
