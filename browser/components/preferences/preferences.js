@@ -494,6 +494,12 @@ const CONFIG_PANES = Object.freeze({
     module: "chrome://browser/content/preferences/config/translations.mjs",
     visible: () => srdSectionEnabled("translations"),
   },
+  vpnSiteRules: {
+    parent: "privacy",
+    l10nId: "ip-protection-site-rules-header",
+    groupIds: ["vpnSiteRules"],
+    replaces: "privacy",
+  },
   containers: {
     parent: srdSectionEnabled("tabsBrowsing") ? "tabsBrowsing" : "general",
     l10nId: "containers-section-header2",
@@ -641,6 +647,7 @@ function init_all() {
   });
 
   maybeDisplayPoliciesNotice();
+  maybeDisplayTLSKeyLoggingNotice();
 
   window.addEventListener("hashchange", onHashChange);
   window.addEventListener("beforeunload", onBeforeunload);
@@ -850,6 +857,11 @@ async function gotoPref(
    * so the sub-pane drill-down check can compare names.
    */
   let prevCategory = gLastCategory.category;
+
+  // Close any open sub dialogs if navigating away
+  if (prevCategory && prevCategory !== category) {
+    gSubDialog.abortDialogs();
+  }
 
   // Save the previous entry's scroll offset and focused element before
   // switching, so that returning to it later restores the user's place.
@@ -1167,6 +1179,14 @@ function maybeDisplayPoliciesNotice() {
   if (Services.policies.status == Services.policies.ACTIVE) {
     document
       .getElementById("policies-container-content")
+      .removeAttribute("hidden");
+  }
+}
+
+function maybeDisplayTLSKeyLoggingNotice() {
+  if (Services.env.exists("SSLKEYLOGFILE")) {
+    document
+      .getElementById("tls-key-logging-container-content")
       .removeAttribute("hidden");
   }
 }
