@@ -76,8 +76,7 @@ NSView* AccessibleWrap::GetNativeWidget() {
   if (nsIFrame* frame = GetFrame()) {
     if (nsIWidget* widget = frame->GetOwnWidget()) {
       NSView* nativeWidget = (NSView*)widget->GetNativeData(NS_NATIVE_WIDGET);
-      MOZ_ASSERT(nativeWidget || gfxPlatform::IsHeadless() ||
-                     widget->IsMacWebAppWidget(),
+      MOZ_ASSERT(nativeWidget || gfxPlatform::IsHeadless(),
                  "Couldn't get the native NSView parent we need to connect the "
                  "accessibility hierarchy!");
       return nativeWidget;
