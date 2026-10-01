@@ -115,8 +115,7 @@ nsMenuBarX* nsMenuUtilsX::GetHiddenWindowMenuBar() {
     return nullptr;
   }
   nsIWidget* hiddenWindowWidgetNoCOMPtr = nsCocoaUtils::GetHiddenWindowWidget();
-  if (hiddenWindowWidgetNoCOMPtr &&
-      !hiddenWindowWidgetNoCOMPtr->IsMacWebAppWidget()) {
+  if (hiddenWindowWidgetNoCOMPtr) {
     return static_cast<nsCocoaWindow*>(hiddenWindowWidgetNoCOMPtr)
         ->GetMenuBar();
   }

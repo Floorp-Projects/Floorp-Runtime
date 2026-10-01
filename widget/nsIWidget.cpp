@@ -3,9 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsIWidget.h"
-#ifdef XP_MACOSX
-#  include "mozilla/widget/MacWebAppWidget.h"
-#endif
 
 #include <utility>
 
@@ -539,14 +536,7 @@ already_AddRefed<nsIWidget> nsIWidget::CreateChild(
   nsCOMPtr<nsIWidget> widget;
   switch (mWidgetType) {
     case WidgetType::Native: {
-#ifdef XP_MACOSX
-      if (IsMacWebAppWidget()) {
-        widget = static_cast<mozilla::widget::MacWebAppWidget*>(this)->CreateMacWebAppWindow();
-      } else
-#endif
-      {
-        widget = nsIWidget::CreateChildWindow();
-      }
+      widget = nsIWidget::CreateChildWindow();
       break;
     }
     case WidgetType::Headless:
