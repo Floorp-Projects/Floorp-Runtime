@@ -11,6 +11,7 @@ permissions:
   push:
     branches:
       - 'codex/runtime-variants/**/recovery'
+      - 'codex/runtime-variants/**/mac-debug-recovery'
     paths:
       - '.github/workflows/**'
   workflow_dispatch:
@@ -40,6 +41,7 @@ jobs:
 
   windows-pgo-profile:
     needs: validate-source-artifacts
+    if: ${{ !endsWith(github.ref, '/mac-debug-recovery') }}
     uses: ./.github/workflows/generate-pgo-profile-windows.yml
     with:
       MOZ_BUILD_DATE: '20261006185710'
@@ -87,6 +89,7 @@ jobs:
             .github/runtime-upstream.json
             python/mozbuild
             config
+            third_party/python/packaging
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -129,6 +132,11 @@ jobs:
         with:
           name: floorp-mac-universal-moz-artifact
           path: recovered-artifact/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-debug-packaging-provenance
+          path: recovered-artifact/runtime-packaging-provenance.json
           if-no-files-found: error
 
   verify-mac-debug-x86_64:
