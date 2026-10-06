@@ -250,6 +250,8 @@ jobs:
           sparse-checkout: |
             .github/workflows/scripts/verify_full_version.py
             .github/workflows/scripts/verify_linux_profile_paths.py
+            .github/workflows/scripts/verify_debug_runtime.py
+            .github/runtime-upstream.json
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
@@ -276,6 +278,8 @@ jobs:
           DEBUG_BUILD: ${{ inputs.debug }}
           OUTPUT_FILE: ${{ runner.temp }}/native-full-version.txt
           PARSER_PATH: ${{ github.workspace }}/.github/workflows/scripts/verify_full_version.py
+          DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
+          DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:RUNNER_ARCH -ne 'X64') {
@@ -329,7 +333,13 @@ jobs:
           Write-Host "Verified packaged BuildIDs: application=$applicationBuildId platform=$platformBuildId"
 
           if ($env:DEBUG_BUILD -eq 'true') {
-            Write-Host 'Debug artifact: skipping native --full-version probe because the Windows Debug early-exit path asserts in NSPR.'
+            & python $env:DEBUG_VERIFIER `
+              --binary $binaries[0].FullName `
+              --output-dir $env:DEBUG_EVIDENCE_DIR `
+              --expected-build-id $env:EXPECTED_BUILD_ID
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Native Windows Debug startup and rendering failed'
+            }
             exit 0
           }
 
@@ -392,6 +402,9 @@ jobs:
           PROFILE_PATH_WORK_DIR: ${{ runner.temp }}/floorp-profile-path-verification
           PROFILE_PATH_RESULTS: ${{ runner.temp }}/floorp-profile-path-results.json
           TARGET_ARCH: ${{ inputs.arch }}
+          DEBUG_BUILD: ${{ inputs.debug }}
+          DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
+          DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
         run: |
           set -euo pipefail
           case "$TARGET_ARCH" in
@@ -438,6 +451,12 @@ jobs:
             --binary "${binaries[0]}" \
             --work-dir "$PROFILE_PATH_WORK_DIR" \
             --results-json "$PROFILE_PATH_RESULTS"
+          if [[ "$DEBUG_BUILD" == 'true' ]]; then
+            python "$DEBUG_VERIFIER" \
+              --binary "${binaries[0]}" \
+              --output-dir "$DEBUG_EVIDENCE_DIR" \
+              --expected-build-id "$EXPECTED_BUILD_ID"
+          fi
 
       - name: Upload Linux profile path verification evidence
         if: always() && inputs.platform == 'Linux'
@@ -460,6 +479,9 @@ jobs:
           OUTPUT_FILE: ${{ runner.temp }}/native-full-version.txt
           PARSER_PATH: ${{ github.workspace }}/.github/workflows/scripts/verify_full_version.py
           TARGET_ARCH: ${{ inputs.arch }}
+          DEBUG_BUILD: ${{ inputs.debug }}
+          DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
+          DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
         run: |
           set -euo pipefail
           case "$TARGET_ARCH" in
@@ -561,3 +583,18 @@ jobs:
           python "$PARSER_PATH" \
             --expected-build-id "$EXPECTED_BUILD_ID" \
             --output-file "$OUTPUT_FILE"
+          if [[ "$DEBUG_BUILD" == 'true' ]]; then
+            python "$DEBUG_VERIFIER" \
+              --binary "$app_binary" \
+              --output-dir "$DEBUG_EVIDENCE_DIR" \
+              --expected-build-id "$EXPECTED_BUILD_ID"
+          fi
+
+      - name: Upload native Debug verification evidence
+        if: always() && inputs.debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-debug-${{ inputs.platform }}-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-debug-evidence
+          if-no-files-found: warn
+          retention-days: 14
