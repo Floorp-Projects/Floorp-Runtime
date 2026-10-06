@@ -43,44 +43,6 @@ namespace layers {
 
 class NativeLayerRootSnapshotterCA;
 
-class NativeLayerSurface final {
- public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(NativeLayerSurface)
-  explicit NativeLayerSurface(IOSurfaceRef aSurface) : mSurface(CFTypeRefPtr<IOSurfaceRef>::WrapUnderGetRule(aSurface)) {
-    IOSurfaceIncrementUseCount(mSurface.get());
-  }
-  IOSurfaceRef Get() const { return mSurface.get(); }
- private:
-  ~NativeLayerSurface() { IOSurfaceDecrementUseCount(mSurface.get()); }
-  CFTypeRefPtr<IOSurfaceRef> mSurface;
-};
-
-struct NativeLayerPresentation {
-  uintptr_t mIdentity;
-  RefPtr<NativeLayerSurface> mSurface;
-  gfx::IntSize mSize;
-  gfx::IntPoint mPosition;
-  gfx::Matrix4x4 mTransform;
-  gfx::IntRect mDisplayRect;
-  Maybe<gfx::IntRect> mClipRect;
-  Maybe<gfx::RoundedRect> mRoundedClipRect;
-  Maybe<gfx::DeviceColor> mColor;
-  gfx::SamplingFilter mSamplingFilter;
-  bool mSurfaceIsFlipped;
-  bool mIsOpaque;
-  bool mIsDRM;
-  bool mIsHDR;
-};
-
-class NativeLayerPresentationSink {
- public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(NativeLayerPresentationSink)
-  virtual bool Present(nsTArray<NativeLayerPresentation>&& aLayers,
-                       float aBackingScale) = 0;
- protected:
-  virtual ~NativeLayerPresentationSink() = default;
-};
-
 enum class VideoLowPowerType {
   // These must be kept synchronized with the telemetry histogram enums.
   NotVideo,           // Never emitted as telemetry. No video is visible.
@@ -165,8 +127,6 @@ class NativeLayerRootCA final : public NativeLayerRoot {
   // successful. Will return false if called off the main thread while
   // off-main-thread commits are suspended.
   bool CommitToScreen() override;
-
-  void SetPresentationSink(NativeLayerPresentationSink* aSink);
 
   void CommitOffscreen(CALayer* aRootCALayer);
   void OnNativeLayerRootSnapshotterDestroyed(
@@ -258,7 +218,6 @@ class NativeLayerRootCA final : public NativeLayerRoot {
   CALayer* mOnscreenRootCALayer = nullptr;   // strong
   CALayer* mOffscreenRootCALayer = nullptr;  // strong
   NativeLayerRootSnapshotterCA* mWeakSnapshotter = nullptr;
-  RefPtr<NativeLayerPresentationSink> mPresentationSink;
   nsTArray<RefPtr<NativeLayerCA>> mSublayers;  // in z-order
   float mBackingScale = 1.0f;
   bool mMutated = false;
@@ -495,8 +454,6 @@ class NativeLayerCA : public NativeLayer {
   bool IsVideo(const MutexAutoLock& aProofOfLock);
   bool ShouldSpecializeVideo(const MutexAutoLock& aProofOfLock);
 
- public:
-  // Shared by the local CALayer and remote App Shim presentation paths.
   // This function returns a CGRect if a clip should be applied to the layer.
   // If set, the CGRect has the scaled position of the clip relative to the
   // surface origin and the scaled size of the clip rect.
@@ -505,7 +462,6 @@ class NativeLayerCA : public NativeLayer {
       const gfx::Matrix4x4& aTransform, const gfx::IntRect& aDisplayRect,
       const Maybe<gfx::IntRect>& aClipRect, float aBackingScale);
 
- protected:
   Representation& GetRepresentation(WhichRepresentation aRepresentation);
   template <typename F>
   void ForAllRepresentations(F aFn);
