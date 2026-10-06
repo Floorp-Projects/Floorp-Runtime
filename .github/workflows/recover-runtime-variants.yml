@@ -1,0 +1,156 @@
+---
+# SPDX-License-Identifier: MPL-2.0
+
+name: Recover Runtime variants
+
+permissions:
+  actions: read
+  contents: read
+
+'on':
+  push:
+    branches:
+      - 'codex/runtime-variants/**/recovery'
+    paths:
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  validate-source-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const sources = [
+              {id: 11447939387, run: 37515255289, sha: 'd20378eb768503a8ea169a651d44dd0196139095', name: 'floorp-windows-x86_64-profile-generate-mode-package', digest: 'sha256:2061522b0000d0dbee316304d900d98bd05cc79da3259b255db05a04ae766195', build: '20261006185710'},
+              {id: 11448955746, run: 37516295099, sha: 'baa4b86407b65fbb390e5bf4386d193c1518d790', name: 'floorp-mac-universal-moz-artifact', digest: 'sha256:9bb15a218942e518035c0322737c0ea1de7a62a7119970ff668995eee41dda23', build: '20261006190514'}
+            ];
+            for (const source of sources) {
+              const {data: artifact} = await github.rest.actions.getArtifact({...context.repo, artifact_id: source.id});
+              const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id: source.run});
+              const buildId = run.created_at.replace(/\D/g, '').slice(0, 14);
+              if (artifact.expired || artifact.name !== source.name || artifact.digest !== source.digest ||
+                  artifact.workflow_run.id !== source.run || artifact.workflow_run.head_sha !== source.sha ||
+                  run.head_sha !== source.sha || buildId !== source.build) {
+                throw new Error('Source artifact identity mismatch: ' + source.id);
+              }
+              core.info('Validated immutable source artifact ' + source.id + ' at ' + source.sha + ' with BuildID ' + source.build);
+            }
+
+  windows-pgo-profile:
+    needs: validate-source-artifacts
+    uses: ./.github/workflows/generate-pgo-profile-windows.yml
+    with:
+      MOZ_BUILD_DATE: '20261006185710'
+      browser-artifact-name: floorp-windows-x86_64-profile-generate-mode-package
+      browser-artifact-id: '11447939387'
+      source-workflow-run-id: '37515255289'
+      upload-artifact-name: floorp-windows-x86_64-profile-generate-output
+      runner: windows-latest
+
+  windows-pgo-final:
+    needs: windows-pgo-profile
+    uses: ./.github/workflows/common-build.yml
+    with:
+      platform: windows
+      arch: x86_64
+      debug: false
+      pgo: true
+      pgo_mode: use
+      pgo_artifact_name: floorp-windows-x86_64-profile-generate-output
+      MOZ_BUILD_DATE: '20261006185710'
+
+  verify-windows-pgo:
+    needs: windows-pgo-final
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.windows-pgo-final.outputs.artifact-id }}
+      artifact-name: ${{ needs.windows-pgo-final.outputs.artifact-name }}
+      expected-build-id: '20261006185710'
+      platform: Windows
+      arch: x86_64
+      runner: windows-2025
+      debug: false
+
+  mac-debug-repack:
+    needs: validate-source-artifacts
+    runs-on: macos-14
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-name: floorp-mac-universal-moz-artifact
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/workflows/scripts
+            .github/runtime-upstream.json
+            python/mozbuild
+            config
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '11448955746'
+          run-id: '37516295099'
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: source-artifact
+      - name: Repack existing Debug application
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app-stage recovered-artifact
+          cp -a source-artifact/. recovered-artifact/
+          hdiutil attach source-artifact/floorp-macOS-universal-moz-artifact.dmg -readonly -nobrowse -plist > mount.plist
+          python3 - <<'PY'
+          import plistlib
+          import shutil
+          from pathlib import Path
+          mounts = [Path(e['mount-point']) for e in plistlib.loads(Path('mount.plist').read_bytes())['system-entities'] if 'mount-point' in e]
+          apps = [app for mount in mounts for app in mount.glob('*.app')]
+          if len(apps) != 1:
+              raise RuntimeError(f'Expected one application in the source DMG, found {len(apps)}')
+          shutil.copytree(apps[0], Path('app-stage') / apps[0].name, symlinks=True)
+          Path('mount-point.txt').write_text(str(apps[0].parent))
+          PY
+          hdiutil detach "$(cat mount-point.txt)"
+          APP_PATH=$(find app-stage -maxdepth 1 -type d -name '*.app')
+          python3 .github/workflows/scripts/repack_mac_debug_runtime.py \
+            --app "$APP_PATH" \
+            --expected-build-id 20261006190514 \
+            --compiled-source-commit baa4b86407b65fbb390e5bf4386d193c1518d790 \
+            --evidence recovered-artifact/runtime-packaging-provenance.json
+          rm recovered-artifact/floorp-macOS-universal-moz-artifact.dmg
+          hdiutil create -volname "Floorp Daylight" -srcfolder app-stage -format UDZO recovered-artifact/floorp-macOS-universal-moz-artifact.dmg
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: floorp-mac-universal-moz-artifact
+          path: recovered-artifact/
+          if-no-files-found: error
+
+  verify-mac-debug-x86_64:
+    needs: mac-debug-repack
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.mac-debug-repack.outputs.artifact-id }}
+      artifact-name: ${{ needs.mac-debug-repack.outputs.artifact-name }}
+      expected-build-id: '20261006190514'
+      platform: Darwin
+      arch: x86_64
+      runner: macos-15-intel
+      debug: true
+
+  verify-mac-debug-aarch64:
+    needs: mac-debug-repack
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.mac-debug-repack.outputs.artifact-id }}
+      artifact-name: ${{ needs.mac-debug-repack.outputs.artifact-name }}
+      expected-build-id: '20261006190514'
+      platform: Darwin
+      arch: aarch64
+      runner: macos-14
+      debug: true

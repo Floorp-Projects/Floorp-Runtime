@@ -275,7 +275,15 @@ jobs:
           MACOS_SDK_DIR: ${{ env.RUNNER_USERDIR }}/macos-sdk
           MOZ_SDK_DIR: ${{ env.RUNNER_USERDIR }}/macos-sdk
           MOZ_BUILD_DATE: ${{ inputs.MOZ_BUILD_DATE }}
+          GHA_DEBUG: ${{ inputs.debug }}
         run: |
+          if [[ "$GHA_DEBUG" == "true" ]]; then
+            DEBUG_APP=$(find ./obj-x86_64-apple-darwin/dist/floorp -maxdepth 1 -name "*.app" -type d)
+            ./mach python .github/workflows/scripts/repack_mac_debug_runtime.py \
+              --app "$DEBUG_APP" \
+              --expected-build-id "$MOZ_BUILD_DATE" \
+              --evidence ./runtime-packaging-provenance.json
+          fi
           ./mach python -m mozbuild.action.make_dmg ./obj-x86_64-apple-darwin/dist/floorp floorp-macOS-universal-moz-artifact.dmg
 
           cp ./obj-x86_64-apple-darwin/dist/floorp*update_framework_artifacts.zip ./floorp-macOS.update_framework_artifacts.zip
@@ -309,6 +317,9 @@ jobs:
           cp ./floorp-macOS.update_framework_artifacts.zip "$STAGE_DIR/"
           cp -a ./obj-x86_64-apple-darwin/dist/host/. "$STAGE_DIR/dist-host/"
           cp ./floorp-application.ini "$STAGE_DIR/floorp-application.ini"
+          if [[ -f ./runtime-packaging-provenance.json ]]; then
+            cp ./runtime-packaging-provenance.json "$STAGE_DIR/"
+          fi
 
           test -s "$STAGE_DIR/floorp-macOS-universal-moz-artifact.dmg"
           test -s "$STAGE_DIR/floorp-macOS.update_framework_artifacts.zip"
