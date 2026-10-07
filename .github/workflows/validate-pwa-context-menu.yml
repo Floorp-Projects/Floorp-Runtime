@@ -117,6 +117,7 @@ jobs:
           import configparser
           import json
           import os
+          import subprocess
           from pathlib import Path
           root = Path(os.environ['RUNNER_TEMP'])
           expected = json.loads((root / 'runtime-input.json').read_text())['expectedBuildId']
@@ -137,9 +138,12 @@ jobs:
           app = root / 'Floorp.app'
           removed = []
           for path in [app, *app.rglob('*')]:
-              for name in os.listxattr(path, follow_symlinks=False):
+              if path.is_symlink():
+                  continue
+              attributes = subprocess.check_output(['/usr/bin/xattr', str(path)], text=True)
+              for name in attributes.splitlines():
                   if name in {'com.apple.FinderInfo', 'com.apple.ResourceFork'}:
-                      os.removexattr(path, name, follow_symlinks=False)
+                      subprocess.run(['/usr/bin/xattr', '-d', name, str(path)], check=True)
                       removed.append({'path': str(path.relative_to(app)), 'attribute': name})
           (root / 'pwa-context-menu/development-copy-metadata.json').write_text(
               json.dumps({'removed': removed}, indent=2) + '\n')
@@ -151,6 +155,15 @@ jobs:
           python3 floorp/tools/app-shim/test-context-menu.py \
             --browser "$RUNNER_TEMP/Floorp.app" \
             --output "$RUNNER_TEMP/pwa-context-menu" --iterations 20
+
+      - name: Verify native GUI input with existing macOS permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 floorp/tools/app-shim/test-runtime.py \
+            --browser "$RUNNER_TEMP/Floorp.app" \
+            --output "$RUNNER_TEMP/pwa-context-menu/native-gui" \
+            --launch-services --capture-window
 
       - name: Upload native regression evidence
         if: always()
