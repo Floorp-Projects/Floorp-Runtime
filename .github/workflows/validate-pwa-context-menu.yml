@@ -126,8 +126,8 @@ jobs:
               JSON.stringify({runId, artifactId, digest, sourceCommit: run.head_sha,
                 expectedBuildId: run.created_at.replace(/\D/g, '').slice(0, 14)}, null, 2));
 
-      - name: Verify and run the native context-menu regression
-        id: context-menu
+      - name: Validate and stage the exact Runtime package
+        id: stage-runtime
         shell: bash
         env:
           CANDIDATE_PACKAGING: ${{ inputs.candidate_packaging }}
@@ -163,8 +163,33 @@ jobs:
               --evidence "$RUNNER_TEMP/pwa-context-menu/candidate-packaging.json"
             mkdir -p "$RUNNER_TEMP/candidate-dmg-source" "$RUNNER_TEMP/candidate-dmg-mount"
             mv "$RUNNER_TEMP/Floorp.app" "$RUNNER_TEMP/candidate-dmg-source/Floorp.app"
-            hdiutil create -ov -fs HFS+ -format UDZO -volname 'Runtime packaging QA' \
-              -srcfolder "$RUNNER_TEMP/candidate-dmg-source" "$RUNNER_TEMP/candidate-runtime.dmg"
+            python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          command = ['hdiutil', 'create', '-ov', '-fs', 'HFS+', '-format', 'UDZO',
+                     '-volname', 'Runtime packaging QA', '-srcfolder',
+                     str(root / 'candidate-dmg-source'), str(root / 'candidate-runtime.dmg')]
+          attempts = []
+          for attempt in range(3):
+              result = subprocess.run(command, capture_output=True, text=True,
+                                      check=False, timeout=240)
+              attempts.append({'attempt': attempt + 1, 'exitCode': result.returncode,
+                               'stdout': result.stdout, 'stderr': result.stderr})
+              (root / 'pwa-context-menu/candidate-dmg-create.json').write_text(
+                  json.dumps({'attempts': attempts}, indent=2) + '\n')
+              print(result.stdout, end='')
+              print(result.stderr, end='')
+              if result.returncode == 0:
+                  break
+              if 'Resource busy' not in result.stderr or attempt == 2:
+                  raise subprocess.CalledProcessError(result.returncode, command)
+              time.sleep(2)
+          PY
             hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/candidate-dmg-mount" \
               "$RUNNER_TEMP/candidate-runtime.dmg"
             cleanup_candidate() {
@@ -250,6 +275,12 @@ jobs:
           output.write_text(json.dumps(permissions, indent=2) + '\n')
           print(output.read_text())
           PY
+
+      - name: Verify the native context-menu regression
+        id: context-menu
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 - <<'PY'
           import importlib.util
           import json
