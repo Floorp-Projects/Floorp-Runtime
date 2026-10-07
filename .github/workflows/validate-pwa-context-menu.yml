@@ -129,6 +129,21 @@ jobs:
           # Raw Runtime artifacts are unsigned. Use the documented local
           # developer signature on this disposable copy to exercise the normal
           # authenticated host/shim handshake. This is not distribution signing.
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          app = root / 'Floorp.app'
+          removed = []
+          for path in [app, *app.rglob('*')]:
+              for name in os.listxattr(path, follow_symlinks=False):
+                  if name in {'com.apple.FinderInfo', 'com.apple.ResourceFork'}:
+                      os.removexattr(path, name, follow_symlinks=False)
+                      removed.append({'path': str(path.relative_to(app)), 'attribute': name})
+          (root / 'pwa-context-menu/development-copy-metadata.json').write_text(
+              json.dumps({'removed': removed}, indent=2) + '\n')
+          PY
           codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/Floorp.app"
           codesign --display --verbose=4 "$RUNNER_TEMP/Floorp.app" \
