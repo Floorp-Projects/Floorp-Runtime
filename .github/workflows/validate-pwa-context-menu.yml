@@ -63,6 +63,7 @@ jobs:
             .github/runtime-upstream.json
             .github/workflows/scripts/repack_mac_debug_runtime.py
             .github/workflows/scripts/verify_full_version.py
+            .github/workflows/scripts/verify_debug_runtime.py
             .github/workflows/scripts/collect_mac_runtime_symbols.py
             python/mozbuild/mozpack
             python/mozbuild/mozbuild
@@ -514,6 +515,10 @@ jobs:
             --evidence "$RUNNER_TEMP/pwa-context-menu/omnijar-comparison.json"
           codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp-repacked.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/Floorp-repacked.app"
+          python3 runtime-tools/.github/workflows/scripts/verify_debug_runtime.py \
+            --binary "$RUNNER_TEMP/Floorp-repacked.app/Contents/MacOS/floorp" \
+            --output-dir "$RUNNER_TEMP/pwa-context-menu/repacked-native-render" \
+            --expected-build-id "$EXPECTED_BUILD_ID"
           python3 floorp/tools/app-shim/test-context-menu.py \
             --browser "$RUNNER_TEMP/Floorp-repacked.app" \
             --output "$RUNNER_TEMP/pwa-context-menu/repacked-context-menu" --iterations 20
@@ -529,3 +534,25 @@ jobs:
           name: pwa-context-menu-${{ matrix.arch }}-${{ github.run_id }}
           path: ${{ runner.temp }}/pwa-context-menu
           if-no-files-found: error
+
+      - name: Upload compact native reports and fixture screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-reports-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/pwa-context-menu/*.json
+            ${{ runner.temp }}/pwa-context-menu/*.txt
+            ${{ runner.temp }}/pwa-context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/native-gui/run-*/fixture-window.png
+            ${{ runner.temp }}/pwa-context-menu/repacked-context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.png
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.log
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-gui/run-*/fixture-window.png
+          if-no-files-found: error
+          retention-days: 14
