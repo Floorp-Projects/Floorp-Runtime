@@ -259,6 +259,19 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Checkout maintained macOS PWA integration tests
+        if: inputs.platform == 'Darwin'
+        uses: actions/checkout@v4
+        with:
+          repository: Floorp-Projects/Floorp
+          ref: e1da5a98af5fa72065994514dc9618f2a38ba338
+          path: floorp-native-tests
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            tools/app-shim/test-runtime.py
+            tools/app-shim/test-context-menu.py
+
       - name: Download exact final primary artifact by ID
         uses: actions/download-artifact@v4
         with:
@@ -482,6 +495,7 @@ jobs:
           DEBUG_BUILD: ${{ inputs.debug }}
           DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
           DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
+          PWA_EVIDENCE_DIR: ${{ runner.temp }}/native-pwa-evidence
         run: |
           set -euo pipefail
           case "$TARGET_ARCH" in
@@ -587,6 +601,85 @@ jobs:
             --binary "$app_binary" \
             --output-dir "$DEBUG_EVIDENCE_DIR" \
             --expected-build-id "$EXPECTED_BUILD_ID"
+
+          app_bundle="$(dirname "$(dirname "$(dirname "$app_binary")")")"
+          test -s "$app_bundle/Contents/Resources/omni.ja"
+          ditto "$app_bundle" "$RUNNER_TEMP/Floorp-native-test.app"
+          mkdir -p "$PWA_EVIDENCE_DIR"
+          APP_BUNDLE="$app_bundle" python3 - <<'PY'
+          import ctypes
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          source = Path(os.environ['APP_BUNDLE'])
+          app = Path(os.environ['RUNNER_TEMP']) / 'Floorp-native-test.app'
+          evidence = Path(os.environ['PWA_EVIDENCE_DIR'])
+          identities = {}
+          for path in source.rglob('*'):
+              if not path.is_file() or path.is_symlink():
+                  continue
+              relative = path.relative_to(source)
+              with path.open('rb') as stream:
+                  original = hashlib.file_digest(stream, 'sha256').hexdigest()
+              with (app / relative).open('rb') as stream:
+                  copied = hashlib.file_digest(stream, 'sha256').hexdigest()
+              if original != copied:
+                  raise ValueError(f'Disposable copy changed {relative}')
+              identities[str(relative)] = original
+          removed = []
+          for path in [app, *app.rglob('*')]:
+              if path.is_symlink():
+                  continue
+              attributes = subprocess.check_output(['/usr/bin/xattr', str(path)], text=True)
+              for name in attributes.splitlines():
+                  if name in {'com.apple.FinderInfo', 'com.apple.ResourceFork'}:
+                      subprocess.run(['/usr/bin/xattr', '-d', name, str(path)], check=True)
+                      removed.append({'path': str(path.relative_to(app)), 'attribute': name})
+          (evidence / 'development-copy.json').write_text(json.dumps({
+              'filesBeforeDevelopmentSigning': identities,
+              'removedMetadata': removed,
+              'sourceArtifactUnmodified': True,
+          }, indent=2) + '\n')
+          graphics = ctypes.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+          graphics.CGPreflightPostEventAccess.restype = ctypes.c_bool
+          graphics.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+          permissions = {
+              'eventPosting': bool(graphics.CGPreflightPostEventAccess()),
+              'screenCapture': bool(graphics.CGPreflightScreenCaptureAccess()),
+              'permissionPromptOpened': False,
+          }
+          (evidence / 'gui-permissions.json').write_text(json.dumps(permissions, indent=2) + '\n')
+          if not permissions['eventPosting'] or not permissions['screenCapture']:
+              raise RuntimeError('Required existing native GUI test permissions are unavailable')
+          PY
+          codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp-native-test.app"
+          codesign --verify --deep --strict "$RUNNER_TEMP/Floorp-native-test.app"
+          codesign --display --verbose=4 "$RUNNER_TEMP/Floorp-native-test.app" \
+            > "$PWA_EVIDENCE_DIR/development-signature.txt" 2>&1
+          python3 floorp-native-tests/tools/app-shim/test-context-menu.py \
+            --browser "$RUNNER_TEMP/Floorp-native-test.app" \
+            --output "$PWA_EVIDENCE_DIR/context-menu" --iterations 20
+          python3 floorp-native-tests/tools/app-shim/test-runtime.py \
+            --browser "$RUNNER_TEMP/Floorp-native-test.app" \
+            --output "$PWA_EVIDENCE_DIR/native-gui" --launch-services --capture-window
+
+      - name: Upload compact native macOS PWA regression evidence
+        if: always() && inputs.platform == 'Darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-pwa-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native-pwa-evidence/*.json
+            ${{ runner.temp }}/native-pwa-evidence/*.txt
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/result.json
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.log
+            ${{ runner.temp }}/native-pwa-evidence/native-gui/run-*/report.json
+            ${{ runner.temp }}/native-pwa-evidence/native-gui/run-*/fixture-window.png
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload native macOS Release or PGO rendering evidence
         if: always() && inputs.platform == 'Darwin' && !inputs.debug
