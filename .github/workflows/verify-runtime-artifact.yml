@@ -583,12 +583,19 @@ jobs:
           python "$PARSER_PATH" \
             --expected-build-id "$EXPECTED_BUILD_ID" \
             --output-file "$OUTPUT_FILE"
-          if [[ "$DEBUG_BUILD" == 'true' ]]; then
-            python "$DEBUG_VERIFIER" \
-              --binary "$app_binary" \
-              --output-dir "$DEBUG_EVIDENCE_DIR" \
-              --expected-build-id "$EXPECTED_BUILD_ID"
-          fi
+          python "$DEBUG_VERIFIER" \
+            --binary "$app_binary" \
+            --output-dir "$DEBUG_EVIDENCE_DIR" \
+            --expected-build-id "$EXPECTED_BUILD_ID"
+
+      - name: Upload native macOS Release or PGO rendering evidence
+        if: always() && inputs.platform == 'Darwin' && !inputs.debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-render-${{ inputs.platform }}-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-debug-evidence
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload native Debug verification evidence
         if: always() && inputs.debug

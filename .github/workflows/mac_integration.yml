@@ -277,13 +277,12 @@ jobs:
           MOZ_BUILD_DATE: ${{ inputs.MOZ_BUILD_DATE }}
           GHA_DEBUG: ${{ inputs.debug }}
         run: |
-          if [[ "$GHA_DEBUG" == "true" ]]; then
-            DEBUG_APP=$(find ./obj-x86_64-apple-darwin/dist/floorp -maxdepth 1 -name "*.app" -type d)
-            ./mach python .github/workflows/scripts/repack_mac_debug_runtime.py \
-              --app "$DEBUG_APP" \
-              --expected-build-id "$MOZ_BUILD_DATE" \
-              --evidence ./runtime-packaging-provenance.json
-          fi
+          set -euo pipefail
+          UNIVERSAL_APP=$(find ./obj-x86_64-apple-darwin/dist/floorp -maxdepth 1 -name "*.app" -type d)
+          ./mach python .github/workflows/scripts/repack_mac_debug_runtime.py \
+            --app "$UNIVERSAL_APP" \
+            --expected-build-id "$MOZ_BUILD_DATE" \
+            --evidence ./runtime-packaging-provenance.json
           ./mach python -m mozbuild.action.make_dmg ./obj-x86_64-apple-darwin/dist/floorp floorp-macOS-universal-moz-artifact.dmg
 
           cp ./obj-x86_64-apple-darwin/dist/floorp*update_framework_artifacts.zip ./floorp-macOS.update_framework_artifacts.zip
