@@ -1,0 +1,146 @@
+---
+# SPDX-License-Identifier: MPL-2.0
+
+name: Validate Runtime Debug
+
+permissions:
+  actions: read
+  contents: read
+
+'on':
+  push:
+    branches:
+      - 'codex/runtime-variants/**/debug'
+    paths:
+      - '.github/runtime-upstream.json'
+      - '.github/patches/upstream/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      requested_MOZ_BUILD_DATE:
+        description: Optional 14-digit build ID assertion
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  resolve-build-context:
+    uses: ./.github/workflows/resolve-build-context.yml
+    with:
+      requested_moz_build_date: >-
+        ${{ inputs.requested_MOZ_BUILD_DATE || '' }}
+      require_run_metadata: true
+
+  windows-x86_64:
+    name: >-
+      Windows x86_64
+    needs: resolve-build-context
+    uses: ./.github/workflows/wrapper-build-windows.yml
+    secrets: inherit
+    with:
+      debug: true
+      pgo: false
+      MOZ_BUILD_DATE: >-
+        ${{ needs.resolve-build-context.outputs.expected-build-id }}
+
+  linux-x86_64:
+    name: >-
+      Linux x86_64
+    needs: resolve-build-context
+    uses: ./.github/workflows/wrapper-build-linux.yml
+    secrets: inherit
+    with:
+      debug: true
+      pgo: false
+      arch: x86_64
+      MOZ_BUILD_DATE: >-
+        ${{ needs.resolve-build-context.outputs.expected-build-id }}
+
+  linux-aarch64:
+    name: Linux aarch64
+    needs: resolve-build-context
+    uses: ./.github/workflows/wrapper-build-linux.yml
+    secrets: inherit
+    with:
+      debug: true
+      pgo: false
+      arch: aarch64
+      MOZ_BUILD_DATE: >-
+        ${{ needs.resolve-build-context.outputs.expected-build-id }}
+
+  mac:
+    name: >-
+      Mac build
+    needs: resolve-build-context
+    uses: ./.github/workflows/wrapper-mac-build.yml
+    secrets: inherit
+    with:
+      debug: true
+      pgo: false
+      MOZ_BUILD_DATE: >-
+        ${{ needs.resolve-build-context.outputs.expected-build-id }}
+
+  verify-windows-x86_64:
+    name: Verify Windows x86_64 runtime artifact
+    needs: windows-x86_64
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.windows-x86_64.outputs.artifact-id }}
+      artifact-name: ${{ needs.windows-x86_64.outputs.artifact-name }}
+      expected-build-id: ${{ needs.windows-x86_64.outputs.expected-build-id }}
+      platform: Windows
+      arch: x86_64
+      runner: windows-2025
+      debug: true
+
+  verify-linux-x86_64:
+    name: Verify Linux x86_64 runtime artifact
+    needs: linux-x86_64
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.linux-x86_64.outputs.artifact-id }}
+      artifact-name: ${{ needs.linux-x86_64.outputs.artifact-name }}
+      expected-build-id: ${{ needs.linux-x86_64.outputs.expected-build-id }}
+      platform: Linux
+      arch: x86_64
+      runner: ubuntu-24.04
+      debug: true
+
+  verify-linux-aarch64:
+    name: Verify Linux aarch64 runtime artifact
+    needs: linux-aarch64
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.linux-aarch64.outputs.artifact-id }}
+      artifact-name: ${{ needs.linux-aarch64.outputs.artifact-name }}
+      expected-build-id: ${{ needs.linux-aarch64.outputs.expected-build-id }}
+      platform: Linux
+      arch: aarch64
+      runner: ubuntu-24.04-arm
+      debug: true
+
+  verify-mac-x86_64:
+    name: Verify macOS x86_64 runtime artifact
+    needs: mac
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.mac.outputs.artifact-id }}
+      artifact-name: ${{ needs.mac.outputs.artifact-name }}
+      expected-build-id: ${{ needs.mac.outputs.expected-build-id }}
+      platform: Darwin
+      arch: x86_64
+      runner: macos-15-intel
+      debug: true
+
+  verify-mac-aarch64:
+    name: Verify macOS aarch64 runtime artifact
+    needs: mac
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      artifact-id: ${{ needs.mac.outputs.artifact-id }}
+      artifact-name: ${{ needs.mac.outputs.artifact-name }}
+      expected-build-id: ${{ needs.mac.outputs.expected-build-id }}
+      platform: Darwin
+      arch: aarch64
+      runner: macos-14
+      debug: true
