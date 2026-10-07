@@ -117,8 +117,8 @@ jobs:
           import configparser
           import json
           import os
-          import subprocess
           from pathlib import Path
+
           root = Path(os.environ['RUNNER_TEMP'])
           expected = json.loads((root / 'runtime-input.json').read_text())['expectedBuildId']
           for filename, section in [('application.ini', 'App'), ('platform.ini', 'Build')]:
@@ -133,7 +133,9 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import subprocess
           from pathlib import Path
+
           root = Path(os.environ['RUNNER_TEMP'])
           app = root / 'Floorp.app'
           removed = []
