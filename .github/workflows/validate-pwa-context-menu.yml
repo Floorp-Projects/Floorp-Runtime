@@ -217,10 +217,62 @@ jobs:
           set -euo pipefail
           # This supported launch mode keeps the child PID and its real exit
           # status. Its report cannot replace the failed LaunchServices gate.
-          python3 floorp/tools/app-shim/test-runtime.py \
-            --browser "$RUNNER_TEMP/Floorp.app" \
-            --output "$RUNNER_TEMP/pwa-context-menu/subprocess-diagnostic" \
-            --capture-window
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          import shutil
+          import sys
+          import time
+          from pathlib import Path
+
+          script = Path('floorp/tools/app-shim/test-runtime.py').resolve()
+          spec = importlib.util.spec_from_file_location('native_runtime_test', script)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          root = Path(os.environ['RUNNER_TEMP'])
+          output = root / 'pwa-context-menu/subprocess-diagnostic'
+          output.mkdir(parents=True, exist_ok=True)
+          identities = []
+          original_init = module.HostProcess.__init__
+
+          def record_host(host, *args, **kwargs):
+              original_init(host, *args, **kwargs)
+              identities.append({'pid': host.process.pid, 'command': host.command})
+
+          module.HostProcess.__init__ = record_host
+          sys.argv = [str(script), '--browser', str(root / 'Floorp.app'),
+                      '--output', str(output), '--capture-window']
+          code = module.main()
+          (output / 'launcher-identities.json').write_text(
+              json.dumps(identities, indent=2) + '\n')
+          # Retain only OS crash reports for our exact freshly launched child.
+          # This does not change crash handling or the original test result.
+          reports = Path.home() / 'Library/Logs/DiagnosticReports'
+          captured = []
+          deadline = time.monotonic() + 15
+          while time.monotonic() < deadline and not captured:
+              for path in reports.glob('Floorp*.ips'):
+                  if path.stat().st_size > 10 * 1024 * 1024:
+                      continue
+                  try:
+                      crash = json.loads(path.read_text().split('\n', 1)[1])
+                  except (ValueError, IndexError):
+                      continue
+                  if not any(crash.get('pid') == item['pid'] and
+                             crash.get('procPath') == item['command'][0]
+                             for item in identities):
+                      continue
+                  destination = output / 'DiagnosticReports'
+                  destination.mkdir(exist_ok=True)
+                  shutil.copyfile(path, destination / path.name)
+                  captured.append(path.name)
+              if not captured:
+                  time.sleep(0.5)
+          print(json.dumps({'ownedHostIdentities': identities,
+                            'matchingCrashReports': captured}), flush=True)
+          raise SystemExit(code)
+          PY
 
       - name: Upload native regression evidence
         if: always()
