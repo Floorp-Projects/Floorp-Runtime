@@ -172,9 +172,33 @@ jobs:
           output.write_text(json.dumps(permissions, indent=2) + '\n')
           print(output.read_text())
           PY
-          python3 floorp/tools/app-shim/test-context-menu.py \
-            --browser "$RUNNER_TEMP/Floorp.app" \
-            --output "$RUNNER_TEMP/pwa-context-menu" --iterations 20
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          script = Path('floorp/tools/app-shim/test-context-menu.py').resolve()
+          spec = importlib.util.spec_from_file_location('context_menu_test', script)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          original_poll = module.h.HostProcess.poll
+
+          def diagnostic_poll(host):
+              result = original_poll(host)
+              if result is not None and host.pid is None:
+                  rows = [row for row in host._process_rows() if str(host.profile) in row[2]]
+                  print(json.dumps({'launcherExitCode': host.process.returncode,
+                                    'isolatedProfileProcesses': rows}), flush=True)
+              return result
+
+          module.h.HostProcess.poll = diagnostic_poll
+          root = Path(os.environ['RUNNER_TEMP'])
+          sys.argv = [str(script), '--browser', str(root / 'Floorp.app'),
+                      '--output', str(root / 'pwa-context-menu'), '--iterations', '20']
+          raise SystemExit(module.main())
+          PY
 
       - name: Verify native GUI input with existing macOS permissions
         shell: bash
