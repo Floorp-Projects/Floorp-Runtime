@@ -16,6 +16,7 @@ from pathlib import Path
 SOURCE_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(SOURCE_ROOT / "python/mozbuild"))
 sys.path.insert(0, str(SOURCE_ROOT / "config"))
+sys.path.insert(0, str(SOURCE_ROOT / "third_party/python/packaging"))
 
 from createprecomplete import generate_precomplete
 from mozpack.chrome.manifest import is_manifest
