@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import json
+import os
 import struct
+import subprocess
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 
-from repack_mac_debug_runtime import repack
+import yaml
+from repack_mac_debug_runtime import SOURCE_ROOT, repack
 
 
-class MacDebugRepackTest(unittest.TestCase):
+class MacRepackTest(unittest.TestCase):
     def setUp(self):
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)
@@ -53,6 +56,103 @@ class MacDebugRepackTest(unittest.TestCase):
         self.assertFalse((self.resources / "omni.ja").exists())
         self.assertTrue((self.resources / "chrome.manifest").is_file())
         self.assertEqual(self.binary.read_bytes(), self.binary_bytes)
+
+    def test_release_and_pgo_packages_preserve_their_identity_and_native_code(self):
+        for mode, build_id in (
+            ("Release", "20261006154310"),
+            ("PGO", "20261006185710"),
+        ):
+            with self.subTest(mode=mode):
+                app = Path(self.work.name) / mode / "Floorp.app"
+                resources = app / "Contents/Resources"
+                (resources / "modules").mkdir(parents=True)
+                (app / "Contents/MacOS").mkdir()
+                binary = app / "Contents/MacOS/floorp"
+                binary.write_bytes(self.binary_bytes)
+                (resources / "chrome.manifest").write_text("resource gre .\n")
+                module = b"export const mode=" + mode.encode() + b";\n"
+                (resources / "modules/Fixture.sys.mjs").write_bytes(module)
+                identity = f"[App]\nVersion=157.0.1\nBuildID={build_id}\n"
+                (resources / "application.ini").write_text(identity)
+                (resources / "platform.ini").write_text(f"[Build]\nBuildID={build_id}\n")
+                proof = app.parent / "proof.json"
+                repack(app, build_id, proof, f"{mode}-source")
+                with zipfile.ZipFile(resources / "omni.ja") as jar:
+                    self.assertEqual(jar.read("modules/Fixture.sys.mjs"), module)
+                self.assertEqual(binary.read_bytes(), self.binary_bytes)
+                self.assertEqual((resources / "application.ini").read_text(), identity)
+                evidence = json.loads(proof.read_text())
+                self.assertEqual(evidence["build_id"], build_id)
+                self.assertEqual(evidence["compiled_source_commit"], f"{mode}-source")
+                self.assertTrue(evidence["native_binaries_unchanged"])
+                self.assertEqual(evidence["original_resource_format"], "flat")
+                self.assertEqual(evidence["resource_format"], "omni")
+
+
+class UniversalPackagingWorkflowTest(unittest.TestCase):
+    def setUp(self):
+        self.work = tempfile.TemporaryDirectory()
+        self.addCleanup(self.work.cleanup)
+        self.root = Path(self.work.name)
+        package = self.root / "obj-x86_64-apple-darwin/dist/floorp"
+        resources = package / "Floorp.app/Contents/Resources"
+        resources.mkdir(parents=True)
+        (resources / "application.ini").write_text("[App]\nBuildID=20261006185710\n")
+        (package.parent / "floorp.update_framework_artifacts.zip").write_bytes(b"fixture")
+        self.calls = self.root / "calls.jsonl"
+        mach = self.root / "mach"
+        mach.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "with open(os.environ['CALLS'], 'a') as output:\n"
+            "    output.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if len(sys.argv) > 2 and sys.argv[2].endswith('repack_mac_debug_runtime.py'):\n"
+            "    sys.exit(int(os.environ.get('REPACK_EXIT', '0')))\n"
+        )
+        mach.chmod(0o755)
+        workflow = yaml.safe_load(
+            (SOURCE_ROOT / ".github/workflows/mac_integration.yml").read_text()
+        )
+        self.command = next(
+            step["run"]
+            for step in workflow["jobs"]["Integration"]["steps"]
+            if step.get("name", "").startswith("Create DMG")
+        )
+
+    def run_packaging(self, debug, repack_exit=0):
+        self.calls.unlink(missing_ok=True)
+        environment = {
+            **os.environ,
+            "GHA_DEBUG": str(debug).lower(),
+            "MOZ_BUILD_DATE": "20261006185710",
+            "CALLS": str(self.calls),
+            "REPACK_EXIT": str(repack_exit),
+        }
+        result = subprocess.run(
+            ["bash", "-c", self.command],
+            cwd=self.root,
+            env=environment,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
+        return result, calls
+
+    def test_normal_and_debug_workflow_repack_before_creating_the_dmg(self):
+        for debug in (False, True):
+            with self.subTest(debug=debug):
+                result, calls = self.run_packaging(debug)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(len(calls), 2)
+                self.assertIn("repack_mac_debug_runtime.py", calls[0][1])
+                self.assertIn("20261006185710", calls[0])
+                self.assertEqual(calls[1][:3], ["python", "-m", "mozbuild.action.make_dmg"])
+
+    def test_failed_repack_prevents_dmg_creation(self):
+        result, calls = self.run_packaging(False, repack_exit=17)
+        self.assertEqual(result.returncode, 17)
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
