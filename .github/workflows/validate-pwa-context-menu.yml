@@ -61,6 +61,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             .github/runtime-upstream.json
+            .github/workflows/verify-runtime-artifact.yml
             .github/workflows/scripts/repack_mac_debug_runtime.py
             .github/workflows/scripts/verify_full_version.py
             .github/workflows/scripts/verify_debug_runtime.py
@@ -519,13 +520,31 @@ jobs:
             --binary "$RUNNER_TEMP/Floorp-repacked.app/Contents/MacOS/floorp" \
             --output-dir "$RUNNER_TEMP/pwa-context-menu/repacked-native-render" \
             --expected-build-id "$EXPECTED_BUILD_ID"
-          python3 floorp/tools/app-shim/test-context-menu.py \
-            --browser "$RUNNER_TEMP/Floorp-repacked.app" \
-            --output "$RUNNER_TEMP/pwa-context-menu/repacked-context-menu" --iterations 20
-          python3 floorp/tools/app-shim/test-runtime.py \
-            --browser "$RUNNER_TEMP/Floorp-repacked.app" \
-            --output "$RUNNER_TEMP/pwa-context-menu/repacked-native-gui" \
-            --launch-services --capture-window
+          ln -s floorp floorp-native-tests
+          RUNTIME_PWA_BINARY="$RUNNER_TEMP/Floorp-repacked.app/Contents/MacOS/floorp" \
+          PWA_EVIDENCE_DIR="$RUNNER_TEMP/pwa-context-menu/repacked-production-gate" \
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          workflow = Path('runtime-tools/.github/workflows/verify-runtime-artifact.yml')
+          lines = workflow.read_text().splitlines()
+          markers = [index for index, line in enumerate(lines)
+                     if line.startswith('          app_bundle=')]
+          if len(markers) != 1:
+              raise ValueError('Expected one reviewed production PWA gate')
+          start = markers[0]
+          end = next(index for index in range(start + 1, len(lines))
+                     if lines[index].startswith('      - name:'))
+          body = '\n'.join(line[10:] if line.startswith(' ' * 10) else line
+                           for line in lines[start:end])
+          script = 'set -euo pipefail\napp_binary="$RUNTIME_PWA_BINARY"\n' + body + '\n'
+          output = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu/production-pwa-gate.sh'
+          output.write_text(script)
+          subprocess.run(['bash', '-n', str(output)], check=True)
+          subprocess.run(['bash', str(output)], check=True)
+          PY
 
       - name: Upload native regression evidence
         if: always()
@@ -554,5 +573,11 @@ jobs:
             ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.log
             ${{ runner.temp }}/pwa-context-menu/repacked-native-gui/run-*/report.json
             ${{ runner.temp }}/pwa-context-menu/repacked-native-gui/run-*/fixture-window.png
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/*.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/*.txt
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/native-gui/run-*/fixture-window.png
           if-no-files-found: error
           retention-days: 14
