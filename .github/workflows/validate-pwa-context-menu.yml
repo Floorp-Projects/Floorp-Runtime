@@ -154,6 +154,24 @@ jobs:
           codesign --verify --deep --strict "$RUNNER_TEMP/Floorp.app"
           codesign --display --verbose=4 "$RUNNER_TEMP/Floorp.app" \
             > "$RUNNER_TEMP/pwa-context-menu/development-signature.txt" 2>&1
+          python3 - <<'PY'
+          import ctypes
+          import json
+          import os
+          from pathlib import Path
+
+          graphics = ctypes.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+          graphics.CGPreflightPostEventAccess.restype = ctypes.c_bool
+          graphics.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+          permissions = {
+              'eventPosting': bool(graphics.CGPreflightPostEventAccess()),
+              'screenCapture': bool(graphics.CGPreflightScreenCaptureAccess()),
+              'permissionPromptOpened': False,
+          }
+          output = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu/gui-permissions.json'
+          output.write_text(json.dumps(permissions, indent=2) + '\n')
+          print(output.read_text())
+          PY
           python3 floorp/tools/app-shim/test-context-menu.py \
             --browser "$RUNNER_TEMP/Floorp.app" \
             --output "$RUNNER_TEMP/pwa-context-menu" --iterations 20
