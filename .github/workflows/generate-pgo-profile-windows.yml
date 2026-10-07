@@ -14,6 +14,14 @@ on:
         description: 'Browser artifact to download'
         required: true
         type: string
+      browser-artifact-id:
+        description: 'Optional exact Stage 1 artifact ID'
+        type: string
+        default: ''
+      source-workflow-run-id:
+        description: 'Optional run containing the Stage 1 artifact'
+        type: string
+        default: ''
       artifact-path:
         description: 'Path where browser artifact will be placed'
         required: false
@@ -57,7 +65,11 @@ jobs:
       - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.browser-artifact-name }}
+          name: ${{ inputs.browser-artifact-id == '' && inputs.browser-artifact-name || '' }}
+          artifact-ids: ${{ inputs.browser-artifact-id }}
+          run-id: ${{ inputs.source-workflow-run-id || github.run_id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
           path: ${{ env.ARTIFACT_PATH }}
 
       - name: Extract browser artifact
