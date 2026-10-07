@@ -122,7 +122,7 @@ def repack(app, expected_build_id, evidence_path, compiled_source_commit):
         "gre_omnijar_bytes": (resources / "omni.ja").stat().st_size,
     }
     evidence_path.write_text(json.dumps(evidence, indent=2) + "\n")
-    print("Repacked macOS Debug Runtime with unchanged native binaries: " + json.dumps(evidence))
+    print("Repacked macOS Runtime with unchanged native binaries: " + json.dumps(evidence))
 
 
 if __name__ == "__main__":

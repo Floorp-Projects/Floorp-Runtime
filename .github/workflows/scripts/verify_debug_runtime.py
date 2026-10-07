@@ -42,13 +42,13 @@ def verify_debug_runtime(binary: Path, output_dir: Path, expected_build_id: str)
     if pin.exists():
         expected_version = json.loads(pin.read_text(encoding="utf-8"))["upstream"]["version"]
         if identity["application.ini"]["version"] != expected_version:
-            raise ValueError("Packaged Debug Runtime version does not match the source pin")
+            raise ValueError("Packaged Runtime version does not match the source pin")
 
     page = output_dir / "native-render.html"
     page.write_text(
         '<!doctype html><meta charset="utf-8"><title>Runtime native verification</title>'
         '<body style="margin:0;background:#123456;color:white;font:24px sans-serif">'
-        "Floorp Runtime native Debug verification</body>",
+        "Floorp Runtime native rendering verification</body>",
         encoding="utf-8",
     )
     screenshot = output_dir / "native-render.png"
@@ -78,13 +78,13 @@ def verify_debug_runtime(binary: Path, output_dir: Path, expected_build_id: str)
                 check=False,
             )
     if result.returncode != 0:
-        raise RuntimeError(f"Native Debug Runtime exited with code {result.returncode}")
+        raise RuntimeError(f"Native Runtime exited with code {result.returncode}")
     png = screenshot.read_bytes()
     if len(png) < 64 or png[:8] != b"\x89PNG\r\n\x1a\n" or png[12:16] != b"IHDR":
-        raise ValueError("Native Debug Runtime did not render a valid PNG")
+        raise ValueError("Native Runtime did not render a valid PNG")
     dimensions = struct.unpack(">II", png[16:24])
     if dimensions != (800, 600):
-        raise ValueError(f"Native Debug screenshot has unexpected dimensions: {dimensions}")
+        raise ValueError(f"Native screenshot has unexpected dimensions: {dimensions}")
     evidence = {
         "success": True,
         "native_system": platform.system(),
@@ -96,7 +96,7 @@ def verify_debug_runtime(binary: Path, output_dir: Path, expected_build_id: str)
     (output_dir / "native-debug-results.json").write_text(
         json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
     )
-    print("Verified native Debug startup and rendering: " + json.dumps(evidence))
+    print("Verified native startup and rendering: " + json.dumps(evidence))
 
 
 if __name__ == "__main__":
