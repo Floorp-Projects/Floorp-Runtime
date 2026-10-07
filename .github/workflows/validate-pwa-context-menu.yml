@@ -249,10 +249,14 @@ jobs:
           # Retain only OS crash reports for our exact freshly launched child.
           # This does not change crash handling or the original test result.
           reports = Path.home() / 'Library/Logs/DiagnosticReports'
+          process_names = {'Floorp', *(Path(item['command'][0]).name
+                                      for item in identities)}
           captured = []
           deadline = time.monotonic() + 15
           while time.monotonic() < deadline and not captured:
-              for path in reports.glob('Floorp*.ips'):
+              candidates = {path for name in process_names
+                            for path in reports.glob(f'{name}*.ips')}
+              for path in sorted(candidates):
                   if path.stat().st_size > 10 * 1024 * 1024:
                       continue
                   try:
