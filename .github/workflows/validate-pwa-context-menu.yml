@@ -103,6 +103,7 @@ jobs:
                 expectedBuildId: run.created_at.replace(/\D/g, '').slice(0, 14)}, null, 2));
 
       - name: Verify and run the native context-menu regression
+        id: context-menu
         shell: bash
         run: |
           set -euo pipefail
@@ -208,6 +209,18 @@ jobs:
             --browser "$RUNNER_TEMP/Floorp.app" \
             --output "$RUNNER_TEMP/pwa-context-menu/native-gui" \
             --launch-services --capture-window
+
+      - name: Diagnose subprocess startup after a failed LaunchServices probe
+        if: ${{ failure() && steps.context-menu.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This supported launch mode keeps the child PID and its real exit
+          # status. Its report cannot replace the failed LaunchServices gate.
+          python3 floorp/tools/app-shim/test-runtime.py \
+            --browser "$RUNNER_TEMP/Floorp.app" \
+            --output "$RUNNER_TEMP/pwa-context-menu/subprocess-diagnostic" \
+            --capture-window
 
       - name: Upload native regression evidence
         if: always()
