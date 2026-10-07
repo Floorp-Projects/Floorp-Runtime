@@ -327,31 +327,58 @@ jobs:
           debugger.SetAsync(True)
           target = debugger.CreateTarget(command[0])
           launch = lldb.SBLaunchInfo(command[1:])
-          launch.SetLaunchFlags(launch.GetLaunchFlags() & ~lldb.eLaunchFlagDisableASLR)
+          launch.SetLaunchFlags(launch.GetLaunchFlags() & ~(
+              lldb.eLaunchFlagDisableASLR | lldb.eLaunchFlagStopAtEntry))
+          listener = lldb.SBListener('floorp-startup-diagnostic')
+          launch.SetListener(listener)
           launch.SetEnvironmentEntries(['MOZ_CRASHREPORTER_DISABLE=1'], True)
           launch.SetWorkingDirectory(str(root))
           error = lldb.SBError()
           process = target.Launch(launch, error)
           report = {'diagnosticOnly': True, 'command': command,
-                    'launchError': error.GetCString(), 'pid': process.GetProcessID()}
+                    'launchError': error.GetCString(), 'pid': process.GetProcessID(),
+                    'events': []}
           try:
               if error.Fail():
                   print(json.dumps(report), flush=True)
                   raise RuntimeError('Debugger launch failed; existing permissions were not changed')
               deadline = time.monotonic() + 45
-              active = {lldb.eStateAttaching, lldb.eStateConnected,
-                        lldb.eStateLaunching, lldb.eStateRunning, lldb.eStateStepping}
-              while process.GetState() in active and time.monotonic() < deadline:
-                  time.sleep(0.1)
+              while time.monotonic() < deadline:
+                  event = lldb.SBEvent()
+                  if not listener.WaitForEvent(1, event) or not (
+                          event.GetType() & lldb.SBProcess.eBroadcastBitStateChanged):
+                      continue
+                  state = lldb.SBProcess.GetStateFromEvent(event)
+                  restarted = lldb.SBProcess.GetRestartedFromEvent(event)
+                  report['events'].append({'state': int(state), 'restarted': restarted})
+                  if state == lldb.eStateExited:
+                      break
+                  if state not in {lldb.eStateStopped, lldb.eStateCrashed} or restarted:
+                      continue
+                  reasons = [process.GetThreadAtIndex(index).GetStopReason()
+                             for index in range(process.GetNumThreads())]
+                  if any(reason in {lldb.eStopReasonSignal, lldb.eStopReasonException}
+                         for reason in reasons):
+                      break
+                  resumed = process.Continue()
+                  if resumed.Fail():
+                      raise RuntimeError(resumed.GetCString())
               report['state'] = int(process.GetState())
               report['exitStatus'] = process.GetExitStatus()
+              report['threads'] = []
               with (root / 'lldb-backtrace.log').open('w') as trace:
-                  for query in ('process status', 'thread backtrace all', 'image list'):
-                      result = lldb.SBCommandReturnObject()
-                      debugger.GetCommandInterpreter().HandleCommand(query, result)
-                      trace.write(f'{query}\n')
-                      trace.write(result.GetOutput() or result.GetError() or '')
-                      trace.write('\n')
+                  trace.write(f'process state={report["state"]} pid={report["pid"]}\n')
+                  for index in range(process.GetNumThreads()):
+                      thread = process.GetThreadAtIndex(index)
+                      item = {'id': thread.GetThreadID(), 'reason': int(thread.GetStopReason()),
+                              'description': thread.GetStopDescription(512),
+                              'frames': [str(thread.GetFrameAtIndex(frame))
+                                         for frame in range(min(thread.GetNumFrames(), 80))]}
+                      report['threads'].append(item)
+                      trace.write(json.dumps(item, indent=2) + '\n')
+                  trace.write('image list\n')
+                  for index in range(target.GetNumModules()):
+                      trace.write(str(target.GetModuleAtIndex(index)) + '\n')
           except Exception:
               report['error'] = traceback.format_exc()
               (root / 'lldb-error.log').write_text(report['error'])
@@ -385,7 +412,7 @@ jobs:
           if trace.is_file():
               print(trace.read_text())
           raise SystemExit(result.returncode or int(
-              bool(report.get('error')) or 'state' not in report or not trace.is_file()))
+              bool(report.get('error')) or not report.get('threads') or not trace.is_file()))
           PY
 
       - name: Upload native regression evidence
