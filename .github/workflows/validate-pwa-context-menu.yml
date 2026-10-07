@@ -339,7 +339,7 @@ jobs:
                   print(json.dumps(report), flush=True)
                   raise RuntimeError('Debugger launch failed; existing permissions were not changed')
               deadline = time.monotonic() + 45
-              active = {lldb.eStateAttaching, lldb.eStateConnecting,
+              active = {lldb.eStateAttaching, lldb.eStateConnected,
                         lldb.eStateLaunching, lldb.eStateRunning, lldb.eStateStepping}
               while process.GetState() in active and time.monotonic() < deadline:
                   time.sleep(0.1)
