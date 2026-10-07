@@ -309,6 +309,7 @@ jobs:
           import os
           import shutil
           import time
+          import traceback
           from pathlib import Path
 
           import lldb
@@ -342,13 +343,18 @@ jobs:
                         lldb.eStateLaunching, lldb.eStateRunning, lldb.eStateStepping}
               while process.GetState() in active and time.monotonic() < deadline:
                   time.sleep(0.1)
-              report['state'] = lldb.SBDebugger.StateAsCString(process.GetState())
+              report['state'] = int(process.GetState())
               report['exitStatus'] = process.GetExitStatus()
-              print(json.dumps(report), flush=True)
-              for query in ('process status', 'thread backtrace all', 'image list'):
-                  result = lldb.SBCommandReturnObject()
-                  debugger.GetCommandInterpreter().HandleCommand(query, result)
-                  print(result.GetOutput() or result.GetError() or '', flush=True)
+              with (root / 'lldb-backtrace.log').open('w') as trace:
+                  for query in ('process status', 'thread backtrace all', 'image list'):
+                      result = lldb.SBCommandReturnObject()
+                      debugger.GetCommandInterpreter().HandleCommand(query, result)
+                      trace.write(f'{query}\n')
+                      trace.write(result.GetOutput() or result.GetError() or '')
+                      trace.write('\n')
+          except Exception:
+              report['error'] = traceback.format_exc()
+              (root / 'lldb-error.log').write_text(report['error'])
           finally:
               # LLDB owns this newly launched private-profile child. Only that
               # debugger process is retired; no application-name kill is used.
@@ -373,7 +379,13 @@ jobs:
                                        '--one-line', command], stdout=output,
                                       stderr=subprocess.STDOUT, check=False)
           print((root / 'lldb-startup.log').read_text())
-          raise SystemExit(result.returncode)
+          report = json.loads((root / 'lldb-startup.json').read_text())
+          print(json.dumps(report, indent=2))
+          trace = root / 'lldb-backtrace.log'
+          if trace.is_file():
+              print(trace.read_text())
+          raise SystemExit(result.returncode or int(
+              bool(report.get('error')) or 'state' not in report or not trace.is_file()))
           PY
 
       - name: Upload native regression evidence
