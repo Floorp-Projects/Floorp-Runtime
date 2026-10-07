@@ -21,6 +21,11 @@ name: Validate native PWA context menus
         description: Exact Runtime commit recorded by the selected run
         required: true
         type: string
+      candidate_packaging:
+        description: Test reviewed omnijar packing and a disposable DMG round trip; never publish
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -51,6 +56,25 @@ jobs:
           sparse-checkout: |
             tools/app-shim/test-runtime.py
             tools/app-shim/test-context-menu.py
+
+      - name: Checkout reviewed packaging and diagnostic helpers
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: runtime-tools
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/runtime-upstream.json
+            .github/workflows/verify-runtime-artifact.yml
+            .github/workflows/scripts/repack_mac_debug_runtime.py
+            .github/workflows/scripts/verify_full_version.py
+            .github/workflows/scripts/verify_debug_runtime.py
+            .github/workflows/scripts/collect_mac_runtime_symbols.py
+            python/mozbuild/mozpack
+            python/mozbuild/mozbuild
+            config
+            third_party/python/packaging
 
       - name: Authenticate and download the exact compiled artifact
         uses: actions/github-script@v7
@@ -102,8 +126,12 @@ jobs:
               JSON.stringify({runId, artifactId, digest, sourceCommit: run.head_sha,
                 expectedBuildId: run.created_at.replace(/\D/g, '').slice(0, 14)}, null, 2));
 
-      - name: Verify and run the native context-menu regression
+      - name: Validate and stage the exact Runtime package
+        id: stage-runtime
         shell: bash
+        env:
+          CANDIDATE_PACKAGING: ${{ inputs.candidate_packaging }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/runtime-artifact" "$RUNNER_TEMP/runtime-mount" "$RUNNER_TEMP/pwa-context-menu"
@@ -118,6 +146,7 @@ jobs:
           import json
           import os
           from pathlib import Path
+
           root = Path(os.environ['RUNNER_TEMP'])
           expected = json.loads((root / 'runtime-input.json').read_text())['expectedBuildId']
           for filename, section in [('application.ini', 'App'), ('platform.ini', 'Build')]:
@@ -126,16 +155,516 @@ jobs:
               if config[section]['BuildID'] != expected:
                   raise ValueError('Packaged BuildID mismatch')
           PY
+          if [[ "$CANDIDATE_PACKAGING" == 'true' ]]; then
+            EXPECTED_BUILD_ID=$(python3 -c 'import json,os; print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "runtime-input.json")))["expectedBuildId"])')
+            python3 runtime-tools/.github/workflows/scripts/repack_mac_debug_runtime.py \
+              --app "$RUNNER_TEMP/Floorp.app" --expected-build-id "$EXPECTED_BUILD_ID" \
+              --compiled-source-commit "$SOURCE_COMMIT" \
+              --evidence "$RUNNER_TEMP/pwa-context-menu/candidate-packaging.json"
+            mkdir -p "$RUNNER_TEMP/candidate-dmg-source" "$RUNNER_TEMP/candidate-dmg-mount"
+            mv "$RUNNER_TEMP/Floorp.app" "$RUNNER_TEMP/candidate-dmg-source/Floorp.app"
+            python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          command = ['hdiutil', 'create', '-ov', '-fs', 'HFS+', '-format', 'UDZO',
+                     '-volname', 'Runtime packaging QA', '-srcfolder',
+                     str(root / 'candidate-dmg-source'), str(root / 'candidate-runtime.dmg')]
+          attempts = []
+          for attempt in range(3):
+              result = subprocess.run(command, capture_output=True, text=True,
+                                      check=False, timeout=240)
+              attempts.append({'attempt': attempt + 1, 'exitCode': result.returncode,
+                               'stdout': result.stdout, 'stderr': result.stderr})
+              (root / 'pwa-context-menu/candidate-dmg-create.json').write_text(
+                  json.dumps({'attempts': attempts}, indent=2) + '\n')
+              print(result.stdout, end='')
+              print(result.stderr, end='')
+              if result.returncode == 0:
+                  break
+              if 'Resource busy' not in result.stderr or attempt == 2:
+                  raise subprocess.CalledProcessError(result.returncode, command)
+              time.sleep(2)
+          PY
+            hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/candidate-dmg-mount" \
+              "$RUNNER_TEMP/candidate-runtime.dmg"
+            cleanup_candidate() {
+              hdiutil detach "$RUNNER_TEMP/candidate-dmg-mount" || true
+              hdiutil detach "$RUNNER_TEMP/runtime-mount" || true
+            }
+            trap cleanup_candidate EXIT
+            ditto "$RUNNER_TEMP/candidate-dmg-mount/Floorp.app" "$RUNNER_TEMP/Floorp.app"
+            python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          def inventory(app):
+              contents = {}
+              for file in app.rglob('*'):
+                  relative = str(file.relative_to(app))
+                  if file.is_symlink():
+                      contents[relative] = {'symlink': os.readlink(file)}
+                  elif file.is_file():
+                      with file.open('rb') as stream:
+                          contents[relative] = hashlib.file_digest(stream, 'sha256').hexdigest()
+              return contents
+          before = inventory(root / 'candidate-dmg-source/Floorp.app')
+          after = inventory(root / 'Floorp.app')
+          if before != after:
+              raise ValueError('Disposable DMG round trip changed the application payload')
+          (root / 'pwa-context-menu/candidate-dmg-roundtrip.json').write_text(json.dumps({
+              'status': 'passed', 'filesPreserved': len(before),
+              'sourceArtifactUnmodified': True, 'validationComparisonOnly': True,
+              'applicationPayloadSha256': before,
+          }, indent=2) + '\n')
+          PY
+            python3 runtime-tools/.github/workflows/scripts/verify_debug_runtime.py \
+              --binary "$RUNNER_TEMP/Floorp.app/Contents/MacOS/floorp" \
+              --output-dir "$RUNNER_TEMP/pwa-context-menu/candidate-native-render" \
+              --expected-build-id "$EXPECTED_BUILD_ID"
+          fi
           # Raw Runtime artifacts are unsigned. Use the documented local
           # developer signature on this disposable copy to exercise the normal
           # authenticated host/shim handshake. This is not distribution signing.
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          app = root / 'Floorp.app'
+          removed = []
+          for path in [app, *app.rglob('*')]:
+              if path.is_symlink():
+                  continue
+              attributes = subprocess.check_output(['/usr/bin/xattr', str(path)], text=True)
+              for name in attributes.splitlines():
+                  if name in {'com.apple.FinderInfo', 'com.apple.ResourceFork'}:
+                      subprocess.run(['/usr/bin/xattr', '-d', name, str(path)], check=True)
+                      removed.append({'path': str(path.relative_to(app)), 'attribute': name})
+          (root / 'pwa-context-menu/development-copy-metadata.json').write_text(
+              json.dumps({'removed': removed}, indent=2) + '\n')
+          PY
           codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/Floorp.app"
           codesign --display --verbose=4 "$RUNNER_TEMP/Floorp.app" \
             > "$RUNNER_TEMP/pwa-context-menu/development-signature.txt" 2>&1
-          python3 floorp/tools/app-shim/test-context-menu.py \
+          python3 - <<'PY'
+          import ctypes
+          import json
+          import os
+          from pathlib import Path
+
+          graphics = ctypes.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+          graphics.CGPreflightPostEventAccess.restype = ctypes.c_bool
+          graphics.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+          permissions = {
+              'eventPosting': bool(graphics.CGPreflightPostEventAccess()),
+              'screenCapture': bool(graphics.CGPreflightScreenCaptureAccess()),
+              'permissionPromptOpened': False,
+          }
+          output = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu/gui-permissions.json'
+          output.write_text(json.dumps(permissions, indent=2) + '\n')
+          print(output.read_text())
+          PY
+
+      - name: Verify the native context-menu regression
+        id: context-menu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          script = Path('floorp/tools/app-shim/test-context-menu.py').resolve()
+          spec = importlib.util.spec_from_file_location('context_menu_test', script)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          original_poll = module.h.HostProcess.poll
+
+          def diagnostic_poll(host):
+              result = original_poll(host)
+              if result is not None and host.pid is None:
+                  rows = [row for row in host._process_rows() if str(host.profile) in row[2]]
+                  print(json.dumps({'launcherExitCode': host.process.returncode,
+                                    'isolatedProfileProcesses': rows}), flush=True)
+              return result
+
+          module.h.HostProcess.poll = diagnostic_poll
+          root = Path(os.environ['RUNNER_TEMP'])
+          sys.argv = [str(script), '--browser', str(root / 'Floorp.app'),
+                      '--output', str(root / 'pwa-context-menu'), '--iterations', '20']
+          raise SystemExit(module.main())
+          PY
+
+      - name: Verify native GUI input with existing macOS permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 floorp/tools/app-shim/test-runtime.py \
             --browser "$RUNNER_TEMP/Floorp.app" \
-            --output "$RUNNER_TEMP/pwa-context-menu" --iterations 20
+            --output "$RUNNER_TEMP/pwa-context-menu/native-gui" \
+            --launch-services --capture-window
+
+      - name: Verify the exact production PWA gate on candidate packaging
+        if: inputs.candidate_packaging
+        shell: bash
+        env:
+          RUNTIME_PWA_BINARY: ${{ runner.temp }}/Floorp.app/Contents/MacOS/floorp
+          PWA_EVIDENCE_DIR: ${{ runner.temp }}/pwa-context-menu/candidate-production-gate
+        run: |
+          set -euo pipefail
+          ln -s floorp floorp-native-tests
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          lines = Path('runtime-tools/.github/workflows/verify-runtime-artifact.yml').read_text().splitlines()
+          markers = [index for index, line in enumerate(lines)
+                     if line.startswith('          app_bundle=')]
+          if len(markers) != 1:
+              raise ValueError('Expected one reviewed production PWA gate')
+          start = markers[0]
+          end = next(index for index in range(start + 1, len(lines))
+                     if lines[index].startswith('      - name:'))
+          body = '\n'.join(line[10:] if line.startswith(' ' * 10) else line
+                           for line in lines[start:end])
+          script = 'set -euo pipefail\napp_binary="$RUNTIME_PWA_BINARY"\n' + body + '\n'
+          output = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu/production-pwa-gate.sh'
+          output.write_text(script)
+          subprocess.run(['bash', '-n', str(output)], check=True)
+          subprocess.run(['bash', str(output)], check=True)
+          PY
+
+      - name: Diagnose subprocess startup after a failed LaunchServices probe
+        id: subprocess-diagnostic
+        if: ${{ failure() && steps.context-menu.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This supported launch mode keeps the child PID and its real exit
+          # status. Its report cannot replace the failed LaunchServices gate.
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          import shutil
+          import sys
+          import time
+          from pathlib import Path
+
+          script = Path('floorp/tools/app-shim/test-runtime.py').resolve()
+          spec = importlib.util.spec_from_file_location('native_runtime_test', script)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          root = Path(os.environ['RUNNER_TEMP'])
+          output = root / 'pwa-context-menu/subprocess-diagnostic'
+          output.mkdir(parents=True, exist_ok=True)
+          identities = []
+          original_init = module.HostProcess.__init__
+
+          def record_host(host, *args, **kwargs):
+              original_init(host, *args, **kwargs)
+              identities.append({'pid': host.process.pid, 'command': host.command})
+
+          module.HostProcess.__init__ = record_host
+          sys.argv = [str(script), '--browser', str(root / 'Floorp.app'),
+                      '--output', str(output), '--capture-window']
+          code = module.main()
+          (output / 'launcher-identities.json').write_text(
+              json.dumps(identities, indent=2) + '\n')
+          # Retain only OS crash reports for our exact freshly launched child.
+          # This does not change crash handling or the original test result.
+          reports = Path.home() / 'Library/Logs/DiagnosticReports'
+          process_names = {'Floorp', *(Path(item['command'][0]).name
+                                      for item in identities)}
+          captured = []
+          deadline = time.monotonic() + 15
+          while time.monotonic() < deadline and not captured:
+              candidates = {path for name in process_names
+                            for path in reports.glob(f'{name}*.ips')}
+              for path in sorted(candidates):
+                  if path.stat().st_size > 10 * 1024 * 1024:
+                      continue
+                  try:
+                      crash = json.loads(path.read_text().split('\n', 1)[1])
+                  except (ValueError, IndexError):
+                      continue
+                  if not any(crash.get('pid') == item['pid'] and
+                             crash.get('procPath') == item['command'][0]
+                             for item in identities):
+                      continue
+                  destination = output / 'DiagnosticReports'
+                  destination.mkdir(exist_ok=True)
+                  shutil.copyfile(path, destination / path.name)
+                  captured.append(path.name)
+              if not captured:
+                  time.sleep(0.5)
+          print(json.dumps({'ownedHostIdentities': identities,
+                            'matchingCrashReports': captured}), flush=True)
+          raise SystemExit(code)
+          PY
+
+      - name: Inspect startup crash with existing Xcode debugger access
+        if: ${{ failure() && steps.subprocess-diagnostic.outcome == 'failure' }}
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          output = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu'
+          mode = subprocess.run(['/usr/sbin/DevToolsSecurity', '-status'],
+                                capture_output=True, text=True, check=True)
+          groups = subprocess.check_output(['/usr/bin/id', '-Gn'], text=True).split()
+          available = 'currently enabled' in mode.stdout and any(
+              group in groups for group in ('admin', '_developer'))
+          (output / 'debugger-access.json').write_text(json.dumps({
+              'developerMode': mode.stdout.strip(), 'groups': groups,
+              'existingAccess': available, 'permissionChangeRequested': False,
+          }, indent=2) + '\n')
+          if not available:
+              raise SystemExit('Existing debugger access unavailable; no permission change attempted')
+          PY
+          cat > "$RUNNER_TEMP/pwa-context-menu/lldb-startup.py" <<'PY'
+          import json
+          import os
+          import shutil
+          import time
+          import traceback
+          from pathlib import Path
+
+          import lldb
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu'
+          source = root / 'subprocess-diagnostic'
+          identity = json.loads((source / 'launcher-identities.json').read_text())[0]
+          command = identity['command'][:]
+          profile = root / 'lldb-profile'
+          profile.mkdir(mode=0o700)
+          shutil.copyfile(Path(command[command.index('--profile') + 1]) / 'user.js',
+                          profile / 'user.js')
+          command[command.index('--profile') + 1] = str(profile)
+          debugger = lldb.SBDebugger.Create()
+          debugger.SetAsync(True)
+          target = debugger.CreateTarget(command[0])
+          launch = lldb.SBLaunchInfo(command[1:])
+          launch.SetLaunchFlags(launch.GetLaunchFlags() & ~(
+              lldb.eLaunchFlagDisableASLR | lldb.eLaunchFlagStopAtEntry))
+          listener = lldb.SBListener('floorp-startup-diagnostic')
+          launch.SetListener(listener)
+          launch.SetEnvironmentEntries(['MOZ_CRASHREPORTER_DISABLE=1'], True)
+          launch.SetWorkingDirectory(str(root))
+          error = lldb.SBError()
+          process = target.Launch(launch, error)
+          report = {'diagnosticOnly': True, 'command': command,
+                    'launchError': error.GetCString(), 'pid': process.GetProcessID(),
+                    'events': []}
+          try:
+              if error.Fail():
+                  print(json.dumps(report), flush=True)
+                  raise RuntimeError('Debugger launch failed; existing permissions were not changed')
+              deadline = time.monotonic() + 45
+              while time.monotonic() < deadline:
+                  event = lldb.SBEvent()
+                  if not listener.WaitForEvent(1, event) or not (
+                          event.GetType() & lldb.SBProcess.eBroadcastBitStateChanged):
+                      continue
+                  state = lldb.SBProcess.GetStateFromEvent(event)
+                  restarted = lldb.SBProcess.GetRestartedFromEvent(event)
+                  report['events'].append({'state': int(state), 'restarted': restarted})
+                  if state == lldb.eStateExited:
+                      break
+                  if state not in {lldb.eStateStopped, lldb.eStateCrashed} or restarted:
+                      continue
+                  reasons = [process.GetThreadAtIndex(index).GetStopReason()
+                             for index in range(process.GetNumThreads())]
+                  if any(reason in {lldb.eStopReasonSignal, lldb.eStopReasonException}
+                         for reason in reasons):
+                      break
+                  resumed = process.Continue()
+                  if resumed.Fail():
+                      raise RuntimeError(resumed.GetCString())
+              report['state'] = int(process.GetState())
+              report['exitStatus'] = process.GetExitStatus()
+              report['threads'] = []
+              with (root / 'lldb-backtrace.log').open('w') as trace:
+                  trace.write(f'process state={report["state"]} pid={report["pid"]}\n')
+                  for index in range(process.GetNumThreads()):
+                      thread = process.GetThreadAtIndex(index)
+                      item = {'id': thread.GetThreadID(), 'reason': int(thread.GetStopReason()),
+                              'description': thread.GetStopDescription(512),
+                              'frames': [str(thread.GetFrameAtIndex(frame))
+                                         for frame in range(min(thread.GetNumFrames(), 80))],
+                              'locations': []}
+                      for frame_index in range(min(thread.GetNumFrames(), 80)):
+                          frame = thread.GetFrameAtIndex(frame_index)
+                          address = frame.GetPCAddress()
+                          module = address.GetModule()
+                          item['locations'].append({
+                              'fileAddress': hex(address.GetFileAddress()),
+                              'module': str(module.GetFileSpec()) if module.IsValid() else None,
+                              'uuid': module.GetUUIDString() if module.IsValid() else None,
+                          })
+                      report['threads'].append(item)
+                      trace.write(json.dumps(item, indent=2) + '\n')
+                      if item['reason'] in {lldb.eStopReasonSignal, lldb.eStopReasonException}:
+                          frame = thread.GetFrameAtIndex(0)
+                          instructions = target.ReadInstructions(
+                              target.ResolveLoadAddress(frame.GetPC() - 64), 40)
+                          item['faultInstructions'] = [str(instructions.GetInstructionAtIndex(i))
+                                                       for i in range(instructions.GetSize())]
+                          names = ['pc', 'sp', *[f'x{i}' for i in range(31)],
+                                   'rax', 'rbx', 'rcx', 'rdx', 'rdi', 'rsi', 'rbp', 'rsp',
+                                   'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+                          item['registers'] = {name: frame.FindRegister(name).GetValue()
+                                               for name in names if frame.FindRegister(name).IsValid()}
+                  trace.write('image list\n')
+                  for index in range(target.GetNumModules()):
+                      trace.write(str(target.GetModuleAtIndex(index)) + '\n')
+          except Exception:
+              report['error'] = traceback.format_exc()
+              (root / 'lldb-error.log').write_text(report['error'])
+          finally:
+              # LLDB owns this newly launched private-profile child. Only that
+              # debugger process is retired; no application-name kill is used.
+              if process.IsValid() and process.GetState() not in {
+                      lldb.eStateExited, lldb.eStateDetached, lldb.eStateUnloaded}:
+                  report['cleanupError'] = process.Kill().GetCString()
+              (root / 'lldb-startup.json').write_text(json.dumps(report, indent=2) + '\n')
+              lldb.SBDebugger.Destroy(debugger)
+          PY
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu'
+          script = str(root / 'lldb-startup.py')
+          literal = json.dumps(script)
+          command = f'script exec(compile(open({literal}).read(), {literal}, "exec"))'
+          with (root / 'lldb-startup.log').open('w') as output:
+              result = subprocess.run(['xcrun', 'lldb', '--batch', '--no-lldbinit',
+                                       '--one-line', command], stdout=output,
+                                      stderr=subprocess.STDOUT, check=False)
+          print((root / 'lldb-startup.log').read_text())
+          report = json.loads((root / 'lldb-startup.json').read_text())
+          print(json.dumps(report, indent=2))
+          trace = root / 'lldb-backtrace.log'
+          if trace.is_file():
+              print(trace.read_text())
+          raise SystemExit(result.returncode or int(
+              bool(report.get('error')) or not report.get('threads') or not trace.is_file()))
+          PY
+
+      - name: Authenticate original per-architecture symbols
+        if: ${{ failure() && steps.subprocess-diagnostic.outcome == 'failure' }}
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const crypto = require('node:crypto');
+            const runId = Number(process.env.SOURCE_RUN_ID);
+            const name = `floorp-mac-${process.env.TARGET_ARCH}-moz-artifact`;
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
+              {...context.repo, run_id: runId, per_page: 100});
+            const matching = artifacts.filter(item => item.name === name);
+            if (matching.length !== 1) throw new Error('Ambiguous original native archive');
+            const artifact = matching[0];
+            if (artifact.expired || artifact.workflow_run.id !== runId ||
+                artifact.workflow_run.head_sha !== process.env.SOURCE_COMMIT ||
+                !/^sha256:[0-9a-f]{64}$/.test(artifact.digest || '')) {
+              throw new Error('Original native archive identity mismatch');
+            }
+            const response = await github.rest.actions.downloadArtifact(
+              {...context.repo, artifact_id: artifact.id, archive_format: 'zip'});
+            const bytes = Buffer.from(response.data);
+            const digest = 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex');
+            if (digest !== artifact.digest) throw new Error('Native symbols ZIP digest mismatch');
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'native-symbols.zip'), bytes);
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP,
+              'pwa-context-menu/native-symbol-input.json'), JSON.stringify({
+                runId, artifactId: artifact.id, sourceCommit: process.env.SOURCE_COMMIT,
+                artifactName: name, digest, targetArch: process.env.TARGET_ARCH,
+              }, null, 2));
+
+      - name: Resolve exact UUID-matching native addresses
+        if: ${{ failure() && steps.subprocess-diagnostic.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 runtime-tools/.github/workflows/scripts/collect_mac_runtime_symbols.py \
+            --archive "$RUNNER_TEMP/native-symbols.zip" \
+            --evidence "$RUNNER_TEMP/pwa-context-menu" \
+            --working-directory "$RUNNER_TEMP/native-symbols"
+
+      - name: Compare native-byte-preserving omnijar packaging
+        if: ${{ failure() && steps.subprocess-diagnostic.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This disposable comparison does not replace the failed raw-artifact gate.
+          ditto "$RUNNER_TEMP/Floorp.app" "$RUNNER_TEMP/Floorp-repacked.app"
+          EXPECTED_BUILD_ID=$(python3 -c 'import json,os; print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "runtime-input.json")))["expectedBuildId"])')
+          python3 runtime-tools/.github/workflows/scripts/repack_mac_debug_runtime.py \
+            --app "$RUNNER_TEMP/Floorp-repacked.app" \
+            --expected-build-id "$EXPECTED_BUILD_ID" \
+            --compiled-source-commit '${{ inputs.source_commit }}' \
+            --evidence "$RUNNER_TEMP/pwa-context-menu/omnijar-comparison.json"
+          codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp-repacked.app"
+          codesign --verify --deep --strict "$RUNNER_TEMP/Floorp-repacked.app"
+          python3 runtime-tools/.github/workflows/scripts/verify_debug_runtime.py \
+            --binary "$RUNNER_TEMP/Floorp-repacked.app/Contents/MacOS/floorp" \
+            --output-dir "$RUNNER_TEMP/pwa-context-menu/repacked-native-render" \
+            --expected-build-id "$EXPECTED_BUILD_ID"
+          ln -s floorp floorp-native-tests
+          RUNTIME_PWA_BINARY="$RUNNER_TEMP/Floorp-repacked.app/Contents/MacOS/floorp" \
+          PWA_EVIDENCE_DIR="$RUNNER_TEMP/pwa-context-menu/repacked-production-gate" \
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          workflow = Path('runtime-tools/.github/workflows/verify-runtime-artifact.yml')
+          lines = workflow.read_text().splitlines()
+          markers = [index for index, line in enumerate(lines)
+                     if line.startswith('          app_bundle=')]
+          if len(markers) != 1:
+              raise ValueError('Expected one reviewed production PWA gate')
+          start = markers[0]
+          end = next(index for index in range(start + 1, len(lines))
+                     if lines[index].startswith('      - name:'))
+          body = '\n'.join(line[10:] if line.startswith(' ' * 10) else line
+                           for line in lines[start:end])
+          script = 'set -euo pipefail\napp_binary="$RUNTIME_PWA_BINARY"\n' + body + '\n'
+          output = Path(os.environ['RUNNER_TEMP']) / 'pwa-context-menu/production-pwa-gate.sh'
+          output.write_text(script)
+          subprocess.run(['bash', '-n', str(output)], check=True)
+          subprocess.run(['bash', str(output)], check=True)
+          PY
 
       - name: Upload native regression evidence
         if: always()
@@ -144,3 +673,40 @@ jobs:
           name: pwa-context-menu-${{ matrix.arch }}-${{ github.run_id }}
           path: ${{ runner.temp }}/pwa-context-menu
           if-no-files-found: error
+
+      - name: Upload compact native reports and fixture screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-reports-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/pwa-context-menu/*.json
+            ${{ runner.temp }}/pwa-context-menu/*.txt
+            ${{ runner.temp }}/pwa-context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/native-gui/run-*/fixture-window.png
+            ${{ runner.temp }}/pwa-context-menu/candidate-native-render/*.json
+            ${{ runner.temp }}/pwa-context-menu/candidate-native-render/*.png
+            ${{ runner.temp }}/pwa-context-menu/candidate-native-render/*.log
+            ${{ runner.temp }}/pwa-context-menu/candidate-production-gate/*.json
+            ${{ runner.temp }}/pwa-context-menu/candidate-production-gate/*.txt
+            ${{ runner.temp }}/pwa-context-menu/candidate-production-gate/context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/candidate-production-gate/context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/candidate-production-gate/native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/candidate-production-gate/native-gui/run-*/fixture-window.png
+            ${{ runner.temp }}/pwa-context-menu/repacked-context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.png
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-render/*.log
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-native-gui/run-*/fixture-window.png
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/*.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/*.txt
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/context-menu/run-*/result.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/context-menu/run-*/browser.log
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/native-gui/run-*/report.json
+            ${{ runner.temp }}/pwa-context-menu/repacked-production-gate/native-gui/run-*/fixture-window.png
+          if-no-files-found: error
+          retention-days: 14
