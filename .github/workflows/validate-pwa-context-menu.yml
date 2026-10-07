@@ -126,7 +126,13 @@ jobs:
               if config[section]['BuildID'] != expected:
                   raise ValueError('Packaged BuildID mismatch')
           PY
+          # Raw Runtime artifacts are unsigned. Use the documented local
+          # developer signature on this disposable copy to exercise the normal
+          # authenticated host/shim handshake. This is not distribution signing.
+          codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp.app"
           codesign --verify --deep --strict "$RUNNER_TEMP/Floorp.app"
+          codesign --display --verbose=4 "$RUNNER_TEMP/Floorp.app" \
+            > "$RUNNER_TEMP/pwa-context-menu/development-signature.txt" 2>&1
           python3 floorp/tools/app-shim/test-context-menu.py \
             --browser "$RUNNER_TEMP/Floorp.app" \
             --output "$RUNNER_TEMP/pwa-context-menu" --iterations 20
