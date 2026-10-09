@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 
-import os
 import shutil
 import subprocess
 import tempfile
@@ -26,7 +25,17 @@ CONFIGS = {
 
 
 class BuildProfileTests(unittest.TestCase):
-    def generated(self, platform, arch, debug, pgo, mode="", artifact=""):
+    def setup_result(
+        self,
+        platform,
+        arch,
+        debug,
+        pgo,
+        mode="",
+        artifact="",
+        config_suffix="",
+        arguments=None,
+    ):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             scripts = root / ".github/workflows/scripts"
@@ -34,31 +43,41 @@ class BuildProfileTests(unittest.TestCase):
             configs = root / ".github/workflows/mozconfigs"
             configs.mkdir()
             for file in (ROOT / ".github/workflows/mozconfigs").glob("*.mozconfig"):
-                shutil.copy2(file, configs / file.name)
+                (configs / file.name).write_text(file.read_text() + config_suffix)
             for name in ("setup-floorp.sh", "qa3_build_profile.py"):
                 shutil.copy2(ROOT / ".github/workflows/scripts" / name, scripts / name)
             patches = root / ".github/patches/debug"
             patches.mkdir(parents=True)
+            (patches / "fixture.patch").write_text("fixture patch\n")
             (root / "build").mkdir()
-            (root / "build/application.ini.in").write_text("fixture\n")
+            update_file = root / "build/application.ini.in"
+            update_file.write_text("fixture\n")
+            branding = root / ".github/assets/branding"
+            branding.mkdir(parents=True)
+            (branding / "fixture-branding").write_text("fixture branding\n")
+            (root / "browser/branding").mkdir(parents=True)
+            effects = root / "effects"
             bin_dir = root / "bin"
             bin_dir.mkdir()
-            for name in ("sudo", "rustup"):
-                path = bin_dir / name
-                path.write_text("#!/bin/sh\nexit 0\n")
+            for path in (
+                bin_dir / "git",
+                bin_dir / "sudo",
+                bin_dir / "rustup",
+                root / "mach",
+            ):
+                path.write_text(
+                    '#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "$QA3_EFFECTS"\nexit 0\n'
+                )
                 path.chmod(0o700)
-            mach = root / "mach"
-            mach.write_text("#!/bin/sh\nexit 0\n")
-            mach.chmod(0o700)
             env = {
-                "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                "PATH": f"{bin_dir}:/usr/bin:/bin",
                 "GITHUB_WORKSPACE": str(root),
                 "SCCACHE_PATH": "/fixture/sccache",
+                "QA3_EFFECTS": str(effects),
+                "PYTHONDONTWRITEBYTECODE": "1",
             }
-            subprocess.run(
-                [
-                    "bash",
-                    str(scripts / "setup-floorp.sh"),
+            if arguments is None:
+                arguments = [
                     platform,
                     arch,
                     str(debug).lower(),
@@ -66,14 +85,117 @@ class BuildProfileTests(unittest.TestCase):
                     mode,
                     artifact,
                     "20261009000000",
-                ],
+                ]
+            result = subprocess.run(
+                ["bash", str(scripts / "setup-floorp.sh"), *arguments],
                 cwd=root,
                 env=env,
-                check=True,
+                check=False,
                 capture_output=True,
+                text=True,
                 timeout=15,
             )
-            return (root / "mozconfig").read_text()
+            config = root / "mozconfig"
+            return {
+                "process": result,
+                "config": config.read_text() if config.exists() else None,
+                "effects": effects.read_text() if effects.exists() else "",
+                "updateUnchanged": update_file.read_text() == "fixture\n",
+                "brandingCopied": (root / "browser/branding/fixture-branding").exists(),
+            }
+
+    def generated(self, platform, arch, debug, pgo, mode="", artifact=""):
+        result = self.setup_result(platform, arch, debug, pgo, mode, artifact)
+        process = result["process"]
+        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        self.assertIn("bootstrap --application-choice browser", result["effects"])
+        return result["config"]
+
+    def test_real_setup_rejects_invalid_inputs_before_side_effects(self):
+        for args in (
+            ("windows", "aarch64", False, False, "", ""),
+            ("linux", "aarch64", False, True, "generate", ""),
+            ("linux", "x86_64", True, False, "use", "old-profile"),
+            ("mac", "aarch64", False, True, "use", ""),
+            ("mac", "x86_64", False, True, "generate", "old-profile"),
+            ("linux", "x86_64", False, True, "invalid-mode", ""),
+        ):
+            with self.subTest(args=args):
+                result = self.setup_result(*args)
+                process = result["process"]
+                self.assertNotEqual(
+                    process.returncode,
+                    0,
+                    f"stdout={process.stdout!r}\nstderr={process.stderr!r}\n"
+                    f"effects={result['effects']!r}",
+                )
+                self.assertIsNone(result["config"])
+                self.assertEqual(result["effects"], "")
+                self.assertTrue(result["updateUnchanged"])
+                self.assertFalse(result["brandingCopied"])
+
+    def test_real_setup_rejects_wrong_generated_config_before_bootstrap(self):
+        for debug, suffix in (
+            (False, "ac_add_options --target=aarch64-unknown-linux-gnu\n"),
+            (False, "ac_add_options --enable-debug\n"),
+            (False, "ac_add_options --enable-profile-generate=cross\n"),
+            (True, "ac_add_options --disable-tests --other\n"),
+        ):
+            with self.subTest(debug=debug, suffix=suffix):
+                result = self.setup_result(
+                    "linux", "x86_64", debug, False, config_suffix=suffix
+                )
+                process = result["process"]
+                self.assertNotEqual(
+                    process.returncode,
+                    0,
+                    f"stdout={process.stdout!r}\nstderr={process.stderr!r}\n"
+                    f"effects={result['effects']!r}",
+                )
+                self.assertNotIn("sudo", result["effects"])
+                self.assertNotIn("rustup", result["effects"])
+                self.assertNotIn("bootstrap", result["effects"])
+
+    def test_real_setup_rejects_invalid_booleans_and_incomplete_modes(self):
+        for args in (
+            ("unknown", "x86_64", False, False),
+            ("linux", "unknown", False, False),
+            ("linux", "x86_64", "invalid", False),
+            ("linux", "x86_64", False, "invalid"),
+            ("linux", "x86_64", False, False, "generate"),
+            ("linux", "x86_64", False, False, "", "old-profile"),
+            ("linux", "x86_64", False, True),
+        ):
+            with self.subTest(args=args):
+                result = self.setup_result(*args)
+                process = result["process"]
+                self.assertNotEqual(process.returncode, 0, process.stderr)
+                self.assertIsNone(result["config"])
+                self.assertEqual(result["effects"], "")
+                self.assertTrue(result["updateUnchanged"])
+                self.assertFalse(result["brandingCopied"])
+
+    def test_real_setup_argument_count_and_optional_defaults(self):
+        for arguments in (
+            ["linux", "x86_64", "false"],
+            ["linux", "x86_64", "false", "false", "", "", "", "extra"],
+        ):
+            with self.subTest(arguments=arguments):
+                result = self.setup_result(
+                    "linux", "x86_64", False, False, arguments=arguments
+                )
+                self.assertNotEqual(result["process"].returncode, 0)
+                self.assertIsNone(result["config"])
+                self.assertEqual(result["effects"], "")
+        result = self.setup_result(
+            "linux",
+            "x86_64",
+            False,
+            False,
+            arguments=["linux", "x86_64", "false", "false"],
+        )
+        self.assertEqual(result["process"].returncode, 0, result["process"].stderr)
+        verify_config(result["config"], profile("linux", "x86_64", False, False))
 
     def test_real_setup_generates_canonical_debug_on_all_five_targets(self):
         for platform, arch in TARGETS:
@@ -116,14 +238,32 @@ class BuildProfileTests(unittest.TestCase):
         for platform, arch in TARGETS:
             if (platform, arch) == ("linux", "aarch64"):
                 continue
-            expected = profile(platform, arch, True, True, "use", "fixture-profile")
-            self.assertFalse(expected["testsOverride"])
-            self.assertFalse(expected["qualificationEligible"])
-            result = self.generated(
-                platform, arch, True, True, "use", "fixture-profile"
-            )
-            self.assertNotIn("--enable-tests", ac_options(result))
-            verify_config(result, expected)
+            for mode in ("generate", "use"):
+                with self.subTest(platform=platform, arch=arch, mode=mode):
+                    artifact = "fixture-profile" if mode == "use" else ""
+                    expected = profile(
+                        platform,
+                        arch,
+                        True,
+                        True,
+                        mode,
+                        artifact,
+                        allow_legacy_debug_pgo=True,
+                    )
+                    self.assertFalse(expected["testsOverride"])
+                    self.assertFalse(expected["qualificationEligible"])
+                    self.assertEqual(expected["role"], f"legacy-debug-profile-{mode}")
+                    result = self.generated(platform, arch, True, True, mode, artifact)
+                    self.assertNotIn("--enable-tests", ac_options(result))
+                    verify_config(result, expected)
+
+    def test_legacy_debug_pgo_requires_explicit_noncanonical_policy(self):
+        with self.assertRaises(ValueError):
+            profile("linux", "x86_64", True, True, "generate")
+        result = self.setup_result("linux", "x86_64", True, True, "generate")
+        self.assertEqual(result["process"].returncode, 0, result["process"].stderr)
+        self.assertIn("noncanonical", result["process"].stderr)
+        self.assertIn("ineligible for qualification", result["process"].stderr)
 
     def test_invalid_targets_modes_and_profile_inputs_are_rejected(self):
         for args in (

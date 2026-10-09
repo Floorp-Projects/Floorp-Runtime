@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import re
 import shlex
+import sys
 from pathlib import Path
 
 TARGETS = {
@@ -22,13 +23,27 @@ def boolean(value):
     return value == "true"
 
 
-def profile(platform, arch, debug, pgo, mode="", artifact=""):
+def profile(
+    platform,
+    arch,
+    debug,
+    pgo,
+    mode="",
+    artifact="",
+    *,
+    allow_legacy_debug_pgo=False,
+):
     if (
         (platform, arch) not in TARGETS
         or type(debug) is not bool
         or type(pgo) is not bool
+        or type(allow_legacy_debug_pgo) is not bool
     ):
         raise ValueError("unsupported target or non-boolean build mode")
+    if not isinstance(mode, str) or not isinstance(artifact, str):
+        raise ValueError("PGO mode and profile artifact must be strings")
+    if debug and pgo and not allow_legacy_debug_pgo:
+        raise ValueError("Debug+PGO requires explicit noncanonical legacy policy")
     if not pgo and (mode or artifact):
         raise ValueError("non-PGO builds cannot consume a profile")
     if pgo and (
@@ -128,14 +143,41 @@ def verify_config(text, expected):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--debug", required=True)
-    parser.add_argument("--pgo", required=True)
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--validate-inputs", action="store_true")
+    action.add_argument("--config", type=Path)
+    parser.add_argument("--platform", required=True)
+    parser.add_argument("--arch", required=True)
+    parser.add_argument("--debug", type=boolean, required=True)
+    parser.add_argument("--pgo", type=boolean, required=True)
+    parser.add_argument("--mode", default="")
+    parser.add_argument("--artifact", default="")
+    parser.add_argument("--allow-legacy-debug-pgo", action="store_true")
     args = parser.parse_args()
-    text = args.config.read_text()
-    updated = enable_debug_tests(text, boolean(args.debug), boolean(args.pgo))
-    if updated != text:
-        args.config.write_text(updated)
+    try:
+        expected = profile(
+            args.platform,
+            args.arch,
+            args.debug,
+            args.pgo,
+            args.mode,
+            args.artifact,
+            allow_legacy_debug_pgo=args.allow_legacy_debug_pgo,
+        )
+        if args.validate_inputs:
+            if args.debug and args.pgo:
+                print(
+                    "Legacy Debug+PGO is noncanonical and ineligible for qualification",
+                    file=sys.stderr,
+                )
+            return
+        text = args.config.read_text()
+        updated = enable_debug_tests(text, args.debug, args.pgo)
+        verify_config(updated, expected)
+        if updated != text:
+            args.config.write_text(updated)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
 
 
 if __name__ == "__main__":

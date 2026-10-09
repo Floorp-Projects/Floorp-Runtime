@@ -11,13 +11,28 @@ set -e
 #   $6: pgo_artifact_name (string, for "use" mode)
 #   $7: MOZ_BUILD_DATE (optional)
 
+if (( $# < 4 || $# > 7 )); then
+  echo "Expected platform, arch, debug, pgo, optional mode, profile and build date" >&2
+  exit 2
+fi
+
 PLATFORM="$1"
 ARCH="$2"
 DEBUG="$3"
 PGO="$4"
-PGO_MODE="$5"
-PGO_ARTIFACT_NAME="$6"
-MOZ_BUILD_DATE="$7"
+PGO_MODE="${5:-}"
+PGO_ARTIFACT_NAME="${6:-}"
+MOZ_BUILD_DATE="${7:-}"
+
+PROFILE_ARGS=(
+  --platform "$PLATFORM" --arch "$ARCH" --debug "$DEBUG" --pgo "$PGO"
+  --mode "$PGO_MODE" --artifact "$PGO_ARTIFACT_NAME"
+)
+if [[ "$DEBUG" == "true" && "$PGO" == "true" ]]; then
+  PROFILE_ARGS+=(--allow-legacy-debug-pgo)
+fi
+python3 "$GITHUB_WORKSPACE/.github/workflows/scripts/qa3_build_profile.py" \
+  --validate-inputs "${PROFILE_ARGS[@]}"
 
 if [[ -n "$MOZ_BUILD_DATE" ]]; then
   export MOZ_BUILD_DATE="$MOZ_BUILD_DATE"
@@ -89,9 +104,6 @@ if [[ "$PLATFORM" == "mac" ]]; then
   echo "ac_add_options --enable-linker=lld" >> mozconfig
 fi
 
-sudo apt update -y
-sudo apt install msitools -y
-
 SCCACHE_BIN="${SCCACHE_PATH:-}"
 if [[ -z "$SCCACHE_BIN" ]]; then
   SCCACHE_BIN="$(command -v sccache || true)"
@@ -134,9 +146,12 @@ if [[ "$PGO" == "true" ]]; then
   fi
 fi
 
-# Canonical Debug enables upstream test material; legacy Debug+PGO is unchanged.
+# Canonical Debug enables tests; legacy Debug+PGO remains noncanonical.
 python3 .github/workflows/scripts/qa3_build_profile.py \
-  --config mozconfig --debug "$DEBUG" --pgo "$PGO"
+  --config mozconfig "${PROFILE_ARGS[@]}"
+
+sudo apt update -y
+sudo apt install msitools -y
 
 # Update Channel
 
