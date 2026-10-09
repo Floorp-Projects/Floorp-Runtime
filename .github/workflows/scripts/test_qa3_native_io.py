@@ -1,18 +1,23 @@
 # SPDX-License-Identifier: MPL-2.0
 
+import ctypes
+import errno
 import io
 import os
 import shutil
+import signal
 import struct
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
 from unittest import mock
 
+import qa3_native_io
 from qa3_native_io import (
     GIB,
     ExpansionBudget,
@@ -233,6 +238,27 @@ class NativeIOTests(unittest.TestCase):
             read_json(self.root / "logs/fixture.process.json")["stop"], "DATA_LIMIT"
         )
 
+    def test_data_budget_accounting_crosses_supervisor_boundary(self):
+        budget = IOBudget(self.root, 10)
+        self.command(
+            'import os; os.write(1,b"1234")',
+            name="first",
+            data_stdout=True,
+            io_budget=budget,
+        )
+        self.assertEqual(budget.used, 4)
+        with self.assertRaises(ValueError):
+            self.command(
+                'import os; os.write(1,b"1234567")',
+                name="second",
+                data_stdout=True,
+                io_budget=budget,
+            )
+        self.assertEqual(budget.used, 4)
+        self.assertEqual(
+            read_json(self.root / "logs/second.process.json")["stop"], "DISK_LIMIT"
+        )
+
     def test_closed_pipes_do_not_stop_timeout_or_disk_monitoring(self):
         with mock.patch(
             "qa3_native_io.shutil.disk_usage",
@@ -339,6 +365,479 @@ class NativeIOTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             child_environment(self.root / "state2", {"GITHUB_TOKEN": "fixture"})
+
+
+class ProcessFailureTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.original_popen = subprocess.Popen
+        self.original_proc = qa3_native_io._proc
+        self.processes = []
+        self.owned = {}
+        self.prior = {
+            (int(p.name), info[2])
+            for p in Path("/proc").iterdir()
+            if p.name.isdecimal()
+            and (info := self.original_proc(int(p.name)))
+            and info[0] == os.getpid()
+        }
+        self.addCleanup(self.reap_fixture_children)
+
+    def reap_fixture_children(self):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            _descendants(self.owned, self.prior)
+            for pid, info in owned_alive(self.owned).items():
+                if info[1] != "Z":
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                try:
+                    os.waitpid(pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass
+            for process in self.processes:
+                process.poll()
+            if not owned_alive(self.owned):
+                return
+            time.sleep(0.01)
+        self.fail("own bounded process fixture did not finish cleanup")
+
+    def spawn(self, *args, **kwargs):
+        process = self.original_popen(*args, **kwargs)
+        self.processes.append(process)
+        info = self.original_proc(process.pid)
+        if info:
+            self.owned[process.pid] = info[2]
+        deadline = time.monotonic() + 2
+        while not self.ready.exists() and time.monotonic() < deadline:
+            if process.poll() is not None:
+                self.fail("own process fixture exited before initialization")
+            time.sleep(0.005)
+        self.assertTrue(self.ready.exists(), "own process fixture was not ready")
+        if wrapper := getattr(self, "pipe_wrapper", None):
+            process.stdout = wrapper(process.stdout)
+        return process
+
+    def command(self, name="fixture", before_ready="", body="", **kwargs):
+        self.ready = self.root / (name + ".ready")
+        code = (
+            "import json,os,signal,time\nfrom pathlib import Path\n"
+            f"root=Path({str(self.root)!r})\n"
+            "def identity(name):\n"
+            "    data=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()\n"
+            "    (root/(name+'.identity')).write_text(json.dumps("
+            "{'pid':os.getpid(),'birth':int(data[19])}))\n"
+            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            + before_ready
+            + "\nidentity('leader')\n"
+            + f"Path({str(self.ready)!r}).write_text('ready')\n"
+            + (
+                body
+                or "while True:\n"
+                "    try:\n"
+                "        os.write(1,b'stdout\\n'); os.write(2,b'stderr\\n')\n"
+                "    except OSError:\n"
+                "        pass\n"
+                "    time.sleep(0.01)\n"
+            )
+        )
+        with mock.patch("qa3_native_io.subprocess.Popen", side_effect=self.spawn):
+            return run_owned(
+                [sys.executable, "-B", "-c", code],
+                self.root,
+                {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+                self.root / "logs",
+                name,
+                kwargs.pop("timeout", 1),
+                memory=128 * 1024**2,
+                log_limit=1024**2,
+                **kwargs,
+            )
+
+    def check_failure(self, failure, operation, name="fixture"):
+        with self.assertRaises(OSError) as caught:
+            operation()
+        self.assertEqual(type(caught.exception), type(failure))
+        self.assertEqual(caught.exception.args, failure.args)
+        self.assertFalse(
+            owned_alive({
+                process.pid: self.owned[process.pid] for process in self.processes
+            })
+        )
+        self.assertFalse(
+            any(
+                self.original_proc(read_json(p)["pid"])
+                for p in self.root.glob("*.identity")
+            )
+        )
+        receipt = read_json(self.root / "logs" / (name + ".process.json"))
+        self.assertTrue(receipt["ownedCleanupComplete"])
+        self.assertEqual(receipt["error"]["type"], "OSError")
+        self.assertEqual(receipt["error"]["errno"], failure.errno)
+        self.assertEqual(receipt["error"]["message"], str(failure))
+        self.assertIsNotNone(receipt["stop"])
+        return receipt
+
+    def sink_fault(self, failure, name="fixture", suffix=".stdout", when=lambda: True):
+        original_open = Path.open
+
+        class Sink:
+            def __init__(self, stream):
+                self.stream = stream
+                self.failed = False
+
+            def __getattr__(self, key):
+                return getattr(self.stream, key)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return self.stream.__exit__(*args)
+
+            def write(self, block):
+                if when():
+                    if self.failed:
+                        raise OSError(errno.EIO, "secondary cleanup sink failure")
+                    self.failed = True
+                    raise failure
+                return self.stream.write(block)
+
+        def open_file(path, *args, **kwargs):
+            stream = original_open(path, *args, **kwargs)
+            if path == self.root / "logs" / (name + suffix):
+                return Sink(stream)
+            return stream
+
+        return mock.patch.object(Path, "open", new=open_file)
+
+    def test_initial_snapshot_failure_preserves_error_and_reaps(self):
+        failure = OSError(errno.EIO, "initial process snapshot failed")
+        failed = False
+
+        def proc(pid):
+            nonlocal failed
+            if self.processes and pid == self.processes[-1].pid and not failed:
+                failed = True
+                raise failure
+            return self.original_proc(pid)
+
+        with mock.patch("qa3_native_io._proc", side_effect=proc):
+            self.check_failure(failure, self.command)
+
+    def test_pipe_setup_failure_preserves_error_and_reaps(self):
+        failure = OSError(errno.EBADF, "pipe nonblocking setup failed")
+        original = os.set_blocking
+
+        def set_blocking(fd, blocking):
+            if (
+                self.processes
+                and self.processes[-1].stdout
+                and fd
+                in {
+                    self.processes[-1].stdout.fileno(),
+                    self.processes[-1].stderr.fileno(),
+                }
+            ):
+                raise failure
+            return original(fd, blocking)
+
+        with mock.patch("qa3_native_io.os.set_blocking", side_effect=set_blocking):
+            self.check_failure(failure, self.command)
+
+    def test_selector_registration_failure_preserves_error_and_reaps(self):
+        factory = qa3_native_io.selectors.DefaultSelector
+        for index in (1, 2):
+            with self.subTest(index=index):
+                name = "register-" + str(index)
+                failure = OSError(errno.ENOMEM, "selector registration failed")
+                selector = factory()
+                self.addCleanup(selector.close)
+                register = selector.register
+                calls = 0
+
+                def fail_register(*args):
+                    nonlocal calls
+                    calls += 1
+                    if calls == index:
+                        raise failure
+                    return register(*args)
+
+                with mock.patch.object(
+                    selector, "register", side_effect=fail_register
+                ), mock.patch(
+                    "qa3_native_io.selectors.DefaultSelector", return_value=selector
+                ):
+                    self.check_failure(
+                        failure, lambda: self.command(name=name), name=name
+                    )
+
+    def test_selector_read_failure_preserves_error_and_reaps(self):
+        failure = OSError(errno.EIO, "selector read failed")
+        selector = qa3_native_io.selectors.DefaultSelector()
+        self.addCleanup(selector.close)
+        with mock.patch.object(selector, "select", side_effect=failure), mock.patch(
+            "qa3_native_io.selectors.DefaultSelector", return_value=selector
+        ):
+            self.check_failure(failure, self.command)
+
+    def test_pipe_read_failure_preserves_error_and_reaps(self):
+        failure = OSError(errno.EBADF, "pipe read failed")
+        original_read = os.read
+
+        def read(fd, size):
+            if self.processes and fd in {
+                self.processes[-1].stdout.fileno(),
+                self.processes[-1].stderr.fileno(),
+            }:
+                raise failure
+            return original_read(fd, size)
+
+        with mock.patch("qa3_native_io.os.read", side_effect=read):
+            self.check_failure(failure, self.command)
+
+    def test_pipe_close_failure_still_reaps_and_saves_first_error(self):
+        failure = OSError(errno.EIO, "initial pipe close failed")
+
+        class Pipe:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def __getattr__(self, key):
+                return getattr(self.stream, key)
+
+            def close(self):
+                self.stream.close()
+                raise failure
+
+        self.pipe_wrapper = Pipe
+        receipt = self.check_failure(
+            failure,
+            lambda: self.command(body="os.close(1); os.close(2); time.sleep(30)\n"),
+        )
+        self.assertEqual(receipt["error"]["phase"], "RUN")
+
+    def test_sink_errors_preserve_initial_failure_and_reap(self):
+        for index, (code, suffix) in enumerate((
+            (errno.ENOSPC, ".stdout"),
+            (errno.EDQUOT, ".stderr"),
+        )):
+            with self.subTest(code=code):
+                name = "sink-" + str(index)
+                failure = OSError(code, "initial sink failure")
+                with self.sink_fault(failure, name=name, suffix=suffix):
+                    self.check_failure(
+                        failure, lambda: self.command(name=name), name=name
+                    )
+
+    def test_cleanup_only_sink_failure_cannot_abort_kill_and_reap(self):
+        failure = OSError(errno.ENOSPC, "cleanup sink failure")
+        marker = self.root / "term-seen"
+        handler = (
+            "def term(signum,frame):\n"
+            "    signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            f"    Path({str(marker)!r}).write_text('term')\n"
+            "    os.write(1,b'cleanup output\\n')\n"
+            "signal.signal(signal.SIGTERM,term)\n"
+        )
+        with self.sink_fault(failure, when=marker.exists):
+            receipt = self.check_failure(
+                failure, lambda: self.command(before_ready=handler, timeout=0.1)
+            )
+        self.assertEqual(receipt["stop"], "TIMEOUT")
+        self.assertTrue(marker.exists())
+
+    def test_sink_failure_reaps_detached_and_late_fork_children(self):
+        failure = OSError(errno.EDQUOT, "initial sink failure")
+        unrelated = self.original_popen(
+            [sys.executable, "-B", "-c", "import time; time.sleep(30)"],
+            env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+            start_new_session=True,
+        )
+        self.processes.append(unrelated)
+        self.owned[unrelated.pid] = self.original_proc(unrelated.pid)[2]
+        before = (
+            "p=os.fork()\n"
+            "if p==0:\n"
+            "    os.setsid(); identity('detached')\n"
+            "    while True: time.sleep(0.01)\n"
+            "while not (root/'detached.identity').exists(): time.sleep(0.001)\n"
+            "def term(signum,frame):\n"
+            "    signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            "    p=os.fork()\n"
+            "    if p==0:\n"
+            "        os.setsid(); identity('late')\n"
+            "        while True: time.sleep(0.01)\n"
+            "signal.signal(signal.SIGTERM,term)\n"
+        )
+        with self.sink_fault(failure), self.assertRaises(OSError) as caught:
+            self.command(before_ready=before)
+        self.assertEqual(type(caught.exception), type(failure))
+        self.assertEqual(caught.exception.args, failure.args)
+        self.assertIsNone(unrelated.poll())
+        self.assertTrue((self.root / "late.identity").exists())
+        for path in self.root.glob("*.identity"):
+            self.assertIsNone(self.original_proc(read_json(path)["pid"]))
+        receipt = read_json(self.root / "logs/fixture.process.json")
+        self.assertTrue(receipt["ownedCleanupComplete"])
+        self.assertEqual(receipt["error"]["errno"], errno.EDQUOT)
+
+    def test_cleanup_signal_error_cannot_abort_later_kill_and_reap(self):
+        failure = OSError(errno.EMFILE, "initial cleanup signal failed")
+        original_kill = os.kill
+        failed = False
+
+        def kill(pid, sig):
+            nonlocal failed
+            if self.processes and sig == signal.SIGTERM and not failed:
+                failed = True
+                raise failure
+            return original_kill(pid, sig)
+
+        with mock.patch("qa3_native_io.os.kill", side_effect=kill):
+            receipt = self.check_failure(failure, lambda: self.command(timeout=0.1))
+        self.assertEqual(receipt["error"]["phase"], "CLEANUP_SIGNAL")
+
+    def test_expired_term_grace_still_kills_and_reaps(self):
+        failure = OSError(errno.ENOSPC, "initial sink failure")
+        original_time = time.monotonic
+        original_killpg = os.killpg
+        grace_calls = None
+
+        def killpg(pid, sig):
+            nonlocal grace_calls
+            result = original_killpg(pid, sig)
+            if self.processes and sig == signal.SIGTERM:
+                grace_calls = 0
+            return result
+
+        def clock():
+            nonlocal grace_calls
+            if grace_calls is not None:
+                grace_calls += 1
+                if grace_calls == 2:
+                    return original_time() + 3
+            return original_time()
+
+        with self.sink_fault(failure), mock.patch(
+            "qa3_native_io.os.killpg", side_effect=killpg
+        ), mock.patch("qa3_native_io.time.monotonic", side_effect=clock):
+            self.check_failure(failure, self.command)
+
+    def test_selector_close_error_does_not_replace_first_sink_failure(self):
+        failure = OSError(errno.ENOSPC, "initial sink failure")
+        selector = qa3_native_io.selectors.DefaultSelector()
+        close = selector.close
+        self.addCleanup(close)
+
+        def fail_close():
+            close()
+            raise OSError(errno.EMFILE, "secondary selector close failure")
+
+        with self.sink_fault(failure), mock.patch.object(
+            selector, "close", side_effect=fail_close
+        ), mock.patch("qa3_native_io.selectors.DefaultSelector", return_value=selector):
+            receipt = self.check_failure(failure, self.command)
+        self.assertEqual(
+            receipt["cleanupErrors"]["RESOURCE_CLOSE"]["errno"], errno.EMFILE
+        )
+
+    def test_worker_sigterm_after_leader_exit_is_not_pass(self):
+        original_kill = os.kill
+        interrupted = False
+
+        def kill(pid, sig):
+            nonlocal interrupted
+            if self.processes and sig == signal.SIGTERM and not interrupted:
+                interrupted = True
+                original_kill(os.getpid(), signal.SIGTERM)
+            return original_kill(pid, sig)
+
+        before = (
+            "p=os.fork()\n"
+            "if p==0:\n"
+            "    os.setsid(); identity('detached')\n"
+            "    while True: time.sleep(0.01)\n"
+            "while not (root/'detached.identity').exists(): time.sleep(0.001)\n"
+        )
+        with mock.patch("qa3_native_io.os.kill", side_effect=kill):
+            with self.assertRaises((ValueError, InterruptedError)):
+                self.command(before_ready=before, body="os._exit(0)\n", timeout=3)
+        receipt = read_json(self.root / "logs/fixture.process.json")
+        self.assertEqual(receipt["exit"], 0)
+        self.assertTrue(receipt["cancelled"])
+        self.assertEqual(receipt["stop"], "CANCELLED")
+        self.assertTrue(receipt["ownedCleanupComplete"])
+        for path in self.root.glob("*.identity"):
+            self.assertIsNone(self.original_proc(read_json(path)["pid"]))
+
+    def test_caller_subreaper_zero_is_not_enabled(self):
+        libc = ctypes.CDLL(None, use_errno=True)
+        original = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(original), 0, 0, 0), 0)
+        self.assertEqual(libc.prctl(36, 0, 0, 0, 0), 0)
+        try:
+            self.assertEqual(self.command(body="pass\n")["exit"], 0)
+            current = ctypes.c_int()
+            self.assertEqual(libc.prctl(37, ctypes.byref(current), 0, 0, 0), 0)
+            self.assertEqual(current.value, 0)
+        finally:
+            self.reap_fixture_children()
+            self.assertEqual(libc.prctl(36, original.value, 0, 0, 0), 0)
+
+    def test_unrelated_late_adoption_and_caller_subreaper_are_preserved(self):
+        libc = ctypes.CDLL(None, use_errno=True)
+        original = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(original), 0, 0, 0), 0)
+        self.assertEqual(libc.prctl(36, 1, 0, 0, 0), 0)
+        ready = self.root / "fixture.ready"
+        unrelated_code = (
+            "import json,os,signal,time\nfrom pathlib import Path\n"
+            f"root=Path({str(self.root)!r})\n"
+            f"ready=Path({str(ready)!r})\n"
+            "while not ready.exists(): time.sleep(0.005)\n"
+            "pid=os.fork()\n"
+            "if pid: os._exit(0)\n"
+            "os.setsid(); signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            "data=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()\n"
+            "(root/'unrelated.json').write_text(json.dumps("
+            "{'pid':os.getpid(),'birth':int(data[19])}))\n"
+            "while True: time.sleep(0.01)\n"
+        )
+        unrelated = self.original_popen(
+            [sys.executable, "-B", "-c", unrelated_code],
+            env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+            start_new_session=True,
+        )
+        self.processes.append(unrelated)
+        self.owned[unrelated.pid] = self.original_proc(unrelated.pid)[2]
+        try:
+            result = self.command(
+                body=(
+                    "while not (root/'unrelated.json').exists(): time.sleep(0.005)\n"
+                    "time.sleep(0.1)\n"
+                )
+            )
+            self.assertTrue(result["ownedCleanupComplete"])
+            self.assertEqual(result["exit"], 0)
+            info = read_json(self.root / "unrelated.json")
+            state = self.original_proc(info["pid"])
+            self.assertIsNotNone(state)
+            self.assertEqual(state[2], info["birth"])
+            self.owned[info["pid"]] = info["birth"]
+            current = ctypes.c_int()
+            self.assertEqual(libc.prctl(37, ctypes.byref(current), 0, 0, 0), 0)
+            self.assertEqual(current.value, 1)
+        finally:
+            self.reap_fixture_children()
+            self.assertEqual(libc.prctl(36, original.value, 0, 0, 0), 0)
+        current = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(current), 0, 0, 0), 0)
+        self.assertEqual(current.value, original.value)
 
 
 if __name__ == "__main__":

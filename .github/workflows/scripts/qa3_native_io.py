@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: MPL-2.0
 
+import builtins
 import ctypes
 import json
 import os
+import select
 import selectors
 import shutil
 import signal
@@ -251,7 +253,7 @@ def verify_group_limits(
     }
 
 
-def run_owned(
+def _run_owned(
     argv,
     cwd,
     env,
@@ -265,6 +267,7 @@ def run_owned(
     data_stdout=False,
     io_budget=None,
     data_limit=MAX_EXPANDED,
+    cancelled=lambda: False,
 ):
     safe_path(name)
     if "/" in name or not argv or not all(isinstance(x, str) for x in argv):
@@ -303,139 +306,418 @@ def run_owned(
         *argv,
     ]
     data_bytes = 0
-    with out.open("xb") as stdout, err.open(
-        "xb"
-    ) as stderr, selectors.DefaultSelector() as selector:
-        process = subprocess.Popen(
-            executed,
-            cwd=cwd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        )
-        initial = _proc(process.pid)
-        if initial:
-            owned[process.pid] = initial[2]
-        for pipe, sink in ((process.stdout, stdout), (process.stderr, stderr)):
-            os.set_blocking(pipe.fileno(), False)
-            selector.register(pipe, selectors.EVENT_READ, sink)
+    process = None
+    failure = None
+    cleanup_verified = True
+    cleanup_errors = {}
+    drain_ready = False
 
-        def drain(wait):
-            nonlocal logged, data_bytes, stop
-            for key, _ in selector.select(wait):
-                try:
-                    block = os.read(key.fileobj.fileno(), 65536)
-                except BlockingIOError:
-                    continue
-                if not block:
-                    selector.unregister(key.fileobj)
-                    key.fileobj.close()
-                    continue
-                is_data = data_stdout and key.data is stdout
-                remaining = data_limit - data_bytes if is_data else log_limit - logged
-                if len(block) > remaining:
-                    stop = stop or ("DATA_LIMIT" if is_data else "LOG_LIMIT")
-                    block = block[: max(remaining, 0)]
-                if block:
-                    if minimum_free and shutil.disk_usage(
-                        logs
-                    ).free < minimum_free + len(block):
-                        stop = stop or "DISK_LIMIT"
-                        continue
-                    if is_data and io_budget:
-                        try:
-                            io_budget.consume(len(block))
-                        except ValueError:
-                            stop = stop or "DISK_LIMIT"
-                            continue
-                    key.data.write(block)
-                    if is_data:
-                        data_bytes += len(block)
-                    else:
-                        logged += len(block)
+    def remember_error(exc, phase):
+        nonlocal failure, stop
+        if failure is None:
+            failure = (exc, exc.__traceback__, phase)
+        elif phase not in cleanup_errors:
+            cleanup_errors[phase] = {
+                "type": type(exc).__name__,
+                "errno": getattr(exc, "errno", None),
+                "message": str(exc),
+            }
+        stop = stop or "PROCESS_ERROR"
 
-        leader_done = None
+    def cleanup_call(operation, phase, ownership=False):
+        nonlocal cleanup_verified
         try:
-            while selector.get_map() or process.poll() is None:
-                _descendants(owned, prior_children)
-                if process.poll() is not None:
-                    leader_done = leader_done or time.monotonic()
-                    if time.monotonic() - leader_done > 1:
-                        break
-                if time.monotonic() - started > timeout:
-                    stop = "TIMEOUT"
-                if minimum_free and shutil.disk_usage(logs).free < minimum_free:
-                    stop = stop or "DISK_LIMIT"
-                drain(0.05)
-                if stop:
-                    break
-        finally:
-            for sig, interval in ((signal.SIGTERM, 2), (signal.SIGKILL, 2)):
-                signaled = set()
-                try:
-                    leader = _proc(process.pid)
-                    if leader and leader[2] == owned.get(process.pid):
-                        os.killpg(process.pid, sig)
-                except ProcessLookupError:
-                    pass
-                deadline = time.monotonic() + interval
-                while time.monotonic() < deadline:
-                    _descendants(owned, prior_children)
-                    for pid, birth in list(owned.items()):
-                        info = _proc(pid)
-                        if (
-                            info
-                            and info[2] == birth
-                            and info[1] != "Z"
-                            and (pid, birth) not in signaled
-                        ):
-                            try:
-                                os.kill(pid, sig)
-                                signaled.add((pid, birth))
-                            except ProcessLookupError:
-                                pass
-                    drain(0.02)
-                    process.poll()
-                    for pid in owned_alive(owned):
-                        if pid != process.pid:
-                            try:
-                                os.waitpid(pid, os.WNOHANG)
-                            except ChildProcessError:
-                                pass
-                    if not owned_alive(owned):
-                        break
-                if not owned_alive(owned):
-                    break
+            return operation()
+        except BaseException as exc:
+            remember_error(exc, phase)
+            if ownership:
+                cleanup_verified = False
+            return None
+
+    try:
+        with out.open("xb") as stdout, err.open(
+            "xb"
+        ) as stderr, selectors.DefaultSelector() as selector:
+            process = subprocess.Popen(
+                executed,
+                cwd=cwd,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+            phase = "INITIALIZE"
             try:
-                process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                stop = "CLEANUP_FAILED"
-            deadline = time.monotonic() + 2
-            while selector.get_map() and time.monotonic() < deadline:
-                drain(0.02)
-            for key in list(selector.get_map().values()):
-                selector.unregister(key.fileobj)
-                key.fileobj.close()
-                stop = stop or "CLEANUP_FAILED"
-    leftovers = list(owned_alive(owned))
-    if leftovers:
+                initial = _proc(process.pid)
+                if initial:
+                    owned[process.pid] = initial[2]
+                for pipe, sink in ((process.stdout, stdout), (process.stderr, stderr)):
+                    os.set_blocking(pipe.fileno(), False)
+                    selector.register(pipe, selectors.EVENT_READ, sink)
+
+                def drain(wait):
+                    nonlocal logged, data_bytes, stop
+                    for key, _ in selector.select(wait):
+                        try:
+                            block = os.read(key.fileobj.fileno(), 65536)
+                        except BlockingIOError:
+                            continue
+                        if not block:
+                            selector.unregister(key.fileobj)
+                            key.fileobj.close()
+                            continue
+                        is_data = data_stdout and key.data is stdout
+                        remaining = (
+                            data_limit - data_bytes if is_data else log_limit - logged
+                        )
+                        if len(block) > remaining:
+                            stop = stop or ("DATA_LIMIT" if is_data else "LOG_LIMIT")
+                            block = block[: max(remaining, 0)]
+                        if block:
+                            if minimum_free and shutil.disk_usage(
+                                logs
+                            ).free < minimum_free + len(block):
+                                stop = stop or "DISK_LIMIT"
+                                continue
+                            if is_data and io_budget:
+                                try:
+                                    io_budget.consume(len(block))
+                                except ValueError:
+                                    stop = stop or "DISK_LIMIT"
+                                    continue
+                            key.data.write(block)
+                            if is_data:
+                                data_bytes += len(block)
+                            else:
+                                logged += len(block)
+
+                drain_ready = True
+                phase = "RUN"
+                leader_done = None
+                while selector.get_map() or process.poll() is None:
+                    if cancelled():
+                        stop = stop or "CANCELLED"
+                    _descendants(owned, prior_children)
+                    if process.poll() is not None:
+                        leader_done = leader_done or time.monotonic()
+                        if time.monotonic() - leader_done > 1:
+                            break
+                    if time.monotonic() - started > timeout:
+                        stop = "TIMEOUT"
+                    if minimum_free and shutil.disk_usage(logs).free < minimum_free:
+                        stop = stop or "DISK_LIMIT"
+                    drain(0.05)
+                    if stop:
+                        break
+            except BaseException as exc:
+                remember_error(exc, phase)
+                drain_ready = False
+            finally:
+
+                def cleanup_drain(wait):
+                    nonlocal drain_ready
+                    if cancelled():
+                        stop_on_cancel()
+                    if not drain_ready:
+                        time.sleep(wait)
+                        return
+                    try:
+                        drain(wait)
+                    except BaseException as exc:
+                        remember_error(exc, "CLEANUP_IO")
+                        drain_ready = False
+
+                def stop_on_cancel():
+                    nonlocal stop
+                    stop = stop or "CANCELLED"
+
+                leader = cleanup_call(
+                    lambda: _proc(process.pid), "CLEANUP_SNAPSHOT", ownership=True
+                )
+                if leader:
+                    owned.setdefault(process.pid, leader[2])
+                for sig in (signal.SIGTERM, signal.SIGKILL):
+                    signaled = set()
+                    leader = cleanup_call(
+                        lambda: _proc(process.pid), "CLEANUP_SNAPSHOT", ownership=True
+                    )
+                    if leader and leader[2] == owned.get(process.pid):
+                        try:
+                            os.killpg(process.pid, sig)
+                        except ProcessLookupError:
+                            pass
+                        except BaseException as exc:
+                            remember_error(exc, "CLEANUP_SIGNAL")
+                    alive = None
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() < deadline:
+                        cleanup_call(
+                            lambda: _descendants(owned, prior_children),
+                            "CLEANUP_DISCOVER",
+                            ownership=True,
+                        )
+                        alive = cleanup_call(
+                            lambda: owned_alive(owned),
+                            "CLEANUP_SNAPSHOT",
+                            ownership=True,
+                        )
+                        for pid, info in (alive or {}).items():
+                            if info[1] != "Z" and (pid, info[2]) not in signaled:
+                                try:
+                                    os.kill(pid, sig)
+                                    signaled.add((pid, info[2]))
+                                except ProcessLookupError:
+                                    pass
+                                except BaseException as exc:
+                                    remember_error(exc, "CLEANUP_SIGNAL")
+                            if pid != process.pid:
+                                try:
+                                    os.waitpid(pid, os.WNOHANG)
+                                except ChildProcessError:
+                                    pass
+                                except BaseException as exc:
+                                    remember_error(exc, "CLEANUP_REAP")
+                                    cleanup_verified = False
+                        cleanup_drain(0.02)
+                        cleanup_call(process.poll, "CLEANUP_REAP", ownership=True)
+                        alive = cleanup_call(
+                            lambda: owned_alive(owned),
+                            "CLEANUP_SNAPSHOT",
+                            ownership=True,
+                        )
+                        if alive == {}:
+                            break
+                    if alive == {}:
+                        break
+                cleanup_call(
+                    lambda: process.wait(timeout=2), "CLEANUP_REAP", ownership=True
+                )
+                if drain_ready:
+                    deadline = time.monotonic() + 2
+                    while drain_ready and time.monotonic() < deadline:
+                        pending = cleanup_call(selector.get_map, "CLEANUP_IO")
+                        if not pending:
+                            break
+                        cleanup_drain(0.02)
+                for pipe in (process.stdout, process.stderr):
+                    cleanup_call(pipe.close, "CLEANUP_PIPE")
+    except BaseException as exc:
+        remember_error(exc, "RESOURCE_CLOSE")
+    leftovers = cleanup_call(
+        lambda: list(owned_alive(owned)), "CLEANUP_SNAPSHOT", ownership=True
+    )
+    if leftovers is None or leftovers or not cleanup_verified:
         stop = "CLEANUP_FAILED"
     result = {
         "name": name,
         "argv": argv,
-        "exit": process.returncode,
+        "exit": process.returncode if process else None,
         "stop": stop,
         "durationSeconds": round(time.monotonic() - started, 3),
-        "stdoutSha256": file_digest(out),
-        "stderrSha256": file_digest(err),
-        "ownedCleanupComplete": not leftovers,
+        "stdoutSha256": cleanup_call(lambda: file_digest(out), "RECEIPT_HASH"),
+        "stderrSha256": cleanup_call(lambda: file_digest(err), "RECEIPT_HASH"),
+        "ownedCleanupComplete": bool(process) and cleanup_verified and leftovers == [],
         "stdoutIsData": data_stdout,
     }
-    write_json(logs / (name + ".process.json"), result)
+    if cancelled():
+        stop = stop or "CANCELLED"
+        result["cancelled"] = True
+    result["stop"] = stop
+    if failure:
+        exc, _, phase = failure
+        result["stop"] = stop
+        result["error"] = {
+            "type": type(exc).__name__,
+            "errno": getattr(exc, "errno", None),
+            "message": str(exc),
+            "phase": phase,
+        }
+    if cleanup_errors:
+        result["cleanupErrors"] = cleanup_errors
+    cleanup_call(
+        lambda: write_json(logs / (name + ".process.json"), result), "RECEIPT_WRITE"
+    )
+    if failure:
+        exc, traceback, _ = failure
+        raise exc.with_traceback(traceback)
     if stop or process.returncode != 0 and not allow_nonzero:
         raise ValueError(f"{name} failed: {stop or 'NONZERO_EXIT'}")
     return result
+
+
+def _wait_supervisor(pid, timeout, on_error=None):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            raise
+        except BaseException as exc:
+            if on_error is None:
+                raise
+            on_error(exc)
+            waited = 0
+        if waited:
+            return status
+        time.sleep(0.02)
+    return None
+
+
+def _supervise(command, timeout, io_budget):
+    """Isolate orphan adoption; hard kill/stop recovery needs the external job scope."""
+    reader, writer = os.pipe()
+    try:
+        pid = os.fork()
+    except BaseException:
+        os.close(reader)
+        os.close(writer)
+        raise
+    if pid == 0:
+        os.close(reader)
+        cancel_requested = False
+
+        def cancelled(signum, frame):
+            nonlocal cancel_requested
+            cancel_requested = True
+
+        signal.signal(signal.SIGTERM, cancelled)
+        signal.signal(signal.SIGINT, cancelled)
+        try:
+            try:
+                result = command(lambda: cancel_requested)
+                if cancel_requested:
+                    raise InterruptedError("owned command supervisor cancelled")
+                error = None
+            except BaseException as exc:
+                result = None
+                error = {
+                    "type": type(exc).__name__,
+                    "args": list(exc.args),
+                    "errno": getattr(exc, "errno", None),
+                    "filename": getattr(exc, "filename", None),
+                    "message": str(exc),
+                }
+            reply = {
+                "result": result,
+                "error": error,
+                "budgetUsed": io_budget.used if io_budget else None,
+            }
+            data = json.dumps(reply, allow_nan=False).encode()
+            if len(data) > 128 * 1024:
+                raise ValueError("owned supervisor reply exceeds limit")
+            while data:
+                data = data[os.write(writer, data) :]
+        except BaseException:
+            os._exit(1)
+        os.close(writer)
+        os._exit(0)
+    status = None
+    failure = None
+    data = bytearray()
+    birth = None
+
+    def cleanup_error(exc):
+        nonlocal failure
+        failure = failure or (exc, exc.__traceback__)
+
+    try:
+        birth = _proc(pid)
+        os.close(writer)
+        os.set_blocking(reader, False)
+        deadline = time.monotonic() + timeout + 12
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([reader], [], [], 0.05)
+            if ready:
+                block = os.read(reader, 65536)
+                if not block:
+                    break
+                data.extend(block)
+                if len(data) > 128 * 1024:
+                    raise ValueError("owned supervisor reply exceeds limit")
+        else:
+            raise TimeoutError("owned supervisor did not finish bounded cleanup")
+        status = _wait_supervisor(pid, 1)
+    except BaseException as exc:
+        failure = (exc, exc.__traceback__)
+    finally:
+        try:
+            os.close(reader)
+        except OSError:
+            pass
+        for sig, interval in ((signal.SIGTERM, 10), (signal.SIGKILL, 2)):
+            if status is not None:
+                break
+            try:
+                current = _proc(pid)
+                if birth and current and current[2] == birth[2]:
+                    os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+            except BaseException as exc:
+                cleanup_error(exc)
+            try:
+                status = _wait_supervisor(pid, interval, cleanup_error)
+            except ChildProcessError as exc:
+                cleanup_error(exc)
+                break
+            except BaseException as exc:
+                cleanup_error(exc)
+    if failure:
+        exc, traceback = failure
+        raise exc.with_traceback(traceback)
+    if status != 0:
+        raise RuntimeError("owned supervisor failed to retain its result")
+    reply = dict(parse_rest_json(bytes(data)))
+    if io_budget:
+        used = reply["budgetUsed"]
+        if type(used) is not int or not io_budget.used <= used <= io_budget.maximum:
+            raise ValueError("owned supervisor changed the staging budget")
+        io_budget.used = used
+    if error := reply["error"]:
+        kind = getattr(builtins, error["type"], RuntimeError)
+        if not isinstance(kind, type) or not issubclass(kind, BaseException):
+            kind = RuntimeError
+        if issubclass(kind, OSError) and error["filename"] is not None:
+            raise kind(*error["args"], error["filename"])
+        raise kind(*error["args"])
+    return reply["result"]
+
+
+def run_owned(
+    argv,
+    cwd,
+    env,
+    logs,
+    name,
+    timeout,
+    memory=28 * GIB,
+    log_limit=2 * GIB,
+    allow_nonzero=False,
+    minimum_free=0,
+    data_stdout=False,
+    io_budget=None,
+    data_limit=MAX_EXPANDED,
+):
+    return _supervise(
+        lambda cancelled: _run_owned(
+            argv,
+            cwd,
+            env,
+            logs,
+            name,
+            timeout,
+            memory,
+            log_limit,
+            allow_nonzero,
+            minimum_free,
+            data_stdout,
+            io_budget,
+            data_limit,
+            cancelled,
+        ),
+        timeout,
+        io_budget,
+    )
 
 
 def elf_identity(path):

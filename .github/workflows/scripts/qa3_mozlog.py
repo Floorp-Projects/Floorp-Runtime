@@ -5,6 +5,7 @@ import re
 from runtime_build_context import parse_rest_json
 
 CANARY_REASON = "QA3_EXPECTED_ASSERTION"
+MAX_EVENT_BYTES = 1024**2
 
 
 def canonical_test(value, suite, package):
@@ -56,10 +57,12 @@ def verify_mozlog(path, case, package, process, canary=False):
     events = 0
     case_id = case["id"]
     with path.open("rb") as stream:
-        for line in stream:
+        while line := stream.readline(MAX_EVENT_BYTES + 1):
             events += 1
-            if len(line) > 1024**2 or events > 1000000:
+            if len(line) > MAX_EVENT_BYTES or events > 1000000:
                 raise ValueError("raw mozlog event budget exceeded")
+            if not line.endswith(b"\n"):
+                raise ValueError("unterminated raw mozlog event")
             entry = parse_rest_json(line)
             action = entry.get("action")
             if not isinstance(action, str):
@@ -93,6 +96,10 @@ def verify_mozlog(path, case, package, process, canary=False):
                         raise ValueError("assertion outside required test")
                     status = entry.get("status")
                     reason = entry.get("subtest")
+                    if "subtest" not in entry or (
+                        reason is not None and not isinstance(reason, str)
+                    ):
+                        raise ValueError("missing or untyped assertion subtest")
                     if (
                         canary
                         and status == "FAIL"

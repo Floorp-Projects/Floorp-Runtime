@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import copy
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from qa3_mozlog import verify_mozlog
 
@@ -45,6 +47,124 @@ class MozlogContracts(unittest.TestCase):
         result = self.verify()
         self.assertEqual(result["verdict"], "PASS")
         self.assertEqual(result["assertions"], 1)
+
+    def test_subtest_field_and_raw_type_are_required(self):
+        for fields in (
+            {},
+            {"subtest": False},
+            {"subtest": True},
+            {"subtest": 0},
+            {"subtest": 0.0},
+            {"subtest": []},
+            {"subtest": {}},
+        ):
+            events = copy.deepcopy(self.events)
+            del events[2]["subtest"]
+            events[2].update(fields)
+            with self.subTest(fields=fields), self.assertRaisesRegex(
+                ValueError, "subtest"
+            ):
+                self.verify(events)
+
+    def test_formal_nullable_and_string_subtests_are_preserved(self):
+        for value in (None, "", " \t", "assertion 雪"):
+            events = copy.deepcopy(self.events)
+            events[2]["subtest"] = value
+            with self.subTest(value=value):
+                result = self.verify(events)
+                self.assertEqual(result["verdict"], "PASS")
+                self.assertEqual(result["assertions"], 1)
+
+    def test_readline_is_bounded_before_oversized_event_is_loaded(self):
+        limit = 256
+        data = json.dumps({"action": "log", "message": "x" * 1024}).encode() + b"\n"
+        self.path.write_bytes(data)
+        requests = []
+        returned = []
+
+        class TrackingStream(io.BytesIO):
+            def __iter__(self):
+                raise AssertionError("unbounded line iteration")
+
+            def readline(self, size=-1):
+                requests.append(size)
+                line = super().readline(size)
+                returned.append(len(line))
+                return line
+
+        with mock.patch("qa3_mozlog.MAX_EVENT_BYTES", limit, create=True):
+            with mock.patch.object(Path, "open", return_value=TrackingStream(data)):
+                with self.assertRaisesRegex(ValueError, "budget"):
+                    verify_mozlog(self.path, self.case, self.root, self.process)
+        self.assertEqual(requests, [limit + 1])
+        self.assertEqual(returned, [limit + 1])
+
+    def test_event_byte_limit_includes_terminator_at_boundary(self):
+        limit = 256
+        empty = {"action": "log", "level": "INFO", "message": ""}
+        base = (json.dumps(empty) + "\n").encode()
+        prefix = "".join(json.dumps(event) + "\n" for event in self.events).encode()
+        for size in (limit - 1, limit, limit + 1):
+            event = {**empty, "message": "x" * (size - len(base))}
+            line = (json.dumps(event) + "\n").encode()
+            self.assertEqual(len(line), size)
+            self.path.write_bytes(prefix + line)
+            with self.subTest(size=size), mock.patch(
+                "qa3_mozlog.MAX_EVENT_BYTES", limit, create=True
+            ):
+                if size <= limit:
+                    result = verify_mozlog(
+                        self.path, self.case, self.root, self.process
+                    )
+                    self.assertEqual(result["verdict"], "PASS")
+                else:
+                    with self.assertRaisesRegex(ValueError, "budget"):
+                        verify_mozlog(self.path, self.case, self.root, self.process)
+
+    def test_unterminated_complete_and_partial_events_are_rejected(self):
+        complete = "".join(json.dumps(event) + "\n" for event in self.events).encode()
+        for data in (
+            complete[:-1],
+            complete + b'{"action":"log","level":"INFO"}',
+            complete + b'{"action":"log"',
+            complete + b'{"action":"log","level":"INFO"}\r',
+        ):
+            self.path.write_bytes(data)
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                verify_mozlog(self.path, self.case, self.root, self.process)
+
+    def test_multibyte_byte_bound_and_truncation_fail_closed(self):
+        prefix = "".join(json.dumps(event) + "\n" for event in self.events).encode()
+        line = (
+            json.dumps(
+                {"action": "log", "level": "INFO", "message": "雪" * 80},
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode()
+        self.assertGreater(len(line), len(line.decode()))
+        self.path.write_bytes(prefix + line)
+        with mock.patch("qa3_mozlog.MAX_EVENT_BYTES", len(line), create=True):
+            self.assertEqual(
+                verify_mozlog(self.path, self.case, self.root, self.process)["verdict"],
+                "PASS",
+            )
+        for limit in (len(line) - 1, len(line.decode())):
+            with self.subTest(limit=limit), mock.patch(
+                "qa3_mozlog.MAX_EVENT_BYTES", limit, create=True
+            ):
+                with self.assertRaisesRegex(ValueError, "budget"):
+                    verify_mozlog(self.path, self.case, self.root, self.process)
+        self.path.write_bytes(prefix + b'{"action":"log","message":"\xe9\x9b"}\n')
+        with self.assertRaises(ValueError):
+            verify_mozlog(self.path, self.case, self.root, self.process)
+
+    def test_crlf_and_multiple_complete_events_are_preserved(self):
+        data = "".join(json.dumps(event) + "\r\n" for event in self.events).encode()
+        self.path.write_bytes(data)
+        result = verify_mozlog(self.path, self.case, self.root, self.process)
+        self.assertEqual(result["verdict"], "PASS")
+        self.assertEqual(result["rawEvents"], len(self.events))
 
     def test_canonical_package_id_and_browser_chrome_uri(self):
         for suite, test in (
