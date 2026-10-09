@@ -134,6 +134,10 @@ if [[ "$PGO" == "true" ]]; then
   fi
 fi
 
+# Canonical Debug enables upstream test material; legacy Debug+PGO is unchanged.
+python3 .github/workflows/scripts/qa3_build_profile.py \
+  --config mozconfig --debug "$DEBUG" --pgo "$PGO"
+
 # Update Channel
 
 # Replace long MOZ_APPUPDATE URL with NORA update host | Floorp
