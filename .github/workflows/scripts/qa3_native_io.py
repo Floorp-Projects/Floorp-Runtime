@@ -2,7 +2,9 @@
 
 import builtins
 import ctypes
+import errno
 import json
+import math
 import os
 import select
 import selectors
@@ -563,26 +565,117 @@ def _wait_supervisor(pid, timeout, on_error=None):
     return None
 
 
-def _supervise(command, timeout, io_budget):
+def _supervisor_reply(reply, io_budget, expected, allow_nonzero):
+    if type(reply) is not dict or set(reply) != {"result", "error", "budgetUsed"}:
+        raise ValueError("invalid owned supervisor envelope")
+    error = reply["error"]
+    result = reply["result"]
+    if error is None:
+        fields = {
+            "name",
+            "argv",
+            "exit",
+            "stop",
+            "durationSeconds",
+            "stdoutSha256",
+            "stderrSha256",
+            "ownedCleanupComplete",
+            "stdoutIsData",
+        }
+        if type(result) is not dict or set(result) != fields:
+            raise ValueError("invalid owned supervisor result")
+        if (
+            type(result["name"]) is not str
+            or not result["name"]
+            or "/" in result["name"]
+            or type(result["argv"]) is not list
+            or not result["argv"]
+            or any(type(item) is not str for item in result["argv"])
+            or type(result["exit"]) is not int
+            or result["exit"] != 0
+            and not allow_nonzero
+            or result["stop"] is not None
+            or result["ownedCleanupComplete"] is not True
+            or type(result["stdoutIsData"]) is not bool
+            or type(result["durationSeconds"]) not in {int, float}
+            or not math.isfinite(result["durationSeconds"])
+            or result["durationSeconds"] < 0
+        ):
+            raise ValueError("owned supervisor did not prove successful cleanup")
+        for name in ("stdoutSha256", "stderrSha256"):
+            value = result[name]
+            if (
+                type(value) is not str
+                or len(value) != 64
+                or any(char not in "0123456789abcdef" for char in value)
+            ):
+                raise ValueError("invalid owned supervisor stream hash")
+        if expected and any(result[key] != value for key, value in expected.items()):
+            raise ValueError("owned supervisor result changed its command")
+    else:
+        if (
+            result is not None
+            or type(error) is not dict
+            or set(error) != {"type", "args", "errno", "filename", "message"}
+            or type(error["type"]) is not str
+            or type(error["args"]) is not list
+            or type(error["message"]) is not str
+            or error["errno"] is not None
+            and type(error["errno"]) is not int
+            or error["filename"] is not None
+            and type(error["filename"]) is not str
+        ):
+            raise ValueError("invalid owned supervisor error")
+        kind = getattr(builtins, error["type"], None)
+        if not isinstance(kind, type) or not issubclass(kind, Exception):
+            raise ValueError("unsafe owned supervisor exception type")
+    used = reply["budgetUsed"]
+    if io_budget:
+        if type(used) is not int or not io_budget.used <= used <= io_budget.maximum:
+            raise ValueError("owned supervisor changed the staging budget")
+        io_budget.used = used
+    elif used is not None:
+        raise ValueError("unexpected owned supervisor staging budget")
+    if error is not None:
+        if issubclass(kind, OSError) and error["filename"] is not None:
+            raise kind(*error["args"], error["filename"])
+        raise kind(*error["args"])
+    return result
+
+
+def _supervise(command, timeout, io_budget, *, expected=None, allow_nonzero=False):
     """Isolate orphan adoption; hard kill/stop recovery needs the external job scope."""
+    if (
+        signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL
+        or len(list(Path("/proc/self/task").iterdir())) != 1
+    ):
+        raise ValueError("owned supervisor requires one thread and default SIGCHLD")
+    if type(allow_nonzero) is not bool:
+        raise ValueError("allow_nonzero must be an explicit boolean")
     reader, writer = os.pipe()
     try:
         pid = os.fork()
     except BaseException:
-        os.close(reader)
-        os.close(writer)
+        for fd in (reader, writer):
+            for _ in range(2):
+                try:
+                    os.close(fd)
+                    break
+                except BaseException:
+                    pass
         raise
     if pid == 0:
-        os.close(reader)
         cancel_requested = False
+        exitcode = 1
 
         def cancelled(signum, frame):
             nonlocal cancel_requested
             cancel_requested = True
 
-        signal.signal(signal.SIGTERM, cancelled)
-        signal.signal(signal.SIGINT, cancelled)
         try:
+            os.close(reader)
+            signal.signal(signal.SIGTERM, cancelled)
+            signal.signal(signal.SIGINT, cancelled)
             try:
                 result = command(lambda: cancel_requested)
                 if cancel_requested:
@@ -607,22 +700,74 @@ def _supervise(command, timeout, io_budget):
                 raise ValueError("owned supervisor reply exceeds limit")
             while data:
                 data = data[os.write(writer, data) :]
+            exitcode = 0
         except BaseException:
-            os._exit(1)
-        os.close(writer)
-        os._exit(0)
+            pass
+        finally:
+            try:
+                os.close(writer)
+            except BaseException:
+                exitcode = 1
+            os._exit(exitcode)
     status = None
     failure = None
+    cleanup_errors = {}
     data = bytearray()
-    birth = None
+    pidfd = None
 
-    def cleanup_error(exc):
+    def cleanup_error(exc, phase="WAIT"):
         nonlocal failure
-        failure = failure or (exc, exc.__traceback__)
+        if failure is None:
+            failure = (exc, exc.__traceback__)
+        elif phase not in cleanup_errors:
+            cleanup_errors[phase] = {
+                "type": type(exc).__name__,
+                "errno": getattr(exc, "errno", None),
+                "message": str(exc)[:1024],
+            }
+
+    def close_control(fd, phase):
+        if fd is None:
+            return
+        for _ in range(2):
+            try:
+                os.close(fd)
+                return
+            except BaseException as exc:
+                cleanup_error(exc, phase)
+                if isinstance(exc, OSError) and exc.errno == errno.EBADF:
+                    return
+
+    def signal_supervisor(sig):
+        phase = "TERM" if sig == signal.SIGTERM else "KILL"
+        if pidfd is not None:
+            try:
+                signal.pidfd_send_signal(pidfd, sig)
+                return
+            except ProcessLookupError:
+                return
+            except BaseException as exc:
+                cleanup_error(exc, phase + "_PIDFD")
+        try:
+            # WNOWAIT retains our exclusive fork-child lifetime without /proc.
+            exited = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            if exited is None:
+                os.kill(pid, sig)
+        except ProcessLookupError:
+            pass
+        except BaseException as exc:
+            cleanup_error(exc, phase + "_HELD_CHILD")
 
     try:
-        birth = _proc(pid)
         os.close(writer)
+        writer = None
+        if callable(getattr(os, "pidfd_open", None)) and callable(
+            getattr(signal, "pidfd_send_signal", None)
+        ):
+            pidfd = os.pidfd_open(pid)
+        initial = _proc(pid)
+        if initial is not None and initial[0] != os.getpid():
+            raise RuntimeError("owned supervisor is not our fork child")
         os.set_blocking(reader, False)
         deadline = time.monotonic() + timeout + 12
         while time.monotonic() < deadline:
@@ -640,21 +785,12 @@ def _supervise(command, timeout, io_budget):
     except BaseException as exc:
         failure = (exc, exc.__traceback__)
     finally:
-        try:
-            os.close(reader)
-        except OSError:
-            pass
+        close_control(writer, "CLOSE_WRITER")
+        close_control(reader, "CLOSE_READER")
         for sig, interval in ((signal.SIGTERM, 10), (signal.SIGKILL, 2)):
             if status is not None:
                 break
-            try:
-                current = _proc(pid)
-                if birth and current and current[2] == birth[2]:
-                    os.kill(pid, sig)
-            except ProcessLookupError:
-                pass
-            except BaseException as exc:
-                cleanup_error(exc)
+            signal_supervisor(sig)
             try:
                 status = _wait_supervisor(pid, interval, cleanup_error)
             except ChildProcessError as exc:
@@ -662,25 +798,19 @@ def _supervise(command, timeout, io_budget):
                 break
             except BaseException as exc:
                 cleanup_error(exc)
+        close_control(pidfd, "CLOSE_PIDFD")
+        if status is None:
+            cleanup_error(TimeoutError("owned supervisor was not reaped"))
     if failure:
         exc, traceback = failure
+        if cleanup_errors:
+            exc.add_note(json.dumps({"ownedSupervisorCleanupErrors": cleanup_errors}))
         raise exc.with_traceback(traceback)
     if status != 0:
         raise RuntimeError("owned supervisor failed to retain its result")
-    reply = dict(parse_rest_json(bytes(data)))
-    if io_budget:
-        used = reply["budgetUsed"]
-        if type(used) is not int or not io_budget.used <= used <= io_budget.maximum:
-            raise ValueError("owned supervisor changed the staging budget")
-        io_budget.used = used
-    if error := reply["error"]:
-        kind = getattr(builtins, error["type"], RuntimeError)
-        if not isinstance(kind, type) or not issubclass(kind, BaseException):
-            kind = RuntimeError
-        if issubclass(kind, OSError) and error["filename"] is not None:
-            raise kind(*error["args"], error["filename"])
-        raise kind(*error["args"])
-    return reply["result"]
+    return _supervisor_reply(
+        parse_rest_json(bytes(data)), io_budget, expected, allow_nonzero
+    )
 
 
 def run_owned(
@@ -717,6 +847,8 @@ def run_owned(
         ),
         timeout,
         io_budget,
+        expected={"name": name, "argv": argv, "stdoutIsData": data_stdout},
+        allow_nonzero=allow_nonzero,
     )
 
 

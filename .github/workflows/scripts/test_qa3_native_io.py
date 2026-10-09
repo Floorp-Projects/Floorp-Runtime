@@ -840,5 +840,315 @@ class ProcessFailureTests(unittest.TestCase):
         self.assertEqual(current.value, original.value)
 
 
+class SupervisorBoundaryTests(unittest.TestCase):
+    setUp = ProcessFailureTests.setUp
+    reap_fixture_children = ProcessFailureTests.reap_fixture_children
+    spawn = ProcessFailureTests.spawn
+    command = ProcessFailureTests.command
+
+    def parent_failure(self, mode, extra=None):
+        caller = os.getpid()
+        original_fork = os.fork
+        original_pipe = os.pipe
+        original_blocking = os.set_blocking
+        original_close = os.close
+        controls = []
+        supervisors = []
+        failed = False
+        failure = OSError(errno.EIO, "parent " + mode + " failed")
+        libc = ctypes.CDLL(None, use_errno=True)
+        prior = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(prior), 0, 0, 0), 0)
+        self.assertEqual(libc.prctl(36, 1, 0, 0, 0), 0)
+
+        def pipe():
+            pair = original_pipe()
+            if os.getpid() == caller:
+                controls.extend((fd, os.fstat(fd)) for fd in pair)
+            return pair
+
+        def fork():
+            pid = original_fork()
+            if pid > 0 and os.getpid() == caller:
+                supervisors.append(pid)
+                self.owned[pid] = self.original_proc(pid)[2]
+                deadline = time.monotonic() + 2
+                while not self.ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                self.assertTrue(self.ready.exists(), "own command did not start")
+            return pid
+
+        def proc(pid):
+            if os.getpid() == caller and pid in supervisors:
+                if mode == "snapshot":
+                    raise failure
+                if mode in {"reader", "fallback"}:
+                    return None
+            return self.original_proc(pid)
+
+        def blocking(fd, value):
+            if os.getpid() == caller and mode in {"reader", "fallback"}:
+                raise failure
+            return original_blocking(fd, value)
+
+        def close(fd):
+            nonlocal failed
+            if (
+                os.getpid() == caller
+                and mode == "writer"
+                and controls
+                and fd == controls[1][0]
+                and not failed
+            ):
+                failed = True
+                raise failure
+            return original_close(fd)
+
+        try:
+            with mock.patch.object(
+                qa3_native_io.os, "pipe", side_effect=pipe
+            ), mock.patch.object(
+                qa3_native_io.os, "fork", side_effect=fork
+            ), mock.patch.object(
+                qa3_native_io, "_proc", side_effect=proc
+            ), mock.patch.object(
+                qa3_native_io.os, "set_blocking", side_effect=blocking
+            ), mock.patch.object(qa3_native_io.os, "close", side_effect=close):
+                if extra:
+                    with extra(failure):
+                        with self.assertRaises(OSError) as caught:
+                            self.command(timeout=20)
+                else:
+                    with self.assertRaises(OSError) as caught:
+                        self.command(timeout=20)
+            self.assertEqual(caught.exception.args, failure.args)
+            for fd, stat in controls:
+                try:
+                    current = os.fstat(fd)
+                except OSError:
+                    continue
+                self.assertNotEqual(
+                    (current.st_dev, current.st_ino),
+                    (stat.st_dev, stat.st_ino),
+                    "parent left its own control descriptor open",
+                )
+            self.assertFalse(owned_alive(self.owned))
+            for path in self.root.glob("*.identity"):
+                self.assertIsNone(self.original_proc(read_json(path)["pid"]))
+            receipt = read_json(self.root / "logs/fixture.process.json")
+            self.assertTrue(receipt["ownedCleanupComplete"])
+            self.assertTrue(receipt["cancelled"])
+            return caught.exception
+        finally:
+            for fd, stat in controls:
+                try:
+                    current = os.fstat(fd)
+                except OSError:
+                    continue
+                if (current.st_dev, current.st_ino) == (stat.st_dev, stat.st_ino):
+                    original_close(fd)
+            self.reap_fixture_children()
+            self.assertEqual(libc.prctl(36, prior.value, 0, 0, 0), 0)
+
+    def test_parent_snapshot_error_closes_control_and_reaps(self):
+        self.parent_failure("snapshot")
+
+    def test_parent_reader_error_with_missing_snapshot_reaps(self):
+        self.parent_failure("reader")
+
+    def test_parent_writer_close_error_is_retried_and_reaps(self):
+        self.parent_failure("writer")
+
+    def test_parent_pidfd_open_error_uses_held_child_cleanup(self):
+        self.parent_failure(
+            "pidfd",
+            lambda failure: mock.patch.object(
+                qa3_native_io.os, "pidfd_open", side_effect=failure
+            ),
+        )
+
+    def test_parent_no_pidfd_uses_held_child_cleanup(self):
+        self.parent_failure(
+            "fallback",
+            lambda failure: mock.patch.object(qa3_native_io.os, "pidfd_open", None),
+        )
+
+    def test_parent_pidfd_signal_error_keeps_first_error_and_reaps(self):
+        caller = os.getpid()
+        original = signal.pidfd_send_signal
+        failed = False
+
+        def signal_pidfd(fd, sig, *args):
+            nonlocal failed
+            if os.getpid() == caller and not failed:
+                failed = True
+                raise OSError(errno.EMFILE, "secondary parent signal failed")
+            return original(fd, sig, *args)
+
+        exception = self.parent_failure(
+            "reader",
+            lambda failure: mock.patch.object(
+                qa3_native_io.signal, "pidfd_send_signal", side_effect=signal_pidfd
+            ),
+        )
+        self.assertTrue(failed)
+        self.assertIn("TERM_PIDFD", exception.__notes__[0])
+        self.assertIn(str(errno.EMFILE), exception.__notes__[0])
+
+    def valid_reply(self):
+        return {
+            "result": {
+                "name": "fake-only",
+                "argv": ["fixture-only"],
+                "exit": 0,
+                "stop": None,
+                "durationSeconds": 0.001,
+                "stdoutSha256": "a" * 64,
+                "stderrSha256": "b" * 64,
+                "ownedCleanupComplete": True,
+                "stdoutIsData": False,
+            },
+            "error": None,
+            "budgetUsed": None,
+        }
+
+    def reply(self, value, **kwargs):
+        encoded = __import__("json").dumps(value)
+        with mock.patch.object(qa3_native_io.json, "dumps", return_value=encoded):
+            return qa3_native_io._supervise(
+                lambda cancelled: self.valid_reply()["result"], 1, None, **kwargs
+            )
+
+    def test_private_envelope_rejects_false_errors_extra_keys_and_bad_results(self):
+        valid = self.valid_reply()
+        cases = [valid | {"error": error} for error in ({}, False, 0, "")]
+        cases += [valid | {"extra": True}]
+        cases += [valid | {"result": result} for result in (None, "success", 0, [])]
+        for field, value in (
+            ("ownedCleanupComplete", False),
+            ("ownedCleanupComplete", 1),
+            ("exit", True),
+            ("exit", 0.0),
+            ("exit", "0"),
+            ("stop", "CLEANUP_FAILED"),
+            ("stdoutIsData", 0),
+        ):
+            cases.append(valid | {"result": valid["result"] | {field: value}})
+        for i, value in enumerate(cases):
+            with self.subTest(i=i), self.assertRaises(Exception):
+                self.reply(value)
+
+    def test_private_envelope_never_reconstructs_system_exit_zero(self):
+        value = self.valid_reply() | {
+            "result": None,
+            "error": {
+                "type": "SystemExit",
+                "args": [0],
+                "errno": None,
+                "filename": None,
+                "message": "zero",
+            },
+        }
+        with self.assertRaises(Exception):
+            self.reply(value)
+
+    def test_private_envelope_valid_result_and_oserror_survive(self):
+        self.assertEqual(self.reply(self.valid_reply()), self.valid_reply()["result"])
+        value = self.valid_reply() | {
+            "result": None,
+            "error": {
+                "type": "OSError",
+                "args": [errno.EDQUOT, "fixture quota"],
+                "errno": errno.EDQUOT,
+                "filename": "/fixture-only",
+                "message": "fixture quota",
+            },
+        }
+        with self.assertRaises(OSError) as caught:
+            self.reply(value)
+        self.assertEqual(caught.exception.errno, errno.EDQUOT)
+        self.assertEqual(caught.exception.filename, "/fixture-only")
+
+    def test_private_envelope_explicit_nonzero_and_expected_command(self):
+        valid = self.valid_reply()
+        for exitcode in (True, 0.0, "0", None, 1):
+            value = valid | {"result": valid["result"] | {"exit": exitcode}}
+            with self.subTest(exitcode=exitcode), self.assertRaises(ValueError):
+                self.reply(value)
+        value = valid | {"result": valid["result"] | {"exit": 1}}
+        self.assertEqual(self.reply(value, allow_nonzero=True)["exit"], 1)
+        with self.assertRaises(ValueError):
+            self.reply(value, allow_nonzero="true")
+        with self.assertRaises(ValueError):
+            self.reply(valid, expected={"argv": ["changed-command"]})
+        with self.assertRaises(ValueError):
+            self.reply(valid | {"budgetUsed": 0})
+
+    def test_private_envelope_staging_budget_is_typed_and_monotone(self):
+        valid = self.valid_reply()
+        budget = IOBudget(self.root, 10)
+        budget.used = 2
+        for used in (True, 1, 11, None, "4", 4.0):
+            with self.subTest(used=used), self.assertRaises(ValueError):
+                qa3_native_io._supervisor_reply(
+                    valid | {"budgetUsed": used}, budget, None, False
+                )
+            self.assertEqual(budget.used, 2)
+        qa3_native_io._supervisor_reply(valid | {"budgetUsed": 4}, budget, None, False)
+        self.assertEqual(budget.used, 4)
+
+    def test_single_owner_guard_runs_before_fork(self):
+        with mock.patch.object(
+            qa3_native_io.signal, "getsignal", return_value=signal.SIG_IGN
+        ), mock.patch.object(qa3_native_io.os, "fork") as fork:
+            with self.assertRaises(ValueError):
+                self.reply(self.valid_reply())
+            fork.assert_not_called()
+        with mock.patch.object(
+            Path, "iterdir", return_value=iter([Path("1"), Path("2")])
+        ), mock.patch.object(qa3_native_io.os, "fork") as fork:
+            with self.assertRaises(ValueError):
+                self.reply(self.valid_reply())
+            fork.assert_not_called()
+
+    def test_fork_failure_closes_both_fds_even_if_first_close_fails(self):
+        original_pipe = os.pipe
+        original_close = os.close
+        descriptors = []
+        failed = False
+        initial = OSError(errno.EAGAIN, "initial fork failed")
+
+        def pipe():
+            pair = original_pipe()
+            descriptors.extend(pair)
+            return pair
+
+        def close(fd):
+            nonlocal failed
+            if fd in descriptors and not failed:
+                failed = True
+                raise OSError(errno.EIO, "secondary fork cleanup failed")
+            return original_close(fd)
+
+        try:
+            with mock.patch.object(
+                qa3_native_io.os, "pipe", side_effect=pipe
+            ), mock.patch.object(
+                qa3_native_io.os, "fork", side_effect=initial
+            ), mock.patch.object(qa3_native_io.os, "close", side_effect=close):
+                with self.assertRaises(OSError) as caught:
+                    self.reply(self.valid_reply())
+            self.assertEqual(caught.exception.args, initial.args)
+            for fd in descriptors:
+                with self.assertRaises(OSError):
+                    os.fstat(fd)
+        finally:
+            for fd in descriptors:
+                try:
+                    original_close(fd)
+                except OSError:
+                    pass
+
+
 if __name__ == "__main__":
     unittest.main()
