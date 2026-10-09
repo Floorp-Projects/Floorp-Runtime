@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "linux-x64-runtime-l1-proof-v1",
+  "role": "canonical-debug",
+  "target": "x86_64-pc-linux-gnu",
+  "sourceMaterials": [
+    {
+      "path": "browser/base/content/test/performance/browser_hiddenwindow_existence.js",
+      "sha256": "1bb1b457fe97d23a3b767fbefe4e9333427a67259255475c11b3ccd888f332dd"
+    },
+    {
+      "path": "browser/base/content/test/performance/browser.toml",
+      "sha256": "5d912d9a5f1e6c5df1831429cefeca513d2ad86de1180f9c4da1c0d292bc6530"
+    },
+    {
+      "path": "browser/base/content/test/performance/head.js",
+      "sha256": "1c5ca21a4b9ba8920fd7bbe5aa3454006fab3094ae48eead294c64e4d1693963"
+    },
+    {
+      "path": "xpcom/tests/unit/test_nsIMutableArray.js",
+      "sha256": "14a828e5c0f54aa0561c5995da9e6b3948e99f6f2117a13ef6bb620b9638ff08"
+    },
+    {
+      "path": "xpcom/tests/unit/xpcshell.toml",
+      "sha256": "5d7bb1d6235fa018913145227dd79e19aa828f11e26d70c804483f609ed2e00f"
+    },
+    {
+      "path": "xpcom/tests/unit/head_xpcom.js",
+      "sha256": "7fbb66d1c184def357c4d7114aedc5d946f0440398891ce796510c25a65f6e95"
+    },
+    {
+      "path": "testing/testsuite-targets.mk",
+      "sha256": "47dff65b7fa40b1840fb37ae6f8f3e0ca9d6489b467edffbe176ce13e6aa6133"
+    },
+    {
+      "path": "python/mozbuild/mozbuild/action/test_archive.py",
+      "sha256": "43a6d32d18ffd4048a6b2c8eb985e9554cd9129c4e0a8ded048a2b4580e0e968"
+    },
+    {
+      "path": "testing/mochitest/runtests.py",
+      "sha256": "aeb32f022d18d12ce1ad951ba5f34459bb03eff424ad398ea1d4db6074162a3e"
+    },
+    {
+      "path": "testing/mochitest/mochitest_options.py",
+      "sha256": "93bb03110d83d94dde44fa4e8e2428941205c5298c4a040c07c795423bde0558"
+    },
+    {
+      "path": "testing/xpcshell/runxpcshelltests.py",
+      "sha256": "aa38d12bce677ff2b4c9f4a2a70498e2d62a92a8e59612fda81253337a6c9362"
+    },
+    {
+      "path": "testing/xpcshell/xpcshellcommandline.py",
+      "sha256": "434bdc75e9abbd442b4efa99756a3e26c4abeadcf862639bf4f578b945130853"
+    },
+    {
+      "path": "build/buildconfig.py",
+      "sha256": "9d9ff6748ba6529fcc992567053bf2aad7bb9a2802a294cef19cbee2ea778aff"
+    },
+    {
+      "path": ".github/qa/canaries/browser_qa3_assertion.js",
+      "sha256": "869990c5be7fc3292b4c2a54c47b08114dc6ca7398bf8deec4b1df61d61330d8"
+    },
+    {
+      "path": ".github/qa/canaries/test_qa3_assertion.js",
+      "sha256": "336ec5930031c36886fb2d1ab982d30165db951701ce1ea2b3cb47b04bdf20c9"
+    }
+  ],
+  "selection": [
+    {
+      "suite": "browser-chrome",
+      "id": "browser/base/content/test/performance/browser_hiddenwindow_existence.js",
+      "manifest": "browser/base/content/test/performance/browser.toml",
+      "archivePath": "mochitest/browser/browser/base/content/test/performance/browser_hiddenwindow_existence.js",
+      "minimumAssertions": 1,
+      "declaredConditions": {},
+      "requiredNoSkip": true
+    },
+    {
+      "suite": "xpcshell",
+      "id": "xpcom/tests/unit/test_nsIMutableArray.js",
+      "manifest": "xpcom/tests/unit/xpcshell.toml",
+      "archivePath": "xpcshell/tests/xpcom/tests/unit/test_nsIMutableArray.js",
+      "minimumAssertions": 1,
+      "declaredConditions": {},
+      "requiredNoSkip": true
+    }
+  ],
+  "nativeExecution": "UNVERIFIED",
+  "coldHarnessCLI": "UNVERIFIED",
+  "coldRequirements": "UNVERIFIED",
+  "publicationAuthorized": false
+}

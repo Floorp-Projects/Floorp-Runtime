@@ -93,7 +93,11 @@ def verify_patches(root, entries, directory):
 
 def capture_tree(root):
     entries = []
-    for directory, dirs, files in os.walk(root, followlinks=False):
+
+    def walk_error(error):
+        raise error
+
+    for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
         base = Path(directory)
         dirs[:] = [d for d in dirs if not (base == root and d in {".git", ".hg"})]
         for name in list(dirs):
@@ -169,9 +173,9 @@ def verify_inventory(inventory):
     return inventory
 
 
-def diagnostic_expectation(root, baseline, patches):
+def diagnostic_expectation(root, baseline, patches, require_full_baseline=True):
     verify_inventory(baseline)
-    if capture_tree(root) != baseline:
+    if require_full_baseline and capture_tree(root) != baseline:
         raise ValueError("baseline bytes changed before diagnostic preparation")
     paths = set()
     for patch in patches:
@@ -203,6 +207,14 @@ def diagnostic_expectation(root, baseline, patches):
         for path in paths:
             if by_path.get(path, {}).get("type") != "file":
                 raise ValueError("diagnostic delta requires existing regular files")
+            actual = safe_file(root, path)
+            if (
+                file_digest(actual) != by_path[path]["sha256"]
+                or bool(actual.stat().st_mode & 0o111) != by_path[path]["executable"]
+            ):
+                raise ValueError(
+                    "diagnostic preimage bytes or mode differ from baseline"
+                )
             target = scratch / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(safe_file(root, path), target)

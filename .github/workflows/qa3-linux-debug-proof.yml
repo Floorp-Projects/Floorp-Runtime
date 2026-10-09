@@ -1,0 +1,193 @@
+# SPDX-License-Identifier: MPL-2.0
+name: QA3 limited Linux Debug proof (private prerequisite)
+
+"on":
+  workflow_call:
+    inputs:
+      runtime_sha:
+        type: string
+        required: true
+      plan_sha256:
+        type: string
+        required: true
+      builder_toolchain_sha256:
+        type: string
+        required: true
+      consumer_toolchain_sha256:
+        type: string
+        required: true
+      python_environment_sha256:
+        type: string
+        required: true
+      launcher_sha256:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: qa3-native-proof-${{ github.repository }}-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  private-prerequisite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Refuse public execution and nonimmutable inputs
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+          RUNTIME: ${{ inputs.runtime_sha }}
+          PLAN: ${{ inputs.plan_sha256 }}
+          BUILDER: ${{ inputs.builder_toolchain_sha256 }}
+          CONSUMER: ${{ inputs.consumer_toolchain_sha256 }}
+          PYTHON_ENV: ${{ inputs.python_environment_sha256 }}
+          LAUNCHER: ${{ inputs.launcher_sha256 }}
+        shell: bash
+        run: |
+          test "$IS_PRIVATE" = true
+          [[ "$RUNTIME" =~ ^[0-9a-f]{40}$ ]]
+          for value in "$PLAN" "$BUILDER" "$CONSUMER" "$PYTHON_ENV" "$LAUNCHER"; do
+            [[ "$value" =~ ^[0-9a-f]{64}$ ]]
+          done
+  producer:
+    needs: private-prerequisite
+    runs-on: [self-hosted, linux, x64, qa3-private-builder]
+    timeout-minutes: 360
+    outputs:
+      primary-id: ${{ steps.primary.outputs.artifact-id }}
+      primary-sha256: ${{ steps.primary.outputs.artifact-digest }}
+      support-id: ${{ steps.support.outputs.artifact-id }}
+      support-sha256: ${{ steps.support.outputs.artifact-digest }}
+    env:
+      QA3_R: ${{ inputs.runtime_sha }}
+      QA3_W: ${{ github.workflow_sha }}
+      QA3_RECEIPTS: /var/lib/qa3-controller/receipts/${{ github.run_id }}-${{ github.run_attempt }}-builder
+      QA3_JOB: /var/lib/qa3-native/jobs/${{ github.run_id }}-${{ github.run_attempt }}-builder
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Floorp-Projects/Floorp-Runtime
+          ref: ${{ inputs.runtime_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: runtime-recipe
+      - name: Authenticate actual private run and reusable W/R
+        id: context
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -B runtime-recipe/.github/workflows/scripts/qa3_native_transport.py context
+          --runtime "$QA3_R" --controller "$QA3_W" --output "$QA3_RECEIPTS"
+      - name: Launch fresh native UID inside the preconfigured bounded scope
+        env:
+          PLAN: ${{ inputs.plan_sha256 }}
+          TOOLCHAIN: ${{ inputs.builder_toolchain_sha256 }}
+          PYTHON_ENV: ${{ inputs.python_environment_sha256 }}
+          LAUNCHER: ${{ inputs.launcher_sha256 }}
+          CONTEXT: ${{ steps.context.outputs.context-sha256 }}
+        run: |
+          printf '%s  %s\n' "$LAUNCHER" /opt/qa3/bin/launch-native-proof | sha256sum --check --status
+          sudo -n /opt/qa3/bin/launch-native-proof builder "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" -- \
+            /opt/qa3/python/bin/python3 -B "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py" builder \
+            --recipe "$GITHUB_WORKSPACE/runtime-recipe" --runtime "$QA3_R" --controller "$QA3_W" \
+            --context "$QA3_RECEIPTS/context.json" --context-sha256 "$CONTEXT" --plan-sha256 "$PLAN" \
+            --toolchain-lock /opt/qa3/builder-toolchain-lock.json --toolchain-sha256 "$TOOLCHAIN" \
+            --python-environment /opt/qa3/python-environment --python-environment-sha256 "$PYTHON_ENV"
+      - name: Preserve primary package separately
+        id: primary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa3-primary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.QA3_JOB }}/output/primary
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Preserve same-build test-support separately
+        id: support
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa3-support-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.QA3_JOB }}/output/test-support
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Preserve producer evidence on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa3-producer-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.QA3_JOB }}/output/logs/*.stderr
+            ${{ env.QA3_JOB }}/output/logs/*.process.json
+            ${{ env.QA3_JOB }}/output/logs/tool-*.stdout
+            ${{ env.QA3_JOB }}/output/logs/configure.stdout
+            ${{ env.QA3_JOB }}/output/logs/effective-config.stdout
+            ${{ env.QA3_JOB }}/output/logs/native-build.stdout
+            ${{ env.QA3_JOB }}/output/logs/primary-package.stdout
+            ${{ env.QA3_JOB }}/output/logs/package-tests.stdout
+            ${{ env.QA3_JOB }}/output/*.json
+          if-no-files-found: error
+          retention-days: 14
+  consumer:
+    needs: producer
+    runs-on: [self-hosted, linux, x64, qa3-private-consumer]
+    timeout-minutes: 60
+    env:
+      QA3_R: ${{ inputs.runtime_sha }}
+      QA3_W: ${{ github.workflow_sha }}
+      QA3_RECEIPTS: /var/lib/qa3-controller/receipts/${{ github.run_id }}-${{ github.run_attempt }}-consumer
+      QA3_JOB: /var/lib/qa3-native/jobs/${{ github.run_id }}-${{ github.run_attempt }}-consumer
+      PRIMARY_ID: ${{ needs.producer.outputs.primary-id }}
+      PRIMARY_SHA: ${{ needs.producer.outputs.primary-sha256 }}
+      SUPPORT_ID: ${{ needs.producer.outputs.support-id }}
+      SUPPORT_SHA: ${{ needs.producer.outputs.support-sha256 }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Floorp-Projects/Floorp-Runtime
+          ref: ${{ inputs.runtime_sha }}
+          persist-credentials: false
+          sparse-checkout: .github
+          path: runtime-recipe
+      - name: Authenticate and transfer exact same-run/attempt artifacts
+        id: context
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -B runtime-recipe/.github/workflows/scripts/qa3_native_transport.py download
+          --runtime "$QA3_R" --controller "$QA3_W" --output "$QA3_RECEIPTS"
+          --primary-id "$PRIMARY_ID" --primary-sha256 "$PRIMARY_SHA"
+          --support-id "$SUPPORT_ID" --support-sha256 "$SUPPORT_SHA"
+      - name: Launch cold native consumer without controller credentials
+        env:
+          PLAN: ${{ inputs.plan_sha256 }}
+          TOOLCHAIN: ${{ inputs.consumer_toolchain_sha256 }}
+          BUILDER_TOOLCHAIN: ${{ inputs.builder_toolchain_sha256 }}
+          PYTHON_ENV: ${{ inputs.python_environment_sha256 }}
+          LAUNCHER: ${{ inputs.launcher_sha256 }}
+          CONTEXT: ${{ steps.context.outputs.context-sha256 }}
+        run: |
+          printf '%s  %s\n' "$LAUNCHER" /opt/qa3/bin/launch-native-proof | sha256sum --check --status
+          sudo -n /opt/qa3/bin/launch-native-proof consumer "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" -- \
+            /opt/qa3/python/bin/python3 -B "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py" consumer \
+            --recipe "$GITHUB_WORKSPACE/runtime-recipe" --runtime "$QA3_R" --controller "$QA3_W" \
+            --context "$QA3_RECEIPTS/context.json" --context-sha256 "$CONTEXT" --plan-sha256 "$PLAN" \
+            --toolchain-lock /opt/qa3/consumer-toolchain-lock.json --toolchain-sha256 "$TOOLCHAIN" \
+            --builder-toolchain-sha256 "$BUILDER_TOOLCHAIN" \
+            --python-environment /opt/qa3/python-environment --python-environment-sha256 "$PYTHON_ENV" \
+            --primary-id "$PRIMARY_ID" --primary-sha256 "$PRIMARY_SHA" \
+            --support-id "$SUPPORT_ID" --support-sha256 "$SUPPORT_SHA"
+      - name: Preserve complete cold consumer evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa3-consumer-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.QA3_JOB }}/output/logs
+            ${{ env.QA3_JOB }}/output/consumer-result.json
+            ${{ env.QA3_JOB }}/output/failure.json
+          if-no-files-found: error
+          retention-days: 14
