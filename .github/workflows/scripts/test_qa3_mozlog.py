@@ -129,6 +129,26 @@ class MozlogContracts(unittest.TestCase):
             with self.subTest(event=event), self.assertRaises(ValueError):
                 self.verify([*self.events[:3], event, *self.events[3:]])
 
+    def test_child_process_exit_requires_typed_zero(self):
+        event = {"action": "process_exit", "process": "fixture", "exitcode": 0}
+        self.assertEqual(
+            self.verify([*self.events[:3], event, *self.events[3:]])["verdict"],
+            "PASS",
+        )
+        for invalid in (
+            {},
+            {"exitcode": False},
+            {"exitcode": True},
+            {"exitcode": 0.0},
+            {"exitcode": 1.0},
+            {"exitcode": None},
+            {"exitcode": "0"},
+            {"exitcode": 1},
+        ):
+            event = {"action": "process_exit", "process": "fixture", **invalid}
+            with self.subTest(event=event), self.assertRaises(ValueError):
+                self.verify([*self.events[:3], event, *self.events[3:]])
+
     def test_exact_expected_assertion_canary(self):
         events = copy.deepcopy(self.events)
         events[2].update(

@@ -134,7 +134,7 @@ def verify_mozlog(path, case, package, process, canary=False):
                 if type(entry.get("bytes")) is not int or entry["bytes"] != 0:
                     raise ValueError("native leak total is missing or nonzero")
             elif action == "process_exit":
-                if entry.get("exitcode", 0) != 0:
+                if type(entry.get("exitcode")) is not int or entry["exitcode"] != 0:
                     raise ValueError("unexpected native child exit")
             elif action == "log":
                 if entry.get("level") in {"ERROR", "CRITICAL", "FATAL"}:
