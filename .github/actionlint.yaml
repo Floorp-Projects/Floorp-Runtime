@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+self-hosted-runner:
+  labels:
+    - qa3-private-builder
+    - qa3-private-consumer
