@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MPL-2.0
+name: QA3 Runtime contracts (shadow)
+
+"on":
+  pull_request:
+    paths:
+      - ".github/qa/**"
+      - ".github/runtime-upstream.json"
+      - ".github/patches/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Check generated profiles and source/profdata negative contracts
+        run: |
+          mkdir -p "$RUNNER_TEMP/qa3-runtime"
+          set +e
+          python3 -B -m unittest discover -s .github/workflows/scripts \
+          -p 'test_qa3_*.py' -v > "$RUNNER_TEMP/qa3-runtime/contracts.log" 2>&1
+          status=$?
+          printf '%s\n' "$status" > "$RUNNER_TEMP/qa3-runtime/contracts.exit-code"
+          cat "$RUNNER_TEMP/qa3-runtime/contracts.log"
+          exit "$status"
+      - name: Record policy preflight without issuing native qualification
+        if: always()
+        env:
+          QA3_RUNTIME_HEAD: ${{ github.sha }}
+        run: >-
+          python3 -B .github/workflows/scripts/qa3_source_cohort.py
+          --expected-runtime "$QA3_RUNTIME_HEAD"
+          --output "$RUNNER_TEMP/qa3-runtime/preflight.json"
+      - name: Preserve shadow preflight
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa3-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qa3-runtime
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "comparisonPolicy": "common-baseline-with-diagnostics",
+  "commonPatches": [
+    {
+      "path": ".github/patches/upstream/LocalizationCpp.patch",
+      "sha256": "61e0476c14f9e065e8bba1cbd281db406f1981513e341069c165728cfa2d508b"
+    },
+    {
+      "path": ".github/patches/upstream/artifacts.py.patch",
+      "sha256": "34d9b3d625fc9fef589aba604bdc56b55203828abe3321f38d837f5dafc8bb1a"
+    },
+    {
+      "path": ".github/patches/upstream/bootstrap.py.patch",
+      "sha256": "471101e57b649db6a70ef8d47fe0cf261b6bdcd5090c5f9637c0f3365eee8caf"
+    },
+    {
+      "path": ".github/patches/upstream/brandingFileIcon.patch",
+      "sha256": "55d5bc554135564b6324b8206de28c21e87712c6d4a10093936cc0c228409fa0"
+    },
+    {
+      "path": ".github/patches/upstream/browser-installer-windows-nsis-shared.nsh.patch",
+      "sha256": "7ce5c08329053846d3714266c4228df1a4f675d6582fb1d9cd1a875f832e19b6"
+    },
+    {
+      "path": ".github/patches/upstream/common.nsh.patch",
+      "sha256": "69bcf9c0a3a2109b2821c7a49b4015995eb669f5684fb27055d1744d9a0ddeb6"
+    },
+    {
+      "path": ".github/patches/upstream/commonupdatedir.cpp.patch",
+      "sha256": "f01e4f5768caa5ae1903988597397d632c684ab45c5567fc73f158971ad840ce"
+    },
+    {
+      "path": ".github/patches/upstream/config-external-nspr-pr-moz.build.patch",
+      "sha256": "e0fc458b8d8025a87f80692f53db3089b5825006b59a049bfd4023f9683daf2f"
+    },
+    {
+      "path": ".github/patches/upstream/localizeFfiLib.patch",
+      "sha256": "fb4e8297fedc9be79c63028163e934fb9bf67dcc1fcae6e1f5435a255461b701"
+    },
+    {
+      "path": ".github/patches/upstream/macos-app-shim-pwa-input-and-compositor.patch",
+      "sha256": "43a278bedfe0faeb9b747f47b32b9b060683ddbb2e58953d03d3b5470e47c2e8"
+    },
+    {
+      "path": ".github/patches/upstream/moz.build.patch",
+      "sha256": "02221cb80b5182590d3bd77de01f8a7802820cff7c4c82f745649be0d52a6ccf"
+    },
+    {
+      "path": ".github/patches/upstream/moz.configure.patch",
+      "sha256": "b3d4b08108394a8a7cf48daf9292e65c7f9fc49995ab105c44515a14a570a5d4"
+    },
+    {
+      "path": ".github/patches/upstream/nsIUpdateService.idl.patch",
+      "sha256": "8a9626efe2de66589f65a0fee722d6a8c87a40fdf6926ee8e5af2322eebed313"
+    },
+    {
+      "path": ".github/patches/upstream/nxXREDirProvider.cpp.patch",
+      "sha256": "04c14d704a6feb38ab4f335edf4faf90b557f6dbd05e76e20427e44311642043"
+    },
+    {
+      "path": ".github/patches/upstream/pgo-test-helper-install.patch",
+      "sha256": "ce14cfa519fda94073aa24d4f5d5f6fd655d8d0456b7c54c1f0a171ec05cab64"
+    },
+    {
+      "path": ".github/patches/upstream/python-mozbuild-mozbuild-repackaging-desktop_file.py.patch",
+      "sha256": "ecbdac0be968694ec0bcd6f4bb71a71f9bf930ffea092c22a445e53d98309671"
+    },
+    {
+      "path": ".github/patches/upstream/removed-files.in.patch",
+      "sha256": "153ce32214ae6e3d75a0c1a9d8c8cad49c7ba5a27b6c58acef11980aec53e614"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-crashreporter-google-breakpad-.gitignore.patch",
+      "sha256": "f2467ae3460f6a3deda270ed4bf0effa84ca30198083047400f891e88728251a"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-modules-UpdateUtils.sys.mjs.patch",
+      "sha256": "e1a7409e2e616e15bd0b9d48a910db47be6426e7eeda0f1a3662025428e3ba92"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-moz.configure.patch",
+      "sha256": "89a7ffbf99a62568a02d8209765b41d3860e89de32528b181e3aeb2ab3dd1909"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-mozapps-update-UpdateService.sys.mjs.patch",
+      "sha256": "88eb64084fb6cb054e3110665de821260b3395124d7d666e77eff377e75159ab"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-mozapps-update-nsIUpdateService.idl.patch",
+      "sha256": "4a742c0dcc7f42173d85c20f046f000c9a9f1fc9d23ce51ccc3d08355a05a3fd"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-mozapps-update-tests-data-sharedUpdateXML.js.patch",
+      "sha256": "c9ab95598cadc59ab330beb306a620a69ae3fcea1507b6c95330b0a42c0b2256"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-mozapps-update-tests-unit_aus_update-updateManagerXML.js.patch",
+      "sha256": "5cb523194d452460d244bf7d1e118f4f65090203f74d794239dfc972ce209e24"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-tests-gtest-TestXREAppDir.cpp.patch",
+      "sha256": "7f820ccd1eeff90b397b9408785ac645c9b10e6097e2c40c1f444c222230eea9"
+    },
+    {
+      "path": ".github/patches/upstream/toolkit-xre-nsAppRunner.cpp.patch",
+      "sha256": "7030dda5e6793f02a6a11f23fc201ee02495437a82eef9e875fb3be204c31725"
+    },
+    {
+      "path": ".github/patches/upstream/tools-signing-macos-mach_commands.py.patch",
+      "sha256": "0710aa23682cf1cfb4f555527eef31ae759c9d82ff315003330d020747991a92"
+    }
+  ],
+  "debugPatches": [
+    {
+      "path": ".github/patches/debug/dom-security-nsCSPService.patch",
+      "sha256": "e481bd686e82279dfc125a67276dc9fa1095f73666e225193e540d09cd2a5992"
+    },
+    {
+      "path": ".github/patches/debug/dom-security-nsContentSecurityManager.patch",
+      "sha256": "53d6ce8c09a61dc45eb5cebbbd50eb49043a6b7e854a0d1ab8fe7869bd0fbadf"
+    },
+    {
+      "path": ".github/patches/debug/dom-security-nsContentSecurityUtils.patch",
+      "sha256": "9dc5a92af923a5df56c5aea58a091298e27e0a7eca4037d05b380d2e55476a3b"
+    }
+  ]
+}
