@@ -1,700 +1,157 @@
 ---
 # SPDX-License-Identifier: MPL-2.0
 
-name: Verify Final Runtime Artifact
+name: QA314 one-shot macOS Debug diagnosis
 
 'on':
-  workflow_call:
-    inputs:
-      source-workflow-run-id:
-        description: Optional source run ID; blank verifies this workflow run
-        type: string
-        required: false
-        default: ''
-      artifact-id:
-        description: Immutable final primary artifact ID
-        type: string
-        required: true
-      artifact-name:
-        description: Expected final primary artifact name
-        type: string
-        required: true
-      expected-build-id:
-        description: Expected 14-digit application and platform build ID
-        type: string
-        required: true
-      platform:
-        description: Target platform (Windows, Linux, or Darwin)
-        type: string
-        required: true
-      arch:
-        description: Native slice architecture
-        type: string
-        required: true
-      runner:
-        description: Native GitHub-hosted runner label
-        type: string
-        required: true
-      debug:
-        description: Whether the artifact is a Debug build
-        type: boolean
-        required: false
-        default: false
   workflow_dispatch:
-    inputs:
-      source-workflow-run-id:
-        description: Source Actions workflow run ID containing the artifact
-        type: string
-        required: true
-      artifact-id:
-        description: Immutable final primary artifact ID
-        type: string
-        required: true
-      artifact-name:
-        description: Expected final primary artifact name
-        type: string
-        required: true
-      expected-build-id:
-        description: Expected 14-digit BuildID derived from source run created_at
-        type: string
-        required: true
-      platform:
-        description: Target platform
-        type: choice
-        required: true
-        options:
-          - Windows
-          - Linux
-          - Darwin
-      arch:
-        description: Native slice architecture
-        type: choice
-        required: true
-        options:
-          - x86_64
-          - aarch64
-      runner:
-        description: Native runner matching platform and architecture
-        type: choice
-        required: true
-        options:
-          - windows-2025
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
-          - macos-15-intel
-          - macos-14
-      debug:
-        description: Whether the artifact is a Debug build
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   actions: read
   contents: read
 
+concurrency:
+  group: qa314-macos-debug-diagnostic
+  cancel-in-progress: false
+
 jobs:
-  verify:
-    name: Verify ${{ inputs.platform }}/${{ inputs.arch }} final runtime
-    runs-on: ${{ inputs.runner }}
-    timeout-minutes: 30
+  diagnose:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/codex/qa314-macos-debug-diagnostic' &&
+      github.run_attempt == 1
+    runs-on: macos-14
+    timeout-minutes: 20
     steps:
-      - name: Validate immutable verifier contract
-        uses: actions/github-script@v7
-        env:
-          SOURCE_RUN_ID: ${{ inputs.source-workflow-run-id || github.run_id }}
-          ARTIFACT_ID: ${{ inputs.artifact-id }}
-          ARTIFACT_NAME: ${{ inputs.artifact-name }}
-          EXPECTED_BUILD_ID: ${{ inputs.expected-build-id }}
-          TARGET_PLATFORM: ${{ inputs.platform }}
-          TARGET_ARCH: ${{ inputs.arch }}
-          TARGET_RUNNER: ${{ inputs.runner }}
+      - name: Checkout isolated diagnostic scripts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          script: |
-            const contracts = new Map([
-              ["Windows/x86_64", {
-                runner: "windows-2025",
-                artifact: "floorp-windows-x86_64-moz-artifact",
-              }],
-              ["Linux/x86_64", {
-                runner: "ubuntu-24.04",
-                artifact: "floorp-linux-x86_64-moz-artifact",
-              }],
-              ["Linux/aarch64", {
-                runner: "ubuntu-24.04-arm",
-                artifact: "floorp-linux-aarch64-moz-artifact",
-              }],
-              ["Darwin/x86_64", {
-                runner: "macos-15-intel",
-                artifact: "floorp-mac-universal-moz-artifact",
-              }],
-              ["Darwin/aarch64", {
-                runner: "macos-14",
-                artifact: "floorp-mac-universal-moz-artifact",
-              }],
-            ]);
-
-            const positiveId = /^[1-9][0-9]*$/;
-            for (const [name, value] of [
-              ["source workflow run ID", process.env.SOURCE_RUN_ID],
-              ["artifact ID", process.env.ARTIFACT_ID],
-            ]) {
-              if (!positiveId.test(value)) {
-                core.setFailed(`${name} must be a positive decimal integer`);
-                return;
-              }
-              if (!Number.isSafeInteger(Number(value))) {
-                core.setFailed(`${name} exceeds JavaScript's safe integer range`);
-                return;
-              }
-            }
-            if (!/^[0-9]{14}$/.test(process.env.EXPECTED_BUILD_ID)) {
-              core.setFailed("expected build ID must be exactly 14 ASCII digits");
-              return;
-            }
-
-            const key = `${process.env.TARGET_PLATFORM}/${process.env.TARGET_ARCH}`;
-            const contract = contracts.get(key);
-            if (!contract) {
-              core.setFailed(`unsupported native verifier target: ${key}`);
-              return;
-            }
-            if (process.env.TARGET_RUNNER !== contract.runner) {
-              core.setFailed(
-                `${key} requires ${contract.runner}, got ${process.env.TARGET_RUNNER}`
-              );
-              return;
-            }
-            if (process.env.ARTIFACT_NAME !== contract.artifact) {
-              core.setFailed(
-                `${key} requires artifact ${contract.artifact}, got ` +
-                  process.env.ARTIFACT_NAME
-              );
-            }
-
-      - name: Validate manually selected source provenance
-        if: inputs.source-workflow-run-id != ''
-        uses: actions/github-script@v7
-        env:
-          SOURCE_RUN_ID: ${{ inputs.source-workflow-run-id }}
-          ARTIFACT_ID: ${{ inputs.artifact-id }}
-          ARTIFACT_NAME: ${{ inputs.artifact-name }}
-          EXPECTED_BUILD_ID: ${{ inputs.expected-build-id }}
-        with:
-          script: |
-            const sourceRunId = Number(process.env.SOURCE_RUN_ID);
-            const artifactId = Number(process.env.ARTIFACT_ID);
-            const {data: run} = await github.rest.actions.getWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: sourceRunId,
-            });
-            if (run.id !== sourceRunId) {
-              core.setFailed("REST workflow run ID mismatch");
-              return;
-            }
-            if (run.repository?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
-              core.setFailed("REST workflow repository mismatch");
-              return;
-            }
-            if (!/^[0-9a-f]{40}$/.test(run.head_sha || "")) {
-              core.setFailed("REST workflow head SHA is malformed");
-              return;
-            }
-            if (!Number.isInteger(run.run_attempt) || run.run_attempt < 1) {
-              core.setFailed("REST workflow run attempt is malformed");
-              return;
-            }
-            if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(run.created_at || "")) {
-              core.setFailed("REST workflow created_at is malformed");
-              return;
-            }
-            const derivedBuildId = run.created_at.replace(/[-:TZ]/g, "");
-            if (derivedBuildId !== process.env.EXPECTED_BUILD_ID) {
-              core.setFailed(
-                `expected BuildID ${process.env.EXPECTED_BUILD_ID} does not match ` +
-                  `source run created_at BuildID ${derivedBuildId}`
-              );
-              return;
-            }
-
-            const artifacts = await github.paginate(
-              github.rest.actions.listWorkflowRunArtifacts,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: sourceRunId,
-                per_page: 100,
-              }
-            );
-            const matches = artifacts.filter(artifact => artifact.id === artifactId);
-            if (matches.length !== 1) {
-              core.setFailed("artifact ID is not unique in the selected source run");
-              return;
-            }
-            if (matches[0].name !== process.env.ARTIFACT_NAME) {
-              core.setFailed(
-                `REST artifact name ${matches[0].name} does not match ` +
-                  process.env.ARTIFACT_NAME
-              );
-              return;
-            }
-            if (matches[0].expired) {
-              core.setFailed("selected source artifact is expired");
-            }
-
-      - name: Checkout native verification scripts
-        uses: actions/checkout@v4
-        with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-          sparse-checkout: |
-            .github/workflows/scripts/verify_full_version.py
-            .github/workflows/scripts/verify_linux_profile_paths.py
-            .github/workflows/scripts/verify_debug_runtime.py
-            .github/runtime-upstream.json
           sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/workflows/scripts/qa314_mac_diagnostic.py
+            .github/workflows/scripts/qa314_lldb_capture.py
+            .github/runtime-upstream.json
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Checkout maintained macOS PWA integration tests
-        if: inputs.platform == 'Darwin'
-        uses: actions/checkout@v4
+      - name: Checkout unchanged native test
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: Floorp-Projects/Floorp
           ref: e1da5a98af5fa72065994514dc9618f2a38ba338
           path: floorp-native-tests
           persist-credentials: false
           sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            tools/app-shim/test-runtime.py
-            tools/app-shim/test-context-menu.py
+          sparse-checkout: tools/app-shim/test-runtime.py
 
-      - name: Download exact final primary artifact by ID
-        uses: actions/download-artifact@v4
+      - name: Match existing test Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
-          artifact-ids: ${{ inputs.artifact-id }}
-          path: ${{ runner.temp }}/runtime-artifact
-          merge-multiple: true
-          run-id: ${{ inputs.source-workflow-run-id || github.run_id }}
-          github-token: ${{ github.token }}
+          python-version: '3.11'
 
-      - name: Verify Windows final runtime natively
-        if: inputs.platform == 'Windows'
-        shell: pwsh
+      - name: Validate provenance and download original ZIP once
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
-          ARTIFACT_DIR: ${{ runner.temp }}/runtime-artifact
-          ARTIFACT_NAME: ${{ inputs.artifact-name }}
-          EXPECTED_BUILD_ID: ${{ inputs.expected-build-id }}
-          DEBUG_BUILD: ${{ inputs.debug }}
-          OUTPUT_FILE: ${{ runner.temp }}/native-full-version.txt
-          PARSER_PATH: ${{ github.workspace }}/.github/workflows/scripts/verify_full_version.py
-          DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
-          DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if ($env:RUNNER_ARCH -ne 'X64') {
-            throw "Expected a native X64 runner, got $env:RUNNER_ARCH"
-          }
-
-          $expectedPackage = Join-Path $env:ARTIFACT_DIR "$env:ARTIFACT_NAME.zip"
-          $archives = @(Get-ChildItem -LiteralPath $env:ARTIFACT_DIR -File -Filter '*.zip')
-          if ($archives.Count -ne 1 -or
-              $archives[0].FullName -ne $expectedPackage) {
-            throw "Expected exactly the root package $expectedPackage"
-          }
-
-          $extractDirectory = Join-Path $env:RUNNER_TEMP 'native-runtime-package'
-          New-Item -ItemType Directory -Path $extractDirectory -Force | Out-Null
-          Expand-Archive -LiteralPath $expectedPackage -DestinationPath $extractDirectory -Force
-          $binaries = @(
-            Get-ChildItem -LiteralPath $extractDirectory -Recurse -File -Filter 'floorp.exe'
-          )
-          if ($binaries.Count -ne 1) {
-            throw "Expected exactly one packaged floorp.exe; found $($binaries.Count)"
-          }
-
-          $applicationIniFiles = @(
-            Get-ChildItem -LiteralPath $extractDirectory -Recurse -File -Filter 'application.ini'
-          )
-          $platformIniFiles = @(
-            Get-ChildItem -LiteralPath $extractDirectory -Recurse -File -Filter 'platform.ini'
-          )
-          if ($applicationIniFiles.Count -ne 1 -or $platformIniFiles.Count -ne 1) {
-            throw "Expected exactly one packaged application.ini and platform.ini; found application.ini=$($applicationIniFiles.Count), platform.ini=$($platformIniFiles.Count)"
-          }
-
-          function Get-PackagedBuildId([System.IO.FileInfo] $iniFile) {
-            $buildIdMatches = @(
-              Select-String -LiteralPath $iniFile.FullName -Pattern '^BuildID=(\d{14})\r?$' |
-                ForEach-Object { $_.Matches[0].Groups[1].Value }
-            )
-            if ($buildIdMatches.Count -ne 1) {
-              throw "Expected exactly one 14-digit BuildID in $($iniFile.FullName); found $($buildIdMatches.Count)"
+          QA314_EVIDENCE: ${{ runner.temp }}/qa314-mac-evidence
+          QA314_WORK: ${{ runner.temp }}/qa314-mac-work
+        with:
+          retries: 0
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const crypto = require('crypto');
+            const repo = {owner: context.repo.owner, repo: context.repo.repo};
+            if (`${repo.owner}/${repo.repo}` !== 'Floorp-Projects/Floorp-Runtime') {
+              throw new Error('Wrong repository');
             }
-            return $buildIdMatches[0]
-          }
-
-          $applicationBuildId = Get-PackagedBuildId $applicationIniFiles[0]
-          $platformBuildId = Get-PackagedBuildId $platformIniFiles[0]
-          if ($applicationBuildId -ne $env:EXPECTED_BUILD_ID -or
-              $platformBuildId -ne $env:EXPECTED_BUILD_ID) {
-            throw "Packaged BuildID mismatch: expected $env:EXPECTED_BUILD_ID, application=$applicationBuildId, platform=$platformBuildId"
-          }
-          Write-Host "Verified packaged BuildIDs: application=$applicationBuildId platform=$platformBuildId"
-
-          if ($env:DEBUG_BUILD -eq 'true') {
-            & python $env:DEBUG_VERIFIER `
-              --binary $binaries[0].FullName `
-              --output-dir $env:DEBUG_EVIDENCE_DIR `
-              --expected-build-id $env:EXPECTED_BUILD_ID
-            if ($LASTEXITCODE -ne 0) {
-              throw 'Native Windows Debug startup and rendering failed'
+            const history = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              ...repo, workflow_id: 'verify-runtime-artifact.yml',
+              branch: 'codex/qa314-macos-debug-diagnostic',
+              event: 'workflow_dispatch', per_page: 100,
+            });
+            if (history.some(run => run.id !== context.runId)) {
+              throw new Error('A diagnostic run already exists; refusing another execution');
             }
-            exit 0
-          }
-
-          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-          $startInfo.FileName = $binaries[0].FullName
-          $startInfo.Arguments = '--full-version'
-          $startInfo.WorkingDirectory = $binaries[0].DirectoryName
-          $startInfo.UseShellExecute = $false
-          $startInfo.RedirectStandardOutput = $true
-          $startInfo.RedirectStandardError = $true
-          $startInfo.CreateNoWindow = $true
-          [void]$startInfo.Environment.Remove('XUL_APP_FILE')
-
-          $process = [System.Diagnostics.Process]::new()
-          $process.StartInfo = $startInfo
-          try {
-            if (-not $process.Start()) {
-              throw 'Failed to start packaged floorp.exe'
+            const {data: run} = await github.rest.actions.getWorkflowRun({
+              ...repo, run_id: 37999082434,
+            });
+            if (run.head_sha !== 'c74fe1a545d275cdd710ab44701c1ee0dd6b0eae' ||
+                run.head_branch !== 'nora-0.2.0' || run.run_attempt !== 1 ||
+                run.created_at !== '2026-10-09T22:24:56Z' ||
+                run.status !== 'completed' || run.conclusion !== 'failure') {
+              throw new Error('Source run differs from the authorized failed attempt');
             }
-            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-            $stderrTask = $process.StandardError.ReadToEndAsync()
-            if (-not $process.WaitForExit(30000)) {
-              $process.Kill($true)
-              $process.WaitForExit()
-              throw 'Packaged floorp.exe --full-version timed out'
+            const {data: artifact} = await github.rest.actions.getArtifact({
+              ...repo, artifact_id: 11654576822,
+            });
+            const digest = '644b13fdebb7f357b98efff5208bb0fe1d03d95686d9e887f08f483ffb1ee42e';
+            if (artifact.id !== 11654576822 || artifact.expired ||
+                artifact.name !== 'floorp-mac-universal-moz-artifact' ||
+                artifact.size_in_bytes !== 237865129 ||
+                artifact.digest !== `sha256:${digest}` ||
+                artifact.workflow_run?.id !== run.id ||
+                artifact.workflow_run?.head_sha !== run.head_sha) {
+              throw new Error('Original artifact metadata mismatch');
             }
-            $stdout = $stdoutTask.GetAwaiter().GetResult()
-            $stderr = $stderrTask.GetAwaiter().GetResult()
-            if ($process.ExitCode -ne 0) {
-              throw "Packaged floorp.exe exited with code $($process.ExitCode): $stderr"
+            fs.mkdirSync(process.env.QA314_EVIDENCE, {recursive: true, mode: 0o700});
+            fs.mkdirSync(process.env.QA314_WORK, {recursive: true, mode: 0o700});
+            const provenance = {
+              sourceRun: Object.fromEntries(['id', 'head_sha', 'head_branch',
+                'run_attempt', 'created_at', 'status', 'conclusion'].map(k => [k, run[k]])),
+              artifact: Object.fromEntries(['id', 'name', 'size_in_bytes',
+                'digest', 'expired', 'workflow_run'].map(k => [k, artifact[k]])),
+              diagnostic: {runId: context.runId, attempt: 1, head: context.sha,
+                ref: context.ref, runner: 'macos-14', arch: 'arm64',
+                buildVariant: 'debug/non-PGO', verifierDebugInputInOriginalRun: false},
+            };
+            fs.writeFileSync(path.join(process.env.QA314_EVIDENCE, 'provenance.json'),
+              JSON.stringify(provenance, null, 2) + '\n');
+            const archive = await github.rest.actions.downloadArtifact({
+              ...repo, artifact_id: artifact.id, archive_format: 'zip',
+            });
+            const bytes = Buffer.from(archive.data);
+            const actual = crypto.createHash('sha256').update(bytes).digest('hex');
+            if (bytes.length !== artifact.size_in_bytes || actual !== digest) {
+              throw new Error('Downloaded original ZIP differs from the fixed digest or size');
             }
-          } finally {
-            $process.Dispose()
-          }
+            fs.writeFileSync(path.join(process.env.QA314_WORK, 'original-artifact.zip'),
+              bytes, {flag: 'wx', mode: 0o400});
+            fs.writeFileSync(path.join(process.env.QA314_EVIDENCE, 'download.json'),
+              JSON.stringify({bytes: bytes.length, sha256: actual, downloads: 1}, null, 2) + '\n');
 
-          Write-Host $stdout
-          if ($stderr) { Write-Host "stderr: $stderr" }
-          [System.IO.File]::WriteAllText(
-            $env:OUTPUT_FILE,
-            $stdout,
-            [System.Text.UTF8Encoding]::new($false)
-          )
-          & python $env:PARSER_PATH `
-            --expected-build-id $env:EXPECTED_BUILD_ID `
-            --output-file $env:OUTPUT_FILE
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Native --full-version identity parser rejected Windows output'
-          }
-
-      - name: Verify Linux final runtime natively
-        if: inputs.platform == 'Linux'
+      - name: Prepare disposable copy without launching a browser
         shell: bash
         env:
-          ARTIFACT_DIR: ${{ runner.temp }}/runtime-artifact
-          ARTIFACT_NAME: ${{ inputs.artifact-name }}
-          EXPECTED_BUILD_ID: ${{ inputs.expected-build-id }}
-          OUTPUT_FILE: ${{ runner.temp }}/native-full-version.txt
-          PARSER_PATH: ${{ github.workspace }}/.github/workflows/scripts/verify_full_version.py
-          PROFILE_PATH_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_linux_profile_paths.py
-          PROFILE_PATH_WORK_DIR: ${{ runner.temp }}/floorp-profile-path-verification
-          PROFILE_PATH_RESULTS: ${{ runner.temp }}/floorp-profile-path-results.json
-          TARGET_ARCH: ${{ inputs.arch }}
-          DEBUG_BUILD: ${{ inputs.debug }}
-          DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
-          DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
-        run: |
-          set -euo pipefail
-          case "$TARGET_ARCH" in
-            x86_64) expected_runner_arch=x86_64 ;;
-            aarch64) expected_runner_arch=aarch64 ;;
-            *) echo "Unsupported Linux architecture: $TARGET_ARCH" >&2; exit 1 ;;
-          esac
-          if [[ "$(uname -m)" != "$expected_runner_arch" ]]; then
-            echo "Expected native $expected_runner_arch runner, got $(uname -m)" >&2
-            exit 1
-          fi
+          QA314_EVIDENCE: ${{ runner.temp }}/qa314-mac-evidence
+          QA314_WORK: ${{ runner.temp }}/qa314-mac-work
+        run: >-
+          python3 .github/workflows/scripts/qa314_mac_diagnostic.py prepare
 
-          shopt -s nullglob
-          archives=("$ARTIFACT_DIR"/*.tar.xz)
-          expected_archive="$ARTIFACT_DIR/$ARTIFACT_NAME.tar.xz"
-          if (( ${#archives[@]} != 1 )) || [[ "${archives[0]}" != "$expected_archive" ]]; then
-            echo "Expected exactly the root package $expected_archive" >&2
-            exit 1
-          fi
-
-          package_dir="$RUNNER_TEMP/native-runtime-package"
-          mkdir -p "$package_dir"
-          tar -xf "$expected_archive" -C "$package_dir"
-          mapfile -t binaries < <(find "$package_dir" -type f -name floorp -perm /111 -print)
-          if (( ${#binaries[@]} != 1 )); then
-            echo "Expected exactly one packaged floorp binary; found ${#binaries[@]}" >&2
-            exit 1
-          fi
-
-          unset XUL_APP_FILE
-          if full_version="$(timeout 30s "${binaries[0]}" --full-version 2>&1)"; then
-            :
-          else
-            status=$?
-            printf '%s\n' "$full_version" >&2
-            exit "$status"
-          fi
-          printf '%s\n' "$full_version"
-          printf '%s\n' "$full_version" > "$OUTPUT_FILE"
-          python "$PARSER_PATH" \
-            --expected-build-id "$EXPECTED_BUILD_ID" \
-            --output-file "$OUTPUT_FILE"
-          python "$PROFILE_PATH_VERIFIER" \
-            --binary "${binaries[0]}" \
-            --work-dir "$PROFILE_PATH_WORK_DIR" \
-            --results-json "$PROFILE_PATH_RESULTS"
-          if [[ "$DEBUG_BUILD" == 'true' ]]; then
-            python "$DEBUG_VERIFIER" \
-              --binary "${binaries[0]}" \
-              --output-dir "$DEBUG_EVIDENCE_DIR" \
-              --expected-build-id "$EXPECTED_BUILD_ID"
-          fi
-
-      - name: Upload Linux profile path verification evidence
-        if: always() && inputs.platform == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-profile-path-verification-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/floorp-profile-path-results.json
-            ${{ runner.temp }}/floorp-profile-path-verification/evidence
-          if-no-files-found: warn
-          include-hidden-files: true
-          retention-days: 14
-
-      - name: Verify macOS universal final runtime natively
-        if: inputs.platform == 'Darwin'
+      - name: Run fixed native-input test exactly once under bounded diagnosis
         shell: bash
+        timeout-minutes: 8
         env:
-          ARTIFACT_DIR: ${{ runner.temp }}/runtime-artifact
-          EXPECTED_BUILD_ID: ${{ inputs.expected-build-id }}
-          OUTPUT_FILE: ${{ runner.temp }}/native-full-version.txt
-          PARSER_PATH: ${{ github.workspace }}/.github/workflows/scripts/verify_full_version.py
-          TARGET_ARCH: ${{ inputs.arch }}
-          DEBUG_BUILD: ${{ inputs.debug }}
-          DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
-          DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
-          PWA_EVIDENCE_DIR: ${{ runner.temp }}/native-pwa-evidence
-        run: |
-          set -euo pipefail
-          case "$TARGET_ARCH" in
-            x86_64) expected_runner_arch=x86_64; expected_slice=x86_64 ;;
-            aarch64) expected_runner_arch=arm64; expected_slice=arm64 ;;
-            *) echo "Unsupported macOS architecture: $TARGET_ARCH" >&2; exit 1 ;;
-          esac
-          if [[ "$(uname -m)" != "$expected_runner_arch" ]]; then
-            echo "Expected native $expected_runner_arch runner, got $(uname -m)" >&2
-            exit 1
-          fi
+          QA314_EVIDENCE: ${{ runner.temp }}/qa314-mac-evidence
+          QA314_WORK: ${{ runner.temp }}/qa314-mac-work
+        run: >-
+          python3 .github/workflows/scripts/qa314_mac_diagnostic.py run
 
-          shopt -s nullglob
-          dmgs=("$ARTIFACT_DIR"/*.dmg)
-          expected_dmg="$ARTIFACT_DIR/floorp-macOS-universal-moz-artifact.dmg"
-          if (( ${#dmgs[@]} != 1 )) || [[ "${dmgs[0]}" != "$expected_dmg" ]]; then
-            echo "Expected exactly the root package $expected_dmg" >&2
-            exit 1
-          fi
+      - name: Collect test-owned logs and crash reports
+        if: always()
+        shell: bash
+        timeout-minutes: 2
+        env:
+          QA314_EVIDENCE: ${{ runner.temp }}/qa314-mac-evidence
+          QA314_WORK: ${{ runner.temp }}/qa314-mac-work
+        run: >-
+          python3 .github/workflows/scripts/qa314_mac_diagnostic.py collect
 
-          mount_plist="$RUNNER_TEMP/floorp-mount.plist"
-          hdiutil attach -readonly -nobrowse -plist "$expected_dmg" > "$mount_plist"
-          mount_point="$(python - "$mount_plist" <<'PY'
-          import plistlib
-          import sys
-
-          with open(sys.argv[1], "rb") as source:
-              payload = plistlib.load(source)
-          points = [
-              entity["mount-point"]
-              for entity in payload.get("system-entities", [])
-              if isinstance(entity, dict) and entity.get("mount-point")
-          ]
-          if len(points) != 1:
-              raise SystemExit(f"expected one mounted DMG volume, found {len(points)}")
-          print(points[0])
-          PY
-          )"
-          cleanup() {
-            if [[ -n "${mount_point:-}" ]]; then
-              hdiutil detach "$mount_point" >/dev/null 2>&1 || true
-            fi
-          }
-          trap cleanup EXIT
-
-          app_binary="$(python - "$mount_point" <<'PY'
-          import pathlib
-          import sys
-
-          matches = [
-              path
-              for path in pathlib.Path(sys.argv[1]).glob("*.app/Contents/MacOS/floorp")
-              if path.is_file()
-          ]
-          if len(matches) != 1:
-              raise SystemExit(f"expected one packaged Floorp app, found {len(matches)}")
-          print(matches[0])
-          PY
-          )"
-          slices="$(lipo -archs "$app_binary")"
-          case " $slices " in
-            *" $expected_slice "*) ;;
-            *) echo "Universal binary lacks $expected_slice slice: $slices" >&2; exit 1 ;;
-          esac
-
-          unset XUL_APP_FILE
-          APP_BINARY="$app_binary" python3 - <<'PY'
-          import os
-          import pathlib
-          import subprocess
-          import sys
-
-          environment = os.environ.copy()
-          environment.pop("XUL_APP_FILE", None)
-          try:
-              result = subprocess.run(
-                  [os.environ["APP_BINARY"], "--full-version"],
-                  env=environment,
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.STDOUT,
-                  timeout=30,
-                  check=False,
-              )
-          except subprocess.TimeoutExpired as error:
-              if error.stdout:
-                  sys.stderr.buffer.write(error.stdout)
-              raise SystemExit(
-                  "packaged Floorp --full-version timed out after 30 seconds"
-              ) from error
-
-          if result.returncode != 0:
-              sys.stderr.buffer.write(result.stdout)
-              raise SystemExit(
-                  f"packaged Floorp exited with code {result.returncode}"
-              )
-          sys.stdout.buffer.write(result.stdout)
-          pathlib.Path(os.environ["OUTPUT_FILE"]).write_bytes(result.stdout)
-          PY
-          python "$PARSER_PATH" \
-            --expected-build-id "$EXPECTED_BUILD_ID" \
-            --output-file "$OUTPUT_FILE"
-          python "$DEBUG_VERIFIER" \
-            --binary "$app_binary" \
-            --output-dir "$DEBUG_EVIDENCE_DIR" \
-            --expected-build-id "$EXPECTED_BUILD_ID"
-
-          app_bundle="$(dirname "$(dirname "$(dirname "$app_binary")")")"
-          test -s "$app_bundle/Contents/Resources/omni.ja"
-          ditto "$app_bundle" "$RUNNER_TEMP/Floorp-native-test.app"
-          mkdir -p "$PWA_EVIDENCE_DIR"
-          APP_BUNDLE="$app_bundle" python3 - <<'PY'
-          import ctypes
-          import hashlib
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          source = Path(os.environ['APP_BUNDLE'])
-          app = Path(os.environ['RUNNER_TEMP']) / 'Floorp-native-test.app'
-          evidence = Path(os.environ['PWA_EVIDENCE_DIR'])
-          identities = {}
-          for path in source.rglob('*'):
-              if not path.is_file() or path.is_symlink():
-                  continue
-              relative = path.relative_to(source)
-              with path.open('rb') as stream:
-                  original = hashlib.file_digest(stream, 'sha256').hexdigest()
-              with (app / relative).open('rb') as stream:
-                  copied = hashlib.file_digest(stream, 'sha256').hexdigest()
-              if original != copied:
-                  raise ValueError(f'Disposable copy changed {relative}')
-              identities[str(relative)] = original
-          removed = []
-          for path in [app, *app.rglob('*')]:
-              if path.is_symlink():
-                  continue
-              attributes = subprocess.check_output(['/usr/bin/xattr', str(path)], text=True)
-              for name in attributes.splitlines():
-                  if name in {'com.apple.FinderInfo', 'com.apple.ResourceFork'}:
-                      subprocess.run(['/usr/bin/xattr', '-d', name, str(path)], check=True)
-                      removed.append({'path': str(path.relative_to(app)), 'attribute': name})
-          (evidence / 'development-copy.json').write_text(json.dumps({
-              'filesBeforeDevelopmentSigning': identities,
-              'removedMetadata': removed,
-              'sourceArtifactUnmodified': True,
-          }, indent=2) + '\n')
-          graphics = ctypes.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
-          graphics.CGPreflightPostEventAccess.restype = ctypes.c_bool
-          graphics.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
-          permissions = {
-              'eventPosting': bool(graphics.CGPreflightPostEventAccess()),
-              'screenCapture': bool(graphics.CGPreflightScreenCaptureAccess()),
-              'permissionPromptOpened': False,
-          }
-          (evidence / 'gui-permissions.json').write_text(json.dumps(permissions, indent=2) + '\n')
-          if not permissions['eventPosting'] or not permissions['screenCapture']:
-              raise RuntimeError('Required existing native GUI test permissions are unavailable')
-          PY
-          codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Floorp-native-test.app"
-          codesign --verify --deep --strict "$RUNNER_TEMP/Floorp-native-test.app"
-          codesign --display --verbose=4 "$RUNNER_TEMP/Floorp-native-test.app" \
-            > "$PWA_EVIDENCE_DIR/development-signature.txt" 2>&1
-          python3 floorp-native-tests/tools/app-shim/test-context-menu.py \
-            --browser "$RUNNER_TEMP/Floorp-native-test.app" \
-            --output "$PWA_EVIDENCE_DIR/context-menu" --iterations 20
-          python3 floorp-native-tests/tools/app-shim/test-runtime.py \
-            --browser "$RUNNER_TEMP/Floorp-native-test.app" \
-            --output "$PWA_EVIDENCE_DIR/native-gui" --launch-services --capture-window
-
-      - name: Upload compact native macOS PWA regression evidence
-        if: always() && inputs.platform == 'Darwin'
-        uses: actions/upload-artifact@v4
+      - name: Preserve diagnostic evidence from this attempt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: native-pwa-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/native-pwa-evidence/*.json
-            ${{ runner.temp }}/native-pwa-evidence/*.txt
-            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/result.json
-            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.log
-            ${{ runner.temp }}/native-pwa-evidence/native-gui/run-*/report.json
-            ${{ runner.temp }}/native-pwa-evidence/native-gui/run-*/fixture-window.png
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Upload native macOS Release or PGO rendering evidence
-        if: always() && inputs.platform == 'Darwin' && !inputs.debug
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-render-${{ inputs.platform }}-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/native-debug-evidence
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Upload native Debug verification evidence
-        if: always() && inputs.debug
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-debug-${{ inputs.platform }}-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/native-debug-evidence
-          if-no-files-found: warn
+          name: qa314-mac-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qa314-mac-evidence
+          include-hidden-files: false
+          if-no-files-found: error
           retention-days: 14
