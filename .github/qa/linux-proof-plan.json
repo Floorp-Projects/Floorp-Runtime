@@ -58,11 +58,11 @@
     },
     {
       "path": ".github/qa/canaries/browser_qa3_assertion.js",
-      "sha256": "869990c5be7fc3292b4c2a54c47b08114dc6ca7398bf8deec4b1df61d61330d8"
+      "sha256": "ca6be4aba65e4501c3566b396e9f2165b5db609c9f08e3f06f6396991a94f35a"
     },
     {
       "path": ".github/qa/canaries/test_qa3_assertion.js",
-      "sha256": "336ec5930031c36886fb2d1ab982d30165db951701ce1ea2b3cb47b04bdf20c9"
+      "sha256": "67951468a7b25d0cdbfc8f722cff0f3ec81eca7280d4496571039943f19cd495"
     }
   ],
   "selection": [

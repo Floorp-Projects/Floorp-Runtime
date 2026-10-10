@@ -8,7 +8,13 @@ from pathlib import Path
 from unittest import mock
 
 from qa3_source_cohort import capture_tree, file_digest
-from qa3_source_prepare import OLD_URL, git, prepare_source, verify_checkout
+from qa3_source_prepare import (
+    OLD_URL,
+    git,
+    prepare_source,
+    verify_checkout,
+    verify_plan,
+)
 
 
 def save(root, name, content):
@@ -178,6 +184,71 @@ class SourcePreparationTests(unittest.TestCase):
         callback(data)
         path.write_text(json.dumps(data))
         self.runtime = commit(self.source)
+
+    def shipped_canary_plan(self):
+        """Bind the fixture plan's two canaries to the shipped files and pins."""
+        checkout = Path(__file__).resolve().parents[3]
+        shipped = json.loads(
+            (checkout / ".github/qa/linux-proof-plan.json").read_text()
+        )
+        plan_path = self.source / ".github/qa/linux-proof-plan.json"
+        plan = json.loads(plan_path.read_text())
+        fixture_materials = {item["path"]: item for item in plan["sourceMaterials"]}
+        for relative in (
+            ".github/qa/canaries/browser_qa3_assertion.js",
+            ".github/qa/canaries/test_qa3_assertion.js",
+        ):
+            pinned = [
+                item for item in shipped["sourceMaterials"] if item["path"] == relative
+            ]
+            self.assertEqual(len(pinned), 1)
+            (self.source / relative).write_bytes((checkout / relative).read_bytes())
+            fixture_materials[relative]["sha256"] = pinned[0]["sha256"]
+        plan_path.write_text(json.dumps(plan))
+        return plan_path
+
+    def test_shipped_canaries_match_frozen_plan(self):
+        verify_plan(self.source, self.shipped_canary_plan())
+
+    def test_stale_shipped_canary_digest_is_rejected(self):
+        plan_path = self.shipped_canary_plan()
+        original = plan_path.read_text()
+        verify_plan(self.source, plan_path)
+        for relative, stale in (
+            (
+                ".github/qa/canaries/browser_qa3_assertion.js",
+                "869990c5be7fc3292b4c2a54c47b08114dc6ca7398bf8deec4b1df61d61330d8",
+            ),
+            (
+                ".github/qa/canaries/test_qa3_assertion.js",
+                "336ec5930031c36886fb2d1ab982d30165db951701ce1ea2b3cb47b04bdf20c9",
+            ),
+        ):
+            plan = json.loads(original)
+            for item in plan["sourceMaterials"]:
+                if item["path"] == relative:
+                    item["sha256"] = stale
+            plan_path.write_text(json.dumps(plan))
+            with self.subTest(path=relative), self.assertRaisesRegex(
+                ValueError, "pinned harness or selected test source differs"
+            ):
+                verify_plan(self.source, plan_path)
+
+    def test_changed_shipped_canary_bytes_are_rejected(self):
+        plan_path = self.shipped_canary_plan()
+        verify_plan(self.source, plan_path)
+        for relative in (
+            ".github/qa/canaries/browser_qa3_assertion.js",
+            ".github/qa/canaries/test_qa3_assertion.js",
+        ):
+            path = self.source / relative
+            original = path.read_bytes()
+            path.write_bytes(original + b"\n")
+            with self.subTest(path=relative), self.assertRaisesRegex(
+                ValueError, "pinned harness or selected test source differs"
+            ):
+                verify_plan(self.source, plan_path)
+            path.write_bytes(original)
 
     def test_actual_git_p_c_b_d_f_and_generated_config(self):
         record, final, _ = self.prepare()
