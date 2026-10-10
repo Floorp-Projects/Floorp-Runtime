@@ -48,7 +48,7 @@ This repository does not create credentials, users, sudo rules, cgroups or priva
 runner infrastructure. Launch remains No-Go until that boundary is provisioned
 and separately reviewed, and a native run is explicitly authorized.
 
-The existing `/opt/qa3/bin/launch-native-proof` must be root owned, nonwritable by
+The existing `/var/lib/qa3-tools/bin/launch-native-proof` must be root owned, nonwritable by
 controller and native users, and match the caller's SHA256. Its restricted
 interface is `builder|consumer RUN ATTEMPT -- FIXED_COMMAND`. Before loading any
 worker Python module, it must validate that command and provide:

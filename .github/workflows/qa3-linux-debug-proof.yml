@@ -89,13 +89,13 @@ jobs:
           LAUNCHER: ${{ inputs.launcher_sha256 }}
           CONTEXT: ${{ steps.context.outputs.context-sha256 }}
         run: |
-          printf '%s  %s\n' "$LAUNCHER" /opt/qa3/bin/launch-native-proof | sha256sum --check --status
-          sudo -n /opt/qa3/bin/launch-native-proof builder "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" -- \
-            /opt/qa3/python/bin/python3 -B "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py" builder \
+          printf '%s  %s\n' "$LAUNCHER" /var/lib/qa3-tools/bin/launch-native-proof | sha256sum --check --status
+          sudo -n /var/lib/qa3-tools/bin/launch-native-proof builder "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" -- \
+            /var/lib/qa3-tools/python/bin/python3 -B "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py" builder \
             --recipe "$GITHUB_WORKSPACE/runtime-recipe" --runtime "$QA3_R" --controller "$QA3_W" \
             --context "$QA3_RECEIPTS/context.json" --context-sha256 "$CONTEXT" --plan-sha256 "$PLAN" \
-            --toolchain-lock /opt/qa3/builder-toolchain-lock.json --toolchain-sha256 "$TOOLCHAIN" \
-            --python-environment /opt/qa3/python-environment --python-environment-sha256 "$PYTHON_ENV"
+            --toolchain-lock /var/lib/qa3-tools/builder-toolchain-lock.json --toolchain-sha256 "$TOOLCHAIN" \
+            --python-environment /var/lib/qa3-tools/python-environment --python-environment-sha256 "$PYTHON_ENV"
       - name: Preserve primary package separately
         id: primary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -170,14 +170,14 @@ jobs:
           LAUNCHER: ${{ inputs.launcher_sha256 }}
           CONTEXT: ${{ steps.context.outputs.context-sha256 }}
         run: |
-          printf '%s  %s\n' "$LAUNCHER" /opt/qa3/bin/launch-native-proof | sha256sum --check --status
-          sudo -n /opt/qa3/bin/launch-native-proof consumer "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" -- \
-            /opt/qa3/python/bin/python3 -B "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py" consumer \
+          printf '%s  %s\n' "$LAUNCHER" /var/lib/qa3-tools/bin/launch-native-proof | sha256sum --check --status
+          sudo -n /var/lib/qa3-tools/bin/launch-native-proof consumer "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" -- \
+            /var/lib/qa3-tools/python/bin/python3 -B "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py" consumer \
             --recipe "$GITHUB_WORKSPACE/runtime-recipe" --runtime "$QA3_R" --controller "$QA3_W" \
             --context "$QA3_RECEIPTS/context.json" --context-sha256 "$CONTEXT" --plan-sha256 "$PLAN" \
-            --toolchain-lock /opt/qa3/consumer-toolchain-lock.json --toolchain-sha256 "$TOOLCHAIN" \
+            --toolchain-lock /var/lib/qa3-tools/consumer-toolchain-lock.json --toolchain-sha256 "$TOOLCHAIN" \
             --builder-toolchain-sha256 "$BUILDER_TOOLCHAIN" \
-            --python-environment /opt/qa3/python-environment --python-environment-sha256 "$PYTHON_ENV" \
+            --python-environment /var/lib/qa3-tools/python-environment --python-environment-sha256 "$PYTHON_ENV" \
             --primary-id "$PRIMARY_ID" --primary-sha256 "$PRIMARY_SHA" \
             --support-id "$SUPPORT_ID" --support-sha256 "$SUPPORT_SHA"
       - name: Preserve complete cold consumer evidence

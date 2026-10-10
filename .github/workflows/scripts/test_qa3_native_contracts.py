@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import shlex
 import shutil
 import subprocess
 import sys
@@ -513,7 +514,59 @@ class PrivateWorkflowContracts(unittest.TestCase):
         self.assertEqual(self.text.count("fetch-depth: 0"), 1)
         self.assertEqual(self.text.count("sparse-checkout: .github"), 1)
         self.assertEqual(self.text.count("GITHUB_TOKEN: ${{ github.token }}"), 2)
-        self.assertEqual(self.text.count("sudo -n /opt/qa3/bin/launch-native-proof"), 2)
+        self.assertEqual(
+            self.text.count("sudo -n /var/lib/qa3-tools/bin/launch-native-proof"), 2
+        )
+
+    def test_protected_tool_paths_are_exact_for_each_native_role(self):
+        tool_root = "/var/lib/qa3-tools"
+        self.assertNotIn("/opt/qa3", self.text)
+        hash_line = (
+            r"""printf '%s  %s\n' "$LAUNCHER" """
+            f"{tool_root}/bin/launch-native-proof | sha256sum --check --status"
+        )
+        self.assertEqual(self.text.count(hash_line), 2)
+        lines = self.text.splitlines()
+        self.assertEqual(sum(line.strip().startswith("sudo -n ") for line in lines), 2)
+        for role in ("builder", "consumer"):
+            with self.subTest(role=role):
+                prefix = f"sudo -n {tool_root}/bin/launch-native-proof {role} "
+                starts = [
+                    index
+                    for index, line in enumerate(lines)
+                    if line.strip().startswith(prefix)
+                ]
+                self.assertEqual(len(starts), 1)
+                self.assertGreater(starts[0], 0)
+                self.assertEqual(lines[starts[0] - 1].strip(), hash_line)
+                command = []
+                for line in lines[starts[0] :]:
+                    command.append(line.strip().removesuffix("\\"))
+                    if not line.rstrip().endswith("\\"):
+                        break
+                argv = shlex.split(" ".join(command))
+                self.assertEqual(
+                    argv[:11],
+                    [
+                        "sudo",
+                        "-n",
+                        f"{tool_root}/bin/launch-native-proof",
+                        role,
+                        "$GITHUB_RUN_ID",
+                        "$GITHUB_RUN_ATTEMPT",
+                        "--",
+                        f"{tool_root}/python/bin/python3",
+                        "-B",
+                        "$GITHUB_WORKSPACE/runtime-recipe/.github/workflows/scripts/qa3_native_worker.py",
+                        role,
+                    ],
+                )
+                for flag, expected in (
+                    ("--toolchain-lock", f"{tool_root}/{role}-toolchain-lock.json"),
+                    ("--python-environment", f"{tool_root}/python-environment"),
+                ):
+                    self.assertEqual(argv.count(flag), 1)
+                    self.assertEqual(argv[argv.index(flag) + 1], expected)
 
     def test_distinct_same_attempt_primary_support_and_failure_evidence(self):
         for name in (
