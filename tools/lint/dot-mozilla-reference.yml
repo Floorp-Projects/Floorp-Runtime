@@ -42,6 +42,9 @@ avoid-dot-mozilla-without-xdg:
         - netwerk/cookie/CookieCommons.cpp
         - toolkit/components/antitracking/test/browser/browser_thirdPartyChecks_sandboxed_context.js
         # Files which reference .mozilla and have XDG handling in place
+        # Native HOME rejects legacy and default XDG browser roots together;
+        # its scrubbed environment forbids inherited XDG overrides.
+        - .github/workflows/scripts/qa3_native_transport.py
         - testing/talos/talos/heavy.py
         - toolkit/crashreporter/crash_helper_server/src/logging/env.rs
         - toolkit/moz.configure

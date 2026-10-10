@@ -208,6 +208,64 @@ class TransportContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_native_context(path, digest, "c" * 40, "b" * 40)
 
+    def native_context_with_home(self, root, **overrides):
+        home = root / "home"
+        home.mkdir(exist_ok=True)
+        path = root / "context.json"
+        path.write_text(json.dumps(context()))
+        environment = {"PATH": "/usr/bin:/bin", "HOME": str(home), **overrides}
+        with mock.patch("os.geteuid", return_value=456), mock.patch(
+            "pwd.getpwuid",
+            return_value=mock.Mock(pw_name="qa3-native", pw_dir=str(home)),
+        ), mock.patch("os.access", return_value=False), mock.patch.dict(
+            os.environ, environment, clear=True
+        ):
+            return load_native_context(path, file_digest(path), "c" * 40, "b" * 40)
+
+    def test_native_accepts_empty_scrubbed_home(self):
+        with tempfile.TemporaryDirectory() as name:
+            self.assertEqual(self.native_context_with_home(Path(name)), context())
+
+    def test_native_preserves_credential_and_legacy_profile_rejection(self):
+        names = [".ssh", ".aws", ".netrc", ".git-credentials"]
+        names.extend(f".{product}" for product in ("mozilla", "floorp", "ablaze"))
+        for entry in names:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                candidate = root / "home" / entry
+                candidate.mkdir(parents=True)
+                with self.assertRaisesRegex(ValueError, "credentials or real browser"):
+                    self.native_context_with_home(root)
+
+    def test_native_rejects_default_xdg_browser_config_cache_and_data(self):
+        for base in (".config", ".cache", ".local/share"):
+            for product in ("mozilla", "floorp", "ablaze"):
+                with self.subTest(base=base, product=product):
+                    with tempfile.TemporaryDirectory() as name:
+                        root = Path(name)
+                        candidate = root / "home" / base / product
+                        candidate.mkdir(parents=True)
+                        (candidate / "profile-marker").write_text("real browser state")
+                        with self.assertRaisesRegex(
+                            ValueError, "credentials or real browser"
+                        ):
+                            self.native_context_with_home(root)
+
+    def test_native_keeps_xdg_environment_overrides_forbidden(self):
+        for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+            for value in ("", "relative", "/foreign-browser-home"):
+                with self.subTest(key=key, value=value):
+                    with tempfile.TemporaryDirectory() as name:
+                        with self.assertRaisesRegex(ValueError, "not scrubbed"):
+                            self.native_context_with_home(Path(name), **{key: value})
+
+    def test_native_accepts_unrelated_default_xdg_directories(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            for base in (".config", ".cache", ".local/share"):
+                (root / "home" / base / "unrelated").mkdir(parents=True)
+            self.assertEqual(self.native_context_with_home(root), context())
+
 
 if __name__ == "__main__":
     unittest.main()

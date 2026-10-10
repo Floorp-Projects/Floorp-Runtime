@@ -1,4 +1,6 @@
-# SPDX-License-Identifier: MPL-2.0
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
 import os
@@ -302,11 +304,27 @@ def load_native_context(path, expected_digest, runtime, controller):
         os.access(p, os.W_OK) for p in path.parents if p != Path("/")
     ):
         raise ValueError("native UID can replace the authenticated controller context")
-    for name in (".ssh", ".aws", ".netrc", ".git-credentials", ".mozilla"):
-        if (Path.home() / name).exists():
+    home = Path.home()
+    for name in (
+        ".ssh",
+        ".aws",
+        ".netrc",
+        ".git-credentials",
+        ".mozilla",
+        ".floorp",
+        ".ablaze",
+    ):
+        if (home / name).exists():
             raise ValueError(
                 "native home contains credentials or real browser profiles"
             )
+    # XDG overrides are forbidden above; inspect default config/cache/data roots.
+    for base in (".config", ".cache", ".local/share"):
+        for product in ("mozilla", "floorp", "ablaze"):
+            if (home / base / product).exists():
+                raise ValueError(
+                    "native home contains credentials or real browser profiles"
+                )
     return value
 
 
