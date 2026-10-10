@@ -43,7 +43,7 @@ output outside the checkout. Symlinks must resolve to inventoried inputs inside
 the tree; external, missing and excluded targets are rejected. An empty
 diagnostic delta requires `F == B`. Source additions/changes outside the exact
 patch expectation fail. The diagnostic helper computes expected patch results in
-a temporary workspace; a changed path whitelist is insufficient.
+a temporary workspace; a changed path allowlist is insufficient.
 
 `verify_upstream_ancestor` must establish the actual canonical Git ingestion
 relation and expected checkout before accepting producer evidence; absent
