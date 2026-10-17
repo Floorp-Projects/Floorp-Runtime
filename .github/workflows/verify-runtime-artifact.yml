@@ -264,7 +264,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Floorp-Projects/Floorp
-          ref: 7b13484a3102861bf34af7f4b0d57fdfa787d3cd
+          ref: 28592bd1956d74dc01a67898217e129306035aad
           path: floorp-native-tests
           persist-credentials: false
           sparse-checkout-cone-mode: false
@@ -272,6 +272,7 @@ jobs:
             tools/app-shim/test-runtime.py
             tools/app-shim/test-context-menu.py
             tools/app-shim/shim_diagnostics.py
+            tools/app-shim/shim_lifecycle.py
 
       - name: Download exact final primary artifact by ID
         uses: actions/download-artifact@v4
@@ -680,6 +681,8 @@ jobs:
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/result.json
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/first-failure.json
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/before-cleanup.json
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/shim-lifecycle.json
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/binary-inspection.json
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.log
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.stdout.log
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.stderr.log
