@@ -1,7 +1,7 @@
-name: Intel owned ps lifetime diagnostic
+name: Intel focused owned ps lifetime diagnostic
 'on':
   push:
-    branches: [codex/mac-native-ps-lifetime-recovery8-20261017]
+    branches: [codex/mac-native-ps-lifetime-recovery8b-20261017]
 permissions:
   contents: read
 concurrency:
@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-ps-lifetime-recovery8-20261017
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-ps-lifetime-recovery8b-20261017
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -28,7 +28,7 @@ jobs:
           TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
           test -x "$TASK_PYTHON"
           echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
-          echo "TASK_ROOT=$RUNNER_TEMP/floorp-ps-lifetime-recovery8" >> "$GITHUB_ENV"
+          echo "TASK_ROOT=$RUNNER_TEMP/floorp-ps-lifetime-recovery8b" >> "$GITHUB_ENV"
       - name: Checkout reviewed monitor fixture
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -52,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           cd fixture/tools/qa/native-nonpgo
-          PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning "$TASK_PYTHON" -m unittest test_ps_lifetime test_guards -q
+          PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning "$TASK_PYTHON" -m unittest test_ps_lifetime test_guards.DarwinCounterGuards.test_real_mac_unreaped_child_is_gone_while_signal_zero_succeeds -v
       - name: Observe one owned ps across three task queries
         shell: bash
         run: |
