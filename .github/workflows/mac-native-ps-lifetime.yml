@@ -1,7 +1,7 @@
-name: Intel focused owned ps lifetime diagnostic
+name: Intel native lifecycle repair validation
 'on':
   push:
-    branches: [codex/mac-native-ps-lifetime-recovery8b-20261017]
+    branches: [codex/mac-native-lifecycle-recovery9-20261017]
 permissions:
   contents: read
 concurrency:
@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 360
     env:
-      FLOORP_FIXTURE_SHA: 82414aa914508516c2735b32e7d9536effa69a18
+      FLOORP_FIXTURE_SHA: c127e001c5337e47a842c7453177da286bc02c54
       HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
     steps:
       - name: Bound the initial diagnostic execution
@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-ps-lifetime-recovery8b-20261017
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-lifecycle-recovery9-20261017
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -28,7 +28,7 @@ jobs:
           TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
           test -x "$TASK_PYTHON"
           echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
-          echo "TASK_ROOT=$RUNNER_TEMP/floorp-ps-lifetime-recovery8b" >> "$GITHUB_ENV"
+          echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-lifecycle-recovery9" >> "$GITHUB_ENV"
       - name: Checkout reviewed monitor fixture
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -37,7 +37,9 @@ jobs:
           path: fixture
           persist-credentials: false
           fetch-depth: 1
-          sparse-checkout: tools/qa/native-nonpgo
+          sparse-checkout: |
+            tools/qa/native-nonpgo
+            tools/app-shim
       - name: Checkout fixed native harness
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -52,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           cd fixture/tools/qa/native-nonpgo
-          PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning "$TASK_PYTHON" -m unittest test_ps_lifetime test_guards.DarwinCounterGuards.test_real_mac_unreaped_child_is_gone_while_signal_zero_succeeds -v
+          PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning "$TASK_PYTHON" -m unittest test_owned_cleanup test_native_processes test_ps_lifetime test_guards -v
       - name: Observe one owned ps across three task queries
         shell: bash
         run: |
