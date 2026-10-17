@@ -1,0 +1,72 @@
+name: Intel native monitor census diagnostic
+'on':
+  push:
+    branches: [codex/mac-native-monitor-preflight-recovery6-20261017]
+permissions:
+  contents: read
+concurrency:
+  group: intel-native-monitor-census-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-monitor:
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    env:
+      FLOORP_FIXTURE_SHA: 10d64da5a1d8d7bf3268bef0a5ef0734a9d7a464
+      HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
+    steps:
+      - name: Bound the initial diagnostic execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-monitor-preflight-recovery6-20261017
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test '${{ github.event.created }}' = true
+          test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+          TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+          test -x "$TASK_PYTHON"
+          echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+          echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-monitor-recovery6" >> "$GITHUB_ENV"
+      - name: Checkout reviewed monitor fixture
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Floorp-Projects/Floorp
+          ref: ${{ env.FLOORP_FIXTURE_SHA }}
+          path: fixture
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: tools/qa/native-nonpgo
+      - name: Checkout fixed native harness
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Floorp-Projects/Floorp
+          ref: ${{ env.HARNESS_SHA }}
+          path: harness
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: tools/app-shim
+      - name: Sample native harness census descendants
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/monitor_native_preflight.py \
+            --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT"
+      - name: Confirm bounded diagnostic result
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -x "${TASK_PYTHON:-}" || -z "${TASK_ROOT:-}" ]]; then
+            echo '{"status":"failed","errorCode":"diagnostic-setup-incomplete","newArtifacts":0}'
+            exit 1
+          fi
+          "$TASK_PYTHON" - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['TASK_ROOT'])/'census-summary.json'
+          if not p.is_file():
+              print(json.dumps({'status':'failed','errorCode':'diagnostic-summary-missing','newArtifacts':0}))
+              raise SystemExit(1)
+          v=json.loads(p.read_text())
+          if v.get('status')!='passed': raise SystemExit(1)
+          PY
