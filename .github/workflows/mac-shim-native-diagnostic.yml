@@ -1,0 +1,35 @@
+---
+# SPDX-License-Identifier: MPL-2.0
+
+name: Mac Intel Shim diagnostic (existing artifact only)
+run-name: Mac Intel diagnostic / original run 38963901545 attempt 1
+
+'on':
+  push:
+    branches:
+      - codex/mac-shim-native-diagnostic-20261017
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: mac-shim-native-diagnostic-20261017
+  cancel-in-progress: false
+
+jobs:
+  mac-intel-diagnostic:
+    if: >-
+      github.repository == 'Floorp-Projects/Floorp-Runtime' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/codex/mac-shim-native-diagnostic-20261017'
+    uses: ./.github/workflows/verify-runtime-artifact.yml
+    with:
+      source-workflow-run-id: '38963901545'
+      artifact-id: '12082552649'
+      artifact-name: floorp-mac-universal-moz-artifact
+      expected-build-id: '20261016204014'
+      platform: Darwin
+      arch: x86_64
+      runner: macos-15-intel
+      debug: true

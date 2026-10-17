@@ -134,6 +134,7 @@ jobs:
       platform: Linux
       arch: x86_64
       runner: ubuntu-24.04
+      debug: ${{ github.event.schedule == '0 18 * * *' || github.event.inputs.debug == 'true' }}
 
   verify-linux-aarch64:
     name: Verify Linux aarch64 runtime artifact
@@ -146,6 +147,7 @@ jobs:
       platform: Linux
       arch: aarch64
       runner: ubuntu-24.04-arm
+      debug: ${{ github.event.schedule == '0 18 * * *' || github.event.inputs.debug == 'true' }}
 
   verify-mac-x86_64:
     name: Verify macOS x86_64 runtime artifact
@@ -158,6 +160,7 @@ jobs:
       platform: Darwin
       arch: x86_64
       runner: macos-15-intel
+      debug: ${{ github.event.schedule == '0 18 * * *' || github.event.inputs.debug == 'true' }}
 
   verify-mac-aarch64:
     name: Verify macOS aarch64 runtime artifact
@@ -170,6 +173,7 @@ jobs:
       platform: Darwin
       arch: aarch64
       runner: macos-14
+      debug: ${{ github.event.schedule == '0 18 * * *' || github.event.inputs.debug == 'true' }}
 
   aggregate-runtime-manifest-v2:
     name: Aggregate Runtime Build Manifest v2

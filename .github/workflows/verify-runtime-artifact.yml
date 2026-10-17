@@ -36,7 +36,7 @@ name: Verify Final Runtime Artifact
         type: string
         required: true
       debug:
-        description: Whether the artifact is a Debug build
+        description: Requested Debug verifier mode; compiled build type is not attested
         type: boolean
         required: false
         default: false
@@ -84,7 +84,7 @@ name: Verify Final Runtime Artifact
           - macos-15-intel
           - macos-14
       debug:
-        description: Whether the artifact is a Debug build
+        description: Requested Debug verifier mode; compiled build type is not attested
         type: boolean
         required: false
         default: false
@@ -264,13 +264,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Floorp-Projects/Floorp
-          ref: e1da5a98af5fa72065994514dc9618f2a38ba338
+          ref: 7b13484a3102861bf34af7f4b0d57fdfa787d3cd
           path: floorp-native-tests
           persist-credentials: false
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             tools/app-shim/test-runtime.py
             tools/app-shim/test-context-menu.py
+            tools/app-shim/shim_diagnostics.py
 
       - name: Download exact final primary artifact by ID
         uses: actions/download-artifact@v4
@@ -492,12 +493,13 @@ jobs:
           OUTPUT_FILE: ${{ runner.temp }}/native-full-version.txt
           PARSER_PATH: ${{ github.workspace }}/.github/workflows/scripts/verify_full_version.py
           TARGET_ARCH: ${{ inputs.arch }}
-          DEBUG_BUILD: ${{ inputs.debug }}
+          REQUESTED_DEBUG_BUILD: ${{ inputs.debug }}
           DEBUG_VERIFIER: ${{ github.workspace }}/.github/workflows/scripts/verify_debug_runtime.py
           DEBUG_EVIDENCE_DIR: ${{ runner.temp }}/native-debug-evidence
           PWA_EVIDENCE_DIR: ${{ runner.temp }}/native-pwa-evidence
         run: |
           set -euo pipefail
+          echo "Requested Debug verifier mode: $REQUESTED_DEBUG_BUILD; compiled build type is not verified"
           case "$TARGET_ARCH" in
             x86_64) expected_runner_arch=x86_64; expected_slice=x86_64 ;;
             aarch64) expected_runner_arch=arm64; expected_slice=arm64 ;;
@@ -671,11 +673,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-pwa-${{ inputs.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          include-hidden-files: false
           path: |
             ${{ runner.temp }}/native-pwa-evidence/*.json
             ${{ runner.temp }}/native-pwa-evidence/*.txt
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/result.json
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/first-failure.json
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/before-cleanup.json
             ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.log
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.stdout.log
+            ${{ runner.temp }}/native-pwa-evidence/context-menu/run-*/browser.stderr.log
             ${{ runner.temp }}/native-pwa-evidence/native-gui/run-*/report.json
             ${{ runner.temp }}/native-pwa-evidence/native-gui/run-*/fixture-window.png
           if-no-files-found: warn
