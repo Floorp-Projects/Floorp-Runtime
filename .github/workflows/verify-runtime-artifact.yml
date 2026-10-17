@@ -264,7 +264,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Floorp-Projects/Floorp
-          ref: 28592bd1956d74dc01a67898217e129306035aad
+          ref: 73c6d1e5326999adfceac2c2184e0b964938fcd4
           path: floorp-native-tests
           persist-credentials: false
           sparse-checkout-cone-mode: false
