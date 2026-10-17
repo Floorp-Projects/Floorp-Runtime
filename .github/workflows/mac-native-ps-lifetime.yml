@@ -1,18 +1,18 @@
-name: Intel native monitor census diagnostic
+name: Intel owned ps lifetime diagnostic
 'on':
   push:
-    branches: [codex/mac-native-monitor-preflight-recovery6-20261017]
+    branches: [codex/mac-native-ps-lifetime-recovery8-20261017]
 permissions:
   contents: read
 concurrency:
-  group: intel-native-monitor-census-${{ github.ref }}
+  group: intel-owned-ps-lifetime-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   native-monitor:
     runs-on: macos-15-intel
     timeout-minutes: 360
     env:
-      FLOORP_FIXTURE_SHA: 10d64da5a1d8d7bf3268bef0a5ef0734a9d7a464
+      FLOORP_FIXTURE_SHA: 82414aa914508516c2735b32e7d9536effa69a18
       HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
     steps:
       - name: Bound the initial diagnostic execution
@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-monitor-preflight-recovery6-20261017
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-ps-lifetime-recovery8-20261017
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -28,7 +28,7 @@ jobs:
           TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
           test -x "$TASK_PYTHON"
           echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
-          echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-monitor-recovery6" >> "$GITHUB_ENV"
+          echo "TASK_ROOT=$RUNNER_TEMP/floorp-ps-lifetime-recovery8" >> "$GITHUB_ENV"
       - name: Checkout reviewed monitor fixture
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -47,11 +47,17 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
           sparse-checkout: tools/app-shim
-      - name: Sample native harness census descendants
+      - name: Validate diagnostic guards
         shell: bash
         run: |
           set -euo pipefail
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/monitor_native_preflight.py \
+          cd fixture/tools/qa/native-nonpgo
+          PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning "$TASK_PYTHON" -m unittest test_ps_lifetime test_guards -q
+      - name: Observe one owned ps across three task queries
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/monitor_ps_lifetime.py \
             --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT"
       - name: Confirm bounded diagnostic result
         if: always()
@@ -63,7 +69,7 @@ jobs:
           fi
           "$TASK_PYTHON" - <<'PY'
           import json,os,pathlib
-          p=pathlib.Path(os.environ['TASK_ROOT'])/'census-summary.json'
+          p=pathlib.Path(os.environ['TASK_ROOT'])/'ps-lifetime-summary.json'
           if not p.is_file():
               print(json.dumps({'status':'failed','errorCode':'diagnostic-summary-missing','newArtifacts':0}))
               raise SystemExit(1)
