@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 360
     env:
-      FLOORP_FIXTURE_SHA: bcdd4db24cda172a47ed11938f9ba83116742253
+      FLOORP_FIXTURE_SHA: 2ea8714e51b903ced44ce123220109b93ad65f1f
     steps:
       - name: Bound the initial diagnostic execution
         shell: bash
