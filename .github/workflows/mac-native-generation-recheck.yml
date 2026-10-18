@@ -1,0 +1,48 @@
+name: Intel Mac generation and durable diagnostic gate
+'on':
+  push:
+    branches: [codex/mac-native-recheck-recovery11-20261018]
+permissions:
+  contents: read
+concurrency:
+  group: intel-native-recheck-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-recheck:
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    env:
+      FLOORP_FIXTURE_SHA: 1143be2b8acffa7394088bbbd9743e47c0e52315
+    steps:
+      - name: Bound the initial diagnostic execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-recheck-recovery11-20261018
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test '${{ github.event.created }}' = true
+          test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+          TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+          test -x "$TASK_PYTHON"
+          echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+      - name: Checkout immutable reviewed fixture
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Floorp-Projects/Floorp
+          ref: ${{ env.FLOORP_FIXTURE_SHA }}
+          path: fixture
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            tools/qa/native-nonpgo
+            tools/app-shim
+      - name: Verify kernel generation rechecks churn and durable compiler excerpts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd fixture/tools/qa/native-nonpgo
+          PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning "$TASK_PYTHON" -m unittest \
+            test_owned_cleanup test_native_processes test_ps_lifetime test_guards \
+            test_failure_recovery test_mac_recheck -v
