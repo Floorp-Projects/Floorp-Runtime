@@ -1,7 +1,7 @@
-name: One short Intel argv and SDK verification
+name: One short Intel synchronized inventory stress verification
 'on':
   push:
-    branches: [codex/mac-native-inventory-recovery30-20261018]
+    branches: [codex/mac-native-inventory-recovery31-20261018]
 permissions:
   contents: read
   actions: read
@@ -9,7 +9,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 8bb686e70e6076e0f99efb80a44f4cf25d85ceb4
+  FLOORP_FIXTURE_SHA: 10604dd72b7f5764e4d2f7a5f76bf67f530a1a1f
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-inventory-recovery30-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-inventory-recovery31-20261018
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -59,7 +59,7 @@ jobs:
         timeout-minutes: 16
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/census_experiment.py --task "$TASK_ROOT" --expected-tests 282 --inventory-stress --native-selection-repeats 5 --verify-sdk
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/census_experiment.py --task "$TASK_ROOT" --expected-tests 289 --inventory-stress --native-selection-repeats 5 --verify-sdk
       - name: Verify experiment receipt
         if: always()
         timeout-minutes: 1
