@@ -1,7 +1,7 @@
 name: One bounded resumed Intel validation
 'on':
   push:
-    branches: [codex/mac-native-checkpoint-recovery20-20261018]
+    branches: [codex/mac-native-checkpoint-recovery21-20261018]
 permissions:
   contents: read
   actions: read
@@ -9,7 +9,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 46b268ebc0a633cdca0ef0a83e3af8c0870a1a9e
+  FLOORP_FIXTURE_SHA: a05e45c6d6ac1230451c4511c18e8dc45e10e4bd
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery20-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery21-20261018
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -65,6 +65,7 @@ jobs:
           from support import Runner,clean_environment,require,write_json
           from darwin_activity import probe
           from unittest_receipt import receipt as unittest_receipt
+          from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
           task=pathlib.Path(os.environ['TASK_ROOT'])
           plan=json.loads((helper/'plan.json').read_text())
           runner=Runner(task,float((task/'started').read_text()),plan['limits'])
@@ -78,13 +79,20 @@ jobs:
               own=probe().read(os.getpid(),os.getpgrp())
               require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
               result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
+              abi=prepare_abi(task,runner,env)
+              os.environ['FLOORP_CENSUS_ABI']=str(abi)
+              env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
+              env['FLOORP_CENSUS_ABI']=str(abi)
+              result['census']=snapshot(load_abi(abi))['measurement']
+              with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
+                  output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
               if 'producer'=='producer':
                   try:
                       runner.run('checkpoint-tests',[sys.executable,'-m','unittest','discover','-v'],helper,env,360,phase_deadline_minutes=15)
                   finally:
                       result['tests']=unittest_receipt(task/'checkpoint-tests.private.log')
                   require(result['tests']['complete'] and result['tests']['status']=='passed' and
-                          result['tests']['total']==189 and result['tests']['skipped']==0,'checkpoint-mac-tests')
+                          result['tests']['total']==195 and result['tests']['skipped']==0,'checkpoint-mac-tests')
               script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
               runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
               require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
@@ -199,7 +207,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery20-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery21-20261018
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -234,6 +242,7 @@ jobs:
           from support import Runner,clean_environment,require,write_json
           from darwin_activity import probe
           from unittest_receipt import receipt as unittest_receipt
+          from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
           task=pathlib.Path(os.environ['TASK_ROOT'])
           plan=json.loads((helper/'plan.json').read_text())
           runner=Runner(task,float((task/'started').read_text()),plan['limits'])
@@ -247,13 +256,20 @@ jobs:
               own=probe().read(os.getpid(),os.getpgrp())
               require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
               result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
+              abi=prepare_abi(task,runner,env)
+              os.environ['FLOORP_CENSUS_ABI']=str(abi)
+              env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
+              env['FLOORP_CENSUS_ABI']=str(abi)
+              result['census']=snapshot(load_abi(abi))['measurement']
+              with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
+                  output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
               if 'consumer'=='producer':
                   try:
                       runner.run('checkpoint-tests',[sys.executable,'-m','unittest','discover','-v'],helper,env,360,phase_deadline_minutes=15)
                   finally:
                       result['tests']=unittest_receipt(task/'checkpoint-tests.private.log')
                   require(result['tests']['complete'] and result['tests']['status']=='passed' and
-                          result['tests']['total']==189 and result['tests']['skipped']==0,'checkpoint-mac-tests')
+                          result['tests']['total']==195 and result['tests']['skipped']==0,'checkpoint-mac-tests')
               script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
               runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
               require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
