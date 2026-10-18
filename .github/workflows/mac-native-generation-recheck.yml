@@ -1,7 +1,7 @@
 name: Intel Mac inventory timeout and native monitor gate
 'on':
   push:
-    branches: [codex/mac-native-inventory-recovery13-20261018]
+    branches: [codex/mac-native-cleanup-recovery15-20261018]
 permissions:
   contents: read
 concurrency:
@@ -12,14 +12,14 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 360
     env:
-      FLOORP_FIXTURE_SHA: 928e266c79ea4b4a73ec3ef7c12c279a6d295f8e
+      FLOORP_FIXTURE_SHA: bcdd4db24cda172a47ed11938f9ba83116742253
     steps:
       - name: Bound the initial diagnostic execution
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-inventory-recovery13-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-cleanup-recovery15-20261018
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
