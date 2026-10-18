@@ -1,7 +1,7 @@
 name: One bounded resumed Intel validation
 'on':
   push:
-    branches: [codex/mac-native-checkpoint-recovery17-20261018]
+    branches: [codex/mac-native-checkpoint-recovery18-20261018]
 permissions:
   contents: read
   actions: read
@@ -9,7 +9,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 1ce84724d484f28dd74c7e31091819a3f4ec2013
+  FLOORP_FIXTURE_SHA: 6bc5adaeea4bc53fc4702e4d19053fd87b6ca2da
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery17-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery18-20261018
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -64,6 +64,7 @@ jobs:
           sys.path.insert(0,str(helper))
           from support import Runner,clean_environment,require,write_json
           from darwin_activity import probe
+          from unittest_receipt import receipt as unittest_receipt
           task=pathlib.Path(os.environ['TASK_ROOT'])
           plan=json.loads((helper/'plan.json').read_text())
           runner=Runner(task,float((task/'started').read_text()),plan['limits'])
@@ -78,11 +79,12 @@ jobs:
               require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
               result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
               if 'producer'=='producer':
-                  log=runner.run('checkpoint-tests',[sys.executable,'-m','unittest','discover','-v'],helper,env,360,phase_deadline_minutes=15)
-                  text=log.read_text()
-                  counts=re.findall(r'^Ran ([0-9]+) tests? in ([0-9.]+)s$',text,re.M)
-                  require(len(counts)==1 and int(counts[0][0])==178 and re.search(r'^OK$',text,re.M),'checkpoint-mac-tests')
-                  result['tests']={'total':178,'passed':178,'skipped':0,'seconds':float(counts[0][1])}
+                  try:
+                      runner.run('checkpoint-tests',[sys.executable,'-m','unittest','discover','-v'],helper,env,360,phase_deadline_minutes=15)
+                  finally:
+                      result['tests']=unittest_receipt(task/'checkpoint-tests.private.log')
+                  require(result['tests']['complete'] and result['tests']['status']=='passed' and
+                          result['tests']['total']==186 and result['tests']['skipped']==0,'checkpoint-mac-tests')
               script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
               runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
               require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
@@ -197,7 +199,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery17-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-recovery18-20261018
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -231,6 +233,7 @@ jobs:
           sys.path.insert(0,str(helper))
           from support import Runner,clean_environment,require,write_json
           from darwin_activity import probe
+          from unittest_receipt import receipt as unittest_receipt
           task=pathlib.Path(os.environ['TASK_ROOT'])
           plan=json.loads((helper/'plan.json').read_text())
           runner=Runner(task,float((task/'started').read_text()),plan['limits'])
@@ -245,11 +248,12 @@ jobs:
               require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
               result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
               if 'consumer'=='producer':
-                  log=runner.run('checkpoint-tests',[sys.executable,'-m','unittest','discover','-v'],helper,env,360,phase_deadline_minutes=15)
-                  text=log.read_text()
-                  counts=re.findall(r'^Ran ([0-9]+) tests? in ([0-9.]+)s$',text,re.M)
-                  require(len(counts)==1 and int(counts[0][0])==178 and re.search(r'^OK$',text,re.M),'checkpoint-mac-tests')
-                  result['tests']={'total':178,'passed':178,'skipped':0,'seconds':float(counts[0][1])}
+                  try:
+                      runner.run('checkpoint-tests',[sys.executable,'-m','unittest','discover','-v'],helper,env,360,phase_deadline_minutes=15)
+                  finally:
+                      result['tests']=unittest_receipt(task/'checkpoint-tests.private.log')
+                  require(result['tests']['complete'] and result['tests']['status']=='passed' and
+                          result['tests']['total']==186 and result['tests']['skipped']==0,'checkpoint-mac-tests')
               script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
               runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
               require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
