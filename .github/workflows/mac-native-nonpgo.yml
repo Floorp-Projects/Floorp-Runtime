@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 360
     env:
-      FLOORP_FIXTURE_SHA: bcdd4db24cda172a47ed11938f9ba83116742253
+      FLOORP_FIXTURE_SHA: 2ea8714e51b903ced44ce123220109b93ad65f1f
       HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
       RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
     steps:
