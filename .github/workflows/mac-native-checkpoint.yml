@@ -1,8 +1,8 @@
 # SDKless fixed-upstream serializer contract; no real build or Mozilla qualification.
-name: Dense build completion reason and independent serializer contract
+name: Bounded primitive-column tails on Intel Mac
 'on':
   push:
-    branches: [codex/mac-native-streaming-recovery51-20261019]
+    branches: [codex/mac-native-streaming-recovery52-20261019]
 permissions:
   contents: read
   actions: read
@@ -10,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 6996647e3fe717522a6288d6554209f0a387121e
+  FLOORP_FIXTURE_SHA: a893dc17186835f4eaa5d9a82b3d8b901a84519c
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
           [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery51-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery52-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
