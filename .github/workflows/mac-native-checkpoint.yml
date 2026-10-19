@@ -1,8 +1,8 @@
-# Immutable current-source Mozilla xpcshell smoke using the verified existing checkpoint.
-name: Verified origin current-source Mozilla xpcshell smoke
+# SDKless fixed-upstream serializer contract; no real build or Mozilla qualification.
+name: Fixed upstream build completion serializer contract
 'on':
   push:
-    branches: [codex/mac-native-mozilla-smoke-recovery48-20261019]
+    branches: [codex/mac-native-build-completion-recovery49-20261019]
 permissions:
   contents: read
   actions: read
@@ -10,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 563b9e1fe1a2ae0bece173e8173b4a6a62b6c485
+  FLOORP_FIXTURE_SHA: 73b5c6b71be98104bfaa8ba641602b603838d5d5
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
           [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-mozilla-smoke-recovery48-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-build-completion-recovery49-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -96,7 +96,8 @@ jobs:
                       'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
                       'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
                       'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
-                      'test_sdk_source','test_sdk_source_integration','test_consumer_time'],430,False),
+                      'test_sdk_source','test_sdk_source_integration','test_consumer_time',
+                      'test_build_completion','test_build_completion_contract'],491,False),
                       ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                       '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                   for test_stage,command,expected,recording in suites:
@@ -134,45 +135,179 @@ jobs:
               if evidence_error and primary_error is None:
                   require(False,'checkpoint-preflight-evidence-write')
           PYCODE
-      - name: Acquire the official unexpired content-matched SDK
-        timeout-minutes: 12
+      - name: Fetch only the immutable upstream serializer source
+        timeout-minutes: 3
         env:
-          SDK_READ_TOKEN: ${{ github.token }}
+          PROFILE_SOURCE_READ_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json --output "$TASK_ROOT/sdk-download"
-      - name: Checkout immutable Runtime source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ env.RUNTIME_SHA }}
-          path: source
-          persist-credentials: false
-          fetch-depth: 1
-          submodules: false
-      - name: Checkout immutable native harness
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          repository: Floorp-Projects/Floorp
-          ref: ${{ env.HARNESS_SHA }}
-          path: harness
-          persist-credentials: false
-          fetch-depth: 1
-          sparse-checkout: tools/app-shim
-      - name: Download only the verified successful producer checkpoint
-        timeout-minutes: 25
-        env:
-          CHECKPOINT_READ_TOKEN: ${{ github.token }}
+          "$TASK_PYTHON" - <<'PYCODE'
+          import hashlib,json,os,pathlib,time,urllib.request
+          from urllib.error import HTTPError,URLError
+
+          task=pathlib.Path(os.environ['TASK_ROOT'])
+          result={'schema':1,'status':'failed','runtimeRef':'7dd619742b25567e479eeda97ae071d10542ad0b',
+                  'bytes':None,'sha256':None,'officialContentsAPI':True,'tokenPublished':False}
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):
+                  raise RuntimeError('redirect-rejected')
+          try:
+              started=time.monotonic()
+              url=('https://api.github.com/repos/Floorp-Projects/Floorp-Runtime/contents/'
+                   'testing/mozbase/mozsystemmonitor/mozsystemmonitor/resourcemonitor.py'
+                   '?ref=7dd619742b25567e479eeda97ae071d10542ad0b')
+              request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['PROFILE_SOURCE_READ_TOKEN'],
+                  'Accept':'application/vnd.github.raw+json','X-GitHub-Api-Version':'2022-11-28'})
+              with urllib.request.build_opener(NoRedirect).open(request,timeout=30) as response:
+                  if response.status!=200:raise RuntimeError('status')
+                  raw=response.read(1024**2+1)
+              if time.monotonic()-started>90 or len(raw)!=126050:raise RuntimeError('size-or-deadline')
+              sha=hashlib.sha256(raw).hexdigest()
+              if sha!='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf':raise RuntimeError('hash')
+              destination=task/'profile-serializer-source'
+              destination.mkdir(mode=0o700,exist_ok=False)
+              with (destination/'resourcemonitor.py').open('xb') as output:
+                  os.fchmod(output.fileno(),0o600);output.write(raw)
+              result.update(status='passed',bytes=len(raw),sha256=sha)
+          except BaseException:
+              result['code']='fixed-profile-source-acquisition-failed'
+          finally:
+              try:
+                  receipt=task/'profile-serializer-source.json'
+                  receipt.write_text(json.dumps(result,sort_keys=True)+'\n');receipt.chmod(0o600)
+              except BaseException:
+                  result.update(status='failed',code='fixed-profile-source-evidence-write-failed')
+              finally:
+                  print(json.dumps({'upstreamSerializerSourceAcquisition':result}),flush=True)
+          if result['status']!='passed':raise SystemExit(1)
+          PYCODE
+      - name: Observe the actual serializer contract in an owned monitored stage
+        timeout-minutes: 15
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py fetch --role consumer --task "$TASK_ROOT" --replay-origin
-      - name: Restore verified state and run current-source Mozilla xpcshell smoke after full host XUL build
-        id: pipeline
-        env:
-          CHECKPOINT_BUILD_DATE: '20261019035607'
-        shell: bash
-        run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin --mozilla-only --consumer-shared-deadline --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json
-      - name: Confirm current-source Mozilla xpcshell smoke evidence
+          "$TASK_PYTHON" - <<'PYCODE'
+          def integer(value,expected):
+              return type(value) is int and value==expected
+
+          def contract_ok(value):
+              if type(value) is not dict:return False
+              fixed={'schema','status','qualification','runtimeRef','sourceSHA256','sourceBytes',
+                  'actualSerializerSourceVerified','serializerBackend','syntheticClockAndMarkers',
+                  'resourceSamplesCollected','workerStarted','realBuildPerformed','mozillaQualification',
+                  'fullBuildQualification','resourceQualification','bothFormatsObserved',
+                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure'}
+              if set(value)!=fixed:return False
+              if not (integer(value.get('schema'),1) and integer(value.get('sourceBytes'),126050) and
+                  value.get('status')=='observed-both-formats' and
+                  value.get('qualification')=='synthetic-serializer-contract-actual-source' and
+                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                  value.get('sourceSHA256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
+                  value.get('serializerBackend')=='upstream-PsutilStub' and
+                  all(value.get(k) is True for k in ('actualSerializerSourceVerified','syntheticClockAndMarkers',
+                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated')) and
+                  all(value.get(k) is False for k in ('resourceSamplesCollected','workerStarted','realBuildPerformed',
+                      'mozillaQualification','fullBuildQualification','resourceQualification')) and
+                  value.get('firstFailure') is None and value.get('receiptWriteFailure') is None):return False
+              cases=value.get('cases')
+              if type(cases) is not list or len(cases)!=6:return False
+              expected=[(f,c) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
+              for row,(profile_format,control) in zip(cases,expected):
+                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied'}:return False
+                  if row.get('format')!=profile_format or row.get('control')!=control or row.get('expectationSatisfied') is not True:return False
+                  cleanup=row.get('cleanup')
+                  keys={'streamClosed','parentPipeClosed','childPipeClosed','processClosed','workerNeverStarted','failures'}
+                  if type(cleanup) is not dict or set(cleanup)!=keys or cleanup.get('failures')!=[]:return False
+                  if not all(cleanup.get(k) is True for k in keys-{'failures'}):return False
+                  observed=row.get('observation')
+                  if type(observed) is not dict or set(observed)!={'status','profileFormat','completeCoverage','lastFinishedTier',
+                      'targets','finishedTargetCounts','provesBuildCompletion','provesCacheHit'}:return False
+                  if observed.get('provesBuildCompletion') is not False or observed.get('provesCacheHit') is not False:return False
+                  targets=observed.get('targets');counts=observed.get('finishedTargetCounts');last=observed.get('lastFinishedTier')
+                  if type(targets) is not dict or set(targets)!={'XUL','xpcshell'}:return False
+                  if type(counts) is not dict or set(counts)!={'SharedLib','Program'}:return False
+                  if type(last) is not dict or set(last)!={'tier','endTimeMs'}:return False
+                  for target in targets.values():
+                      if type(target) is not dict or set(target)!={'status','endTimeMs'}:return False
+                  if control=='positive':
+                      if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
+                          observed.get('completeCoverage') is True and last=={'tier':'compile','endTimeMs':40000.0} and
+                          targets=={'XUL':{'status':'observed-finished','endTimeMs':35000.0},
+                                   'xpcshell':{'status':'observed-finished','endTimeMs':30000.0}} and
+                          all(integer(counts[k],2) for k in counts)):return False
+                  else:
+                      if last!={'tier':None,'endTimeMs':None}:return False
+                      if any(t!={'status':'unconfirmed','endTimeMs':None} for t in targets.values()):return False
+                      if control=='no-end':
+                          if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
+                              observed.get('completeCoverage') is True and all(integer(counts[k],0) for k in counts)):return False
+                      elif not (observed.get('status')=='unconfirmed' and observed.get('profileFormat') is None and
+                          observed.get('completeCoverage') is False and all(counts[k] is None for k in counts)):return False
+              return True
+
+          def source_ok(value):
+              return (type(value) is dict and set(value)=={'schema','status','runtimeRef','bytes','sha256','officialContentsAPI','tokenPublished'} and
+                  integer(value.get('schema'),1) and integer(value.get('bytes'),126050) and value.get('status')=='passed' and
+                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                  value.get('sha256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
+                  value.get('officialContentsAPI') is True and value.get('tokenPublished') is False)
+
+          import json,os,pathlib,sys
+          helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+          sys.path.insert(0,str(helper))
+          from support import Runner,clean_environment,require,write_json
+          from process_census import BINDING_KEYS,load_abi
+          from helper_import_preflight import stage_projection,monitor_projection,runner_failure
+          from build_completion_contract import safe_error
+
+          task=pathlib.Path(os.environ['TASK_ROOT']).resolve()
+          plan=json.loads((helper/'plan.json').read_text())
+          runner=Runner(task,float((task/'started').read_text()),plan['limits'])
+          result={'schema':1,'status':'failed','contractVerified':False,'firstFailure':None,'driverFailure':None,
+                  'monitorFailure':None,'monitorFailureObserved':False,'monitorDiagnostics':[],
+                  'stages':[],'outstandingGroups':None,'evidenceWriteFailure':False}
+          phase='source'
+          try:
+              require(source_ok(json.loads((task/'profile-serializer-source.json').read_text())),'contract-source-hash')
+              phase='snapshot'
+              load_abi(pathlib.Path(os.environ['FLOORP_CENSUS_ABI']))
+              env=clean_environment(task)
+              env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT','FLOORP_CENSUS_ABI')})
+              env.update(PYTHONDONTWRITEBYTECODE='1',PYTHONWARNINGS='error::ResourceWarning')
+              env['PATH']+=':/usr/local/bin';env['TMPDIR']=str(task/'monitor-tmp')
+              phase='serializer'
+              runner.run('build-completion-contract',[sys.executable,str(helper/'build_completion_contract.py'),
+                  '--runtime-profile-source',str(task/'profile-serializer-source/resourcemonitor.py'),
+                  '--task',str(task/'build-completion-contract-probe')],task,env,360,phase_deadline_minutes=15)
+              phase='observation'
+              value=json.loads((task/'build-completion-contract-probe/build-completion-contract.json').read_text())
+              result['contractVerified']=contract_ok(value)
+              require(result['contractVerified'],'contract-observation')
+              phase='cleanup'
+              require(runner.failure is None and runner.monitor_failure is None and not runner.groups and len(runner.records)==1 and
+                  all(row['exitCode']==0 and row['groupCleanup']=='verified-gone' and row['leaderReap']=={'status':'reaped','exitCode':0} and
+                  row['cleanupFailure'] is None for row in runner.records),'contract-cleanup')
+              result['status']='passed'
+          except BaseException as error:
+              result['driverFailure']=safe_error(error,phase)
+              runner.fail('build-completion-contract','build-completion-contract-driver-failed')
+          finally:
+              result.update(firstFailure=runner_failure(runner.failure),monitorFailure=monitor_projection(runner.monitor_failure),
+                  monitorFailureObserved=runner.monitor_failure is not None,
+                  monitorDiagnostics=[monitor_projection(row) for row in runner.monitor_diagnostics[-16:]],
+                  outstandingGroups=bool(runner.groups),
+                  stages=[{**stage_projection(row),'stage':'build-completion-contract' if row.get('stage')=='build-completion-contract' else 'other'}
+                          for row in runner.records])
+              try:
+                  write_json(task/'build-completion-contract-driver.json',result)
+              except BaseException:
+                  result.update(status='failed',evidenceWriteFailure=True)
+                  runner.fail('build-completion-contract','contract-receipt-write')
+                  result['firstFailure']=runner_failure(runner.failure)
+              finally:
+                  print(json.dumps({'buildCompletionContractDriver':result}),flush=True)
+          if result['status']!='passed':raise SystemExit(1)
+          PYCODE
+      - name: Verify SDKless serializer proof and independent cleanup
         if: always()
         timeout-minutes: 2
         shell: bash
@@ -182,162 +317,111 @@ jobs:
             exit 1
           fi
           "$TASK_PYTHON" - <<'PYCODE'
-          import json,os,pathlib
-          task=pathlib.Path(os.environ['TASK_ROOT'])
-          summary=task/'summary.json'
-          if not summary.is_file():
-              print(json.dumps({'status':'failed','code':'summary-missing'}),flush=True)
-              raise SystemExit(1)
-          value=json.loads(summary.read_text())
-          def mapping(value):
-              return value if type(value) is dict else {}
-          def integer(value, expected):
-              return type(value) is int and value == expected
-          def case_ok(value, label, mode, code, status):
-              if type(value) is not dict:
-                  return False
-              process=mapping(value.get('process'))
-              harness=mapping(value.get('harness'))
-              counts=mapping(harness.get('counts'))
-              end_statuses=mapping(counts.get('testEndStatuses'))
-              common=(value.get('case')==label and value.get('mode')==mode and
-                      integer(value.get('expectedExitCode'),code) and value.get('expectationSatisfied') is True and
-                      value.get('monitorFailure') is None and value.get('monitorFailureObserved') is False and
-                      all(value.get(key) is None for key in ('caseError','evidenceWriteFailure','evidenceCollectionFailure')) and
-                      harness.get('status')==status and harness.get('expectationSatisfied') is True and
-                      harness.get('completeLog') is True and harness.get('nativeQualification') is False and
-                      harness.get('buildQualification') is False and
-                      all(process.get(key) is True for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')) and
-                      integer(process.get('exitCode'),code) and
-                      all(integer(counts.get(key),1) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds')) and
-                      all(integer(counts.get(key),0) for key in ('skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits')))
-              if not common:
-                  return False
-              if code==0:
-                  natural=(value.get('runnerFailure') is None and value.get('caughtCode') is None and
-                           process.get('reason') is None and process.get('failurePhase') is None and
-                           integer(end_statuses.get('PASS'),1) and integer(end_statuses.get('FAIL'),0))
-                  if label=='compiled-debug':
-                      subtests=mapping(counts.get('subtestStatuses')).get('PASS')
-                      natural=(natural and mapping(harness.get('markers')).get('debug') is True and
-                               type(subtests) is int and subtests>=3)
-                  return natural
-              failure=mapping(value.get('runnerFailure'))
-              return (failure.get('stage')=='mozilla-xpcshell' and failure.get('code')=='nonzero-exit' and
-                      value.get('caughtCode')=='nonzero-exit' and process.get('reason')=='nonzero-exit' and
-                      process.get('failurePhase')=='wait' and integer(end_statuses.get('FAIL'),1) and
-                      integer(end_statuses.get('PASS'),0) and
-                      all(integer(counts.get(key),1) for key in ('unexpectedSubtests','unexpectedTestEnds',
-                                                                'unexpectedFailSubtests','unexpectedFailTestEnds')) and
-                      mapping(harness.get('markers')).get('failure') is True)
-          def sdk_ok(value):
-              if type(value) is not dict:
-                  return False
-              sdk=mapping(value.get('sdk'))
-              acquired=mapping(sdk.get('acquisitionSource'))
-              anchor=mapping(acquired.get('uncompressedTar'))
-              return (value.get('planSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460' and
-                      'sdkEvidenceError' not in value and
-                      integer(sdk.get('artifact'),12149860607) and integer(sdk.get('sourceRun'),39162639256) and
-                      integer(sdk.get('attempt'),1) and
-                      sdk.get('zipSHA256')=='2891f1867cd3e53a4cf6d25da9128b345a626a9b0aed97bdc25e283699c14e2b' and
-                      sdk.get('tarSHA256')=='f306df0484aa958803d50943e39dde51b740dca97ac44625b42c3839867a5328' and
-                      sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
-                      sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
-                      set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
-                      acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and
-                      acquired.get('sourceSHA256')=='844cd4f9b47e7a271fe8bdf0731c3731c49f236e22c1e26b5b2c249a8cbf3d25' and
-                      acquired.get('baselinePlanSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460' and
-                      integer(acquired.get('producerJob'),117779018335) and set(anchor)=={'bytes','sha256'} and
-                      integer(anchor.get('bytes'),760518144) and
-                      anchor.get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
-          def preflight_ok(value):
-              if type(value) is not dict:
-                  return False
-              preflight=mapping(value.get('monitorPreflight'))
-              if not (preflight.get('status')=='passed' and 'firstFailure' in preflight and
-                      preflight['firstFailure'] is None and 'monitorFailure' in preflight and
-                      preflight['monitorFailure'] is None):
-                  return False
-              for name,total in (('checkpoint-tests',430),('failure-recording-tests',14)):
-                  tests=mapping(preflight.get(name))
-                  if not (tests.get('complete') is True and tests.get('status')=='passed' and
-                          integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
-                              ('failures','errors','skipped'))):
-                      return False
+          def integer(value,expected):
+              return type(value) is int and value==expected
+
+          def contract_ok(value):
+              if type(value) is not dict:return False
+              fixed={'schema','status','qualification','runtimeRef','sourceSHA256','sourceBytes',
+                  'actualSerializerSourceVerified','serializerBackend','syntheticClockAndMarkers',
+                  'resourceSamplesCollected','workerStarted','realBuildPerformed','mozillaQualification',
+                  'fullBuildQualification','resourceQualification','bothFormatsObserved',
+                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure'}
+              if set(value)!=fixed:return False
+              if not (integer(value.get('schema'),1) and integer(value.get('sourceBytes'),126050) and
+                  value.get('status')=='observed-both-formats' and
+                  value.get('qualification')=='synthetic-serializer-contract-actual-source' and
+                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                  value.get('sourceSHA256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
+                  value.get('serializerBackend')=='upstream-PsutilStub' and
+                  all(value.get(k) is True for k in ('actualSerializerSourceVerified','syntheticClockAndMarkers',
+                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated')) and
+                  all(value.get(k) is False for k in ('resourceSamplesCollected','workerStarted','realBuildPerformed',
+                      'mozillaQualification','fullBuildQualification','resourceQualification')) and
+                  value.get('firstFailure') is None and value.get('receiptWriteFailure') is None):return False
+              cases=value.get('cases')
+              if type(cases) is not list or len(cases)!=6:return False
+              expected=[(f,c) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
+              for row,(profile_format,control) in zip(cases,expected):
+                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied'}:return False
+                  if row.get('format')!=profile_format or row.get('control')!=control or row.get('expectationSatisfied') is not True:return False
+                  cleanup=row.get('cleanup')
+                  keys={'streamClosed','parentPipeClosed','childPipeClosed','processClosed','workerNeverStarted','failures'}
+                  if type(cleanup) is not dict or set(cleanup)!=keys or cleanup.get('failures')!=[]:return False
+                  if not all(cleanup.get(k) is True for k in keys-{'failures'}):return False
+                  observed=row.get('observation')
+                  if type(observed) is not dict or set(observed)!={'status','profileFormat','completeCoverage','lastFinishedTier',
+                      'targets','finishedTargetCounts','provesBuildCompletion','provesCacheHit'}:return False
+                  if observed.get('provesBuildCompletion') is not False or observed.get('provesCacheHit') is not False:return False
+                  targets=observed.get('targets');counts=observed.get('finishedTargetCounts');last=observed.get('lastFinishedTier')
+                  if type(targets) is not dict or set(targets)!={'XUL','xpcshell'}:return False
+                  if type(counts) is not dict or set(counts)!={'SharedLib','Program'}:return False
+                  if type(last) is not dict or set(last)!={'tier','endTimeMs'}:return False
+                  for target in targets.values():
+                      if type(target) is not dict or set(target)!={'status','endTimeMs'}:return False
+                  if control=='positive':
+                      if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
+                          observed.get('completeCoverage') is True and last=={'tier':'compile','endTimeMs':40000.0} and
+                          targets=={'XUL':{'status':'observed-finished','endTimeMs':35000.0},
+                                   'xpcshell':{'status':'observed-finished','endTimeMs':30000.0}} and
+                          all(integer(counts[k],2) for k in counts)):return False
+                  else:
+                      if last!={'tier':None,'endTimeMs':None}:return False
+                      if any(t!={'status':'unconfirmed','endTimeMs':None} for t in targets.values()):return False
+                      if control=='no-end':
+                          if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
+                              observed.get('completeCoverage') is True and all(integer(counts[k],0) for k in counts)):return False
+                      elif not (observed.get('status')=='unconfirmed' and observed.get('profileFormat') is None and
+                          observed.get('completeCoverage') is False and all(counts[k] is None for k in counts)):return False
               return True
-          def time_budget_ok(value):
-              if type(value) is not dict:
-                  return False
-              budget=mapping(value.get('executionTimeBudget'))
-              expected_keys={'schema','profile','baselinePlanSHA256','platformMinutes',
-                  'sharedWorkDeadlineMinutes','cleanupReserveMinutes','clock','deadlineReference',
-                  'deadlines','legacyDeadlines','onlyExecutionTimingChanged',
-                  'resourceAndCompilationInputsChanged','clockResetAllowed','stageBudgetsAreAdditive'}
-              deadlines=mapping(budget.get('deadlines'))
-              legacy=mapping(budget.get('legacyDeadlines'))
-              keys=('consumerRestoreDeadlineMinutes','consumerBuildDeadlineMinutes',
-                    'consumerPackageDeadlineMinutes','consumerNativeDeadlineMinutes','finalDeadlineMinutes')
-              strings={'profile':'consumer-shared-final-deadline-v1',
-                  'baselinePlanSHA256':'33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460',
-                  'clock':'fresh-job-monotonic-origin','deadlineReference':'absolute-from-existing-job-origin'}
-              return (set(budget)==expected_keys and set(deadlines)==set(legacy)==set(keys) and
-                      all(type(budget.get(key)) is str and budget[key]==expected for key,expected in strings.items()) and
-                      integer(budget.get('schema'),1) and integer(budget.get('platformMinutes'),360) and
-                      integer(budget.get('sharedWorkDeadlineMinutes'),345) and integer(budget.get('cleanupReserveMinutes'),15) and
-                      all(integer(deadlines.get(key),expected) for key,expected in zip(keys,(60,345,345,345,345))) and
-                      all(integer(legacy.get(key),expected) for key,expected in zip(keys,(60,300,315,335,345))) and
-                      budget.get('onlyExecutionTimingChanged') is True and
-                      all(budget.get(key) is False for key in ('resourceAndCompilationInputsChanged',
-                          'clockResetAllowed','stageBudgetsAreAdditive')))
-          def final_ok(value):
-              if type(value) is not dict:
-                  return False
-              mozilla=mapping(value.get('mozilla'))
-              inputs=mapping(mozilla.get('inputs'))
-              cases=mozilla.get('cases')
-              expected=[('compiled-debug','positive',0,'passed'),
-                        ('failure-control','negative-control',1,'failed'),
-                        ('upstream-version-comparator','positive',0,'passed')]
-              return (time_budget_ok(value) and sdk_ok(value) and preflight_ok(value) and
-                      value.get('status')=='mozilla-ready' and value.get('mozillaOnly') is True and
-                      'firstFailure' in value and value['firstFailure'] is None and
-                      'monitorFailure' in value and value['monitorFailure'] is None and
-                      value.get('resumedEffectiveConfigVerified') is True and
-                      mapping(value.get('checkpointRestore')).get('qualification')=='verified-origin-cross-run-checkpoint-replay-v1' and
-                      mapping(value.get('checkpointReplayContext')).get('status')=='passed' and
-                      value.get('qualification')=='verified-origin-current-mozilla-xpcshell-smoke' and
-                      value.get('fullHostXUL')=='passed' and value.get('stagePackage')=='NOT_TESTED' and
-                      value.get('nativeAuthentication')=='NOT_TESTED' and value.get('native') is None and
-                      all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and
-                      integer(value.get('newArtifacts'),0) and
-                      mozilla.get('status')=='passed' and mozilla.get('contract')=='current-source-mozilla-xpcshell-smoke-v1' and
-                      mozilla.get('monitorFailure') is None and mozilla.get('productQualification') is False and
-                      mozilla.get('nativeAuthentication')=='NOT_TESTED' and
-                      all(mozilla.get(key) is True for key in ('actualCompiledDebug','actualCurrentSourceUpstreamTest',
-                          'intentionalFailureDetected','allCasesExactReaped','allCasesGroupsGone','defaultUpstreamHeadLoaded',
-                          'verbose','sequential')) and mozilla.get('automaticRetry') is False and integer(mozilla.get('threads'),1) and
-                      inputs.get('sourceCommit')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
-                      integer(inputs.get('sourceFilesVerified'),18) and integer(inputs.get('fixtureFilesVerified'),4) and
-                      type(cases) is list and len(cases)==3 and
-                      all(case_ok(case,*spec) for case,spec in zip(cases,expected)))
-          passed=final_ok(value)
-          sdk_verified=sdk_ok(value)
-          time_verified=time_budget_ok(value)
-          print(json.dumps({'role':'consumer','status':'passed' if passed else 'failed',
-                            'qualification':'verified-origin-current-mozilla-xpcshell-smoke','originRun':39197008470,
-                            'existingArtifact':12164479528,'newArtifactUploads':0,
-                            'executionTimeBudgetVerified':time_verified,
-                            'executionTimeProfile':'consumer-shared-final-deadline-v1' if time_verified else None,
-                            'sharedWorkDeadlineMinutes':345 if time_verified else None,
-                            'nominalCleanupReserveMinutes':15 if time_verified else None,
-                            'sdkSourceVerified':sdk_verified,
-                            'sdkArtifact':12149860607 if sdk_verified else None,
-                            'sdkSourceRun':39162639256 if sdk_verified else None,
-                            'sdkProducerJob':117779018335 if sdk_verified else None,
-                            'sdkSourceSHA256':'844cd4f9b47e7a271fe8bdf0731c3731c49f236e22c1e26b5b2c249a8cbf3d25' if sdk_verified else None,
-                            'sdkQualification':'official-artifact-identical-uncompressed-tar-v1' if sdk_verified else None,
-                            'nativeAuthentication':'NOT_TESTED','stagePackage':'NOT_TESTED',
-                            'productQualification':False,'freshObjdir':False,'sameJob':False}),flush=True)
-          raise SystemExit(0 if passed else 1)
+
+          def source_ok(value):
+              return (type(value) is dict and set(value)=={'schema','status','runtimeRef','bytes','sha256','officialContentsAPI','tokenPublished'} and
+                  integer(value.get('schema'),1) and integer(value.get('bytes'),126050) and value.get('status')=='passed' and
+                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                  value.get('sha256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
+                  value.get('officialContentsAPI') is True and value.get('tokenPublished') is False)
+
+          import json,os,pathlib
+
+          task=pathlib.Path(os.environ['TASK_ROOT'])
+          def read(name):
+              try:return json.loads((task/name).read_text())
+              except BaseException:return None
+
+          def preflight_ok(value):
+              if type(value) is not dict or value.get('status')!='passed' or value.get('firstFailure') is not None or value.get('monitorFailure') is not None:return False
+              for label,total in (('checkpoint-tests',491),('failure-recording-tests',14)):
+                  tests=value.get(label)
+                  if not (type(tests) is dict and tests.get('complete') is True and tests.get('status')=='passed' and
+                      integer(tests.get('total'),total) and integer(tests.get('skipped'),0)):return False
+              stages=value.get('stages')
+              return (type(stages) is list and len(stages)>=3 and all(type(row) is dict and integer(row.get('exitCode'),0) and
+                  row.get('groupCleanup')=='verified-gone' and row.get('leaderReap')=={'status':'reaped','exitCode':0} and
+                  row.get('cleanupFailure') is None for row in stages))
+
+          def driver_ok(value):
+              if type(value) is not dict:return False
+              if not (integer(value.get('schema'),1) and value.get('status')=='passed' and value.get('contractVerified') is True and
+                  value.get('firstFailure') is None and value.get('driverFailure') is None and value.get('monitorFailure') is None and
+                  value.get('monitorFailureObserved') is False and value.get('outstandingGroups') is False and
+                  value.get('evidenceWriteFailure') is False):return False
+              stages=value.get('stages')
+              if type(stages) is not list or len(stages)!=1:return False
+              row=stages[0];leader=row.get('leaderReap') if type(row) is dict else None
+              return (type(row) is dict and row.get('stage')=='build-completion-contract' and integer(row.get('exitCode'),0) and
+                  row.get('groupCleanup')=='verified-gone' and row.get('cleanupFailurePresent') is False and
+                  type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
+
+          preflight=preflight_ok(read('monitor-preflight.json'))
+          source=source_ok(read('profile-serializer-source.json'))
+          contract=contract_ok(read('build-completion-contract-probe/build-completion-contract.json'))
+          driver=driver_ok(read('build-completion-contract-driver.json'))
+          passed=preflight and source and contract and driver
+          print(json.dumps({'status':'passed' if passed else 'failed','monitorPreflightVerified':preflight,
+              'officialPinnedSerializerSourceVerified':source,'bothSerializerFormatsAndNegativesVerified':contract,
+              'ownedStageReapedAndGroupGone':driver,'qualification':'synthetic-serializer-contract-actual-source',
+              'realBuildPerformed':False,'mozillaQualification':False,'resourceQualification':False,
+              'sdkAcquired':False,'checkpointDownloaded':False,'newArtifacts':0}),flush=True)
+          if not passed:raise SystemExit(1)
           PYCODE
