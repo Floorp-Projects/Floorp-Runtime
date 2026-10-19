@@ -1,7 +1,7 @@
-name: One short Intel candidate origin and strict boundary diagnostic
+name: Short Intel writer boundary and task API diagnosis
 'on':
   push:
-    branches: [codex/mac-native-inventory-recovery38-20261018]
+    branches: [codex/mac-native-boundary-recovery39-20261019]
 permissions:
   contents: read
   actions: read
@@ -9,7 +9,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: cf8d724dc817796e1cc36e3c5d0729721fb9c924
+  FLOORP_FIXTURE_SHA: 9b6b8bae8cdfb72690312a87e4f65d75af63498d
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -18,13 +18,13 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 20
     steps:
-      - name: Bound the initial authorized execution
+      - name: Bound the initial diagnostic execution
         timeout-minutes: 1
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-inventory-recovery38-20261018
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-boundary-recovery39-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -41,38 +41,33 @@ jobs:
           path: fixture
           persist-credentials: false
           fetch-depth: 1
-      - name: Establish this job's fresh clock and task root
+      - name: Establish this job's fresh clock and private root
         timeout-minutes: 3
         env:
           CHECKPOINT_READ_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role producer --task "$TASK_ROOT"
-      - name: Acquire the unexpired content-matched SDK through the official API
-        timeout-minutes: 12
-        env:
-          SDK_READ_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --output "$TASK_ROOT/sdk-download"
-      - name: Validate native inventory under short CPU RSS and process churn
+      - name: Observe owned writer controls and native task APIs
         timeout-minutes: 16
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/census_experiment.py --task "$TASK_ROOT" --expected-tests 321 --inventory-stress --native-selection-repeats 5 --verify-sdk --original-parent
-      - name: Verify experiment receipt
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/boundary_diagnostic.py --task "$TASK_ROOT" --expected-tests 77
+      - name: Verify diagnostic receipt
         if: always()
         timeout-minutes: 1
         shell: bash
         run: |
           "$TASK_PYTHON" - <<'PYCODE'
           import json,os,pathlib
-          path=pathlib.Path(os.environ['TASK_ROOT'])/'census-experiment.json'
+          path=pathlib.Path(os.environ['TASK_ROOT'])/'boundary-diagnostic.json'
           if not path.is_file():
-              print('{"status":"failed","code":"census-experiment-receipt-missing"}',flush=True)
+              print('{"status":"failed","code":"boundary-diagnostic-receipt-missing"}',flush=True)
               raise SystemExit(1)
           value=json.loads(path.read_text())
           passed=value['status']=='passed' and value['firstFailure'] is None and value['monitorFailure'] is None
-          print(json.dumps({'censusExperimentStatus':'passed' if passed else 'failed','newArtifacts':0}),flush=True)
+          print(json.dumps({'boundaryDiagnosticStatus':'passed' if passed else 'failed','newArtifacts':0,
+                           'productionGateChanged':False,'checkpointEligibilityEstablished':False,
+                           'longExecution':'ON_HOLD'}),flush=True)
           raise SystemExit(0 if passed else 1)
           PYCODE
