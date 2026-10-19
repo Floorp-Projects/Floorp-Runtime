@@ -1,8 +1,8 @@
 # SDKless fixed-upstream serializer contract; no real build or Mozilla qualification.
-name: Bounded streaming build completion serializer contract
+name: Dense build completion reason and independent serializer contract
 'on':
   push:
-    branches: [codex/mac-native-streaming-recovery50-20261019]
+    branches: [codex/mac-native-streaming-recovery51-20261019]
 permissions:
   contents: read
   actions: read
@@ -10,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: de18c22f3a7e79eb2890f5e63ee6f466f574af98
+  FLOORP_FIXTURE_SHA: 6996647e3fe717522a6288d6554209f0a387121e
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
           [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery50-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery51-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -58,10 +58,44 @@ jobs:
           import json,os,pathlib,re,sys
           helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
           sys.path.insert(0,str(helper))
-          from support import Runner,clean_environment,require,write_json
+          from support import Runner,clean_environment,require,write_json,Failure
           from darwin_activity import probe
-          from unittest_receipt import receipt as unittest_receipt
+          from unittest_receipt import receipt as unittest_receipt,density_public,DENSITY_ID,DENSITY_METHOD
           from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
+          def density_input(value):
+              try:
+                  value=density_public(value)
+                  return (value['inputBytes']==195000385 and
+                      value['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7')
+              except BaseException:return False
+
+          def density_continuation(qa,records,first_failure,monitor_failure,outstanding):
+              if not (type(qa) is dict and qa.get('complete') is True and qa.get('status')=='failed' and
+                  all(type(qa.get(k)) is int and qa[k]==n for k,n in
+                      (('total',522),('failures',1),('errors',0),('skipped',0)))):return False
+              expected={'outcome':'FAIL','test':DENSITY_ID,'phase':DENSITY_METHOD,
+                  'frames':[{'file':'test_build_completion.py','line':450}],'exceptionType':'AssertionError'}
+              if qa.get('cases')!=[expected]:return False
+              diagnostics=qa.get('buildCompletionDensityDiagnostics')
+              if type(diagnostics) is not list or len(diagnostics)!=1:return False
+              diagnostic=diagnostics[0]
+              if not density_input(diagnostic) or diagnostic['status']!='unconfirmed':return False
+              if monitor_failure is not None or outstanding is not False:return False
+              if not (type(first_failure) is dict and set(first_failure)=={'stage','code','elapsedSeconds'} and
+                  first_failure['stage']=='checkpoint-tests' and first_failure['code']=='nonzero-exit' and
+                  type(first_failure['elapsedSeconds']) in (int,float) and
+                  0<=first_failure['elapsedSeconds']<=900):return False
+              if type(records) is not list or len(records)!=3:return False
+              for row,(name,code) in zip(records,(('census-abi-compile',0),('census-abi',0),('checkpoint-tests',1))):
+                  if not (type(row) is dict and row.get('stage')==name and type(row.get('exitCode')) is int and
+                      row['exitCode']==code and row.get('groupCleanup')=='verified-gone' and
+                      'cleanupFailure' in row and row['cleanupFailure'] is None and row.get('cleanupDiagnostics')==[] and
+                      type(row.get('leaderReap')) is dict and row['leaderReap'].get('status')=='reaped' and
+                      type(row['leaderReap'].get('exitCode')) is int and row['leaderReap']['exitCode']==code):return False
+              if not all('reason' in row and row['reason'] is None and
+                  'failurePhase' in row and row['failurePhase'] is None for row in records[:2]):return False
+              return records[-1].get('reason')=='nonzero-exit' and records[-1].get('failurePhase')=='wait'
+
           task=pathlib.Path(os.environ['TASK_ROOT'])
           plan=json.loads((helper/'plan.json').read_text())
           runner=Runner(task,float((task/'started').read_text()),plan['limits'])
@@ -72,7 +106,7 @@ jobs:
           env['PYTHONDONTWRITEBYTECODE']='1'
           env['PYTHONWARNINGS']='error::ResourceWarning'
           env['PATH']+=':/usr/local/bin'
-          result={'status':'failed'}
+          result={'status':'failed','diagnosticContinuation':False}
           primary_error=None
           phase='self-probe'
           try:
@@ -97,25 +131,38 @@ jobs:
                       'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
                       'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
                       'test_sdk_source','test_sdk_source_integration','test_consumer_time',
-                      'test_build_completion','test_build_completion_contract'],514,False),
+                      'test_build_completion','test_build_completion_contract'],522,False),
                       ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                       '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                   for test_stage,command,expected,recording in suites:
                       phase=test_stage
+                      stage_error=None
                       try:
                           runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)
+                      except Failure as error:
+                          stage_error=error
                       finally:
                           result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)
                       tests=result[test_stage]
+                      if stage_error is not None:
+                          if not (test_stage=='checkpoint-tests' and str(stage_error)=='nonzero-exit' and
+                              density_continuation(tests,runner.records,runner.failure,runner.monitor_failure,bool(runner.groups))):
+                              raise stage_error
+                          result['diagnosticContinuation']=True
+                          continue
                       require(tests['complete'] and tests['status']=='passed' and
                               tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')
+                      if test_stage=='checkpoint-tests':
+                          controls=tests.get('buildCompletionDensityDiagnostics')
+                          require(type(controls) is list and len(controls)==1 and density_input(controls[0]) and
+                              controls[0]['status']=='observed','checkpoint-density-observation')
               phase='owned-monitor-control'
               script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
               runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
               require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
                           (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for row in runner.records),
                       'monitor-preflight-no-complete-sample')
-              result['status']='passed'
+              result['status']='failed' if result['diagnosticContinuation'] else 'passed'
           except BaseException as error:
               primary_error=error
               result.update(status='failed',failurePhase=phase)
@@ -402,8 +449,9 @@ jobs:
           def preflight_ok(value):
               if (type(value) is not dict or value.get('status')!='passed' or
                   'firstFailure' not in value or value['firstFailure'] is not None or
-                  'monitorFailure' not in value or value['monitorFailure'] is not None):return False
-              for label,total in (('checkpoint-tests',514),('failure-recording-tests',14)):
+                  'monitorFailure' not in value or value['monitorFailure'] is not None or
+                  value.get('diagnosticContinuation') is not False):return False
+              for label,total in (('checkpoint-tests',522),('failure-recording-tests',14)):
                   tests=value.get(label)
                   if not (type(tests) is dict and tests.get('complete') is True and tests.get('status')=='passed' and
                       integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
@@ -427,17 +475,46 @@ jobs:
                   row.get('groupCleanup')=='verified-gone' and row.get('cleanupFailurePresent') is False and
                   type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
 
-          preflight=preflight_ok(read('monitor-preflight.json'))
+          import sys
+          helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+          sys.path.insert(0,str(helper))
+          from unittest_receipt import density_public
+          preflight_value=read('monitor-preflight.json')
+          density=None
+          try:
+              controls=preflight_value['checkpoint-tests']['buildCompletionDensityDiagnostics']
+              if type(controls) is list and len(controls)==1:
+                  candidate=density_public(controls[0])
+                  if (candidate['inputBytes']==195000385 and
+                      candidate['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7'):
+                      density=candidate
+          except BaseException:pass
+          recording=False
+          try:
+              tests=preflight_value['failure-recording-tests']
+              recording=(tests['complete'] is True and tests['status']=='passed' and integer(tests['total'],14) and
+                  all(integer(tests[k],0) for k in ('failures','errors','skipped')))
+          except BaseException:pass
+          first_preserved=False
+          try:
+              first=preflight_value['firstFailure'];file=task/'first-failure.json'
+              first_preserved=(not file.exists()) if first is None else read('first-failure.json')==first
+          except BaseException:pass
+          preflight=preflight_ok(preflight_value)
           source=source_ok(read('profile-serializer-source.json'))
           contract=contract_ok(read('build-completion-contract-probe/build-completion-contract.json'))
           driver=driver_ok(read('build-completion-contract-driver.json'))
-          passed=preflight and source and contract and driver
+          passed=(preflight and source and contract and driver and density is not None and
+              density['status']=='observed' and first_preserved and recording)
           print(json.dumps({'status':'passed' if passed else 'failed','monitorPreflightVerified':preflight,
               'officialPinnedSerializerSourceVerified':source,'bothSerializerFormatsAndNegativesVerified':contract,
               'ownedStageReapedAndGroupGone':driver,'qualification':'synthetic-serializer-contract-actual-source',
               'realBuildPerformed':False,'mozillaQualification':False,'resourceQualification':False,
               'sdkAcquired':False,'checkpointDownloaded':False,'newArtifacts':0,
               'largeWholeProfilesAndNegativesVerified':contract,
+              'densityObservation':density,'recordingSuiteVerified':recording,
+              'diagnosticContinuation':preflight_value.get('diagnosticContinuation') is True if type(preflight_value) is dict else False,
+              'firstFailurePreserved':first_preserved,
               'serializerCases':read('build-completion-contract-probe/build-completion-contract.json')['cases'] if contract else []}),flush=True)
           if not passed:raise SystemExit(1)
           PYCODE
