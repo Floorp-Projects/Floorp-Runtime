@@ -1,7 +1,8 @@
-name: Verified origin resumed Intel full host and native authentication
+# Immutable current-source Mozilla xpcshell smoke using the verified existing checkpoint.
+name: Verified origin current-source Mozilla xpcshell smoke
 'on':
   push:
-    branches: [codex/mac-native-checkpoint-consumer-recovery47-20261019]
+    branches: [codex/mac-native-mozilla-smoke-recovery48-20261019]
 permissions:
   contents: read
   actions: read
@@ -9,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: d3aeed32c8adabc88267e46cfbbd020f799adecb
+  FLOORP_FIXTURE_SHA: 21f920f6790f78d923947886e0ddd8c6151da59a
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -24,7 +25,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-checkpoint-consumer-recovery47-20261019
+          [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-mozilla-smoke-recovery48-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -92,7 +94,9 @@ jobs:
                       'test_completion_preflight','test_unittest_receipt','test_qa_core',
                       'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',
                       'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
-                      'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public'],305,False),
+                      'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
+                      'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
+                      'test_sdk_source','test_sdk_source_integration'],403,False),
                       ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                       '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                   for test_stage,command,expected,recording in suites:
@@ -130,6 +134,13 @@ jobs:
               if evidence_error and primary_error is None:
                   require(False,'checkpoint-preflight-evidence-write')
           PYCODE
+      - name: Acquire the official unexpired content-matched SDK
+        timeout-minutes: 12
+        env:
+          SDK_READ_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json --output "$TASK_ROOT/sdk-download"
       - name: Checkout immutable Runtime source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -147,13 +158,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
           sparse-checkout: tools/app-shim
-      - name: Acquire the official unexpired content-matched SDK
-        timeout-minutes: 12
-        env:
-          SDK_READ_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --output "$TASK_ROOT/sdk-download"
       - name: Download only the verified successful producer checkpoint
         timeout-minutes: 25
         env:
@@ -161,14 +165,14 @@ jobs:
         shell: bash
         run: |
           "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py fetch --role consumer --task "$TASK_ROOT" --replay-origin
-      - name: Restore verified state then finish full host XUL and native authentication
+      - name: Restore verified state and run current-source Mozilla xpcshell smoke after full host XUL build
         id: pipeline
         env:
           CHECKPOINT_BUILD_DATE: '20261019035607'
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin
-      - name: Confirm this stage's bounded evidence
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin --mozilla-only --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json
+      - name: Confirm current-source Mozilla xpcshell smoke evidence
         if: always()
         timeout-minutes: 2
         shell: bash
@@ -185,14 +189,126 @@ jobs:
               print(json.dumps({'status':'failed','code':'summary-missing'}),flush=True)
               raise SystemExit(1)
           value=json.loads(summary.read_text())
-          passed=value['status']=='passed' and value['firstFailure'] is None and value['monitorFailure'] is None
-          passed=passed and value.get('resumedEffectiveConfigVerified') is True
-          passed=passed and value.get('checkpointRestore',{}).get('qualification')=='verified-origin-cross-run-checkpoint-replay-v1'
-          passed=passed and value.get('checkpointReplayContext',{}).get('status')=='passed'
-          passed=passed and value.get('native',{}).get('status')=='passed'
+          def mapping(value):
+              return value if type(value) is dict else {}
+          def integer(value, expected):
+              return type(value) is int and value == expected
+          def case_ok(value, label, mode, code, status):
+              if type(value) is not dict:
+                  return False
+              process=mapping(value.get('process'))
+              harness=mapping(value.get('harness'))
+              counts=mapping(harness.get('counts'))
+              end_statuses=mapping(counts.get('testEndStatuses'))
+              common=(value.get('case')==label and value.get('mode')==mode and
+                      integer(value.get('expectedExitCode'),code) and value.get('expectationSatisfied') is True and
+                      value.get('monitorFailure') is None and value.get('monitorFailureObserved') is False and
+                      all(value.get(key) is None for key in ('caseError','evidenceWriteFailure','evidenceCollectionFailure')) and
+                      harness.get('status')==status and harness.get('expectationSatisfied') is True and
+                      harness.get('completeLog') is True and harness.get('nativeQualification') is False and
+                      harness.get('buildQualification') is False and
+                      all(process.get(key) is True for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')) and
+                      integer(process.get('exitCode'),code) and
+                      all(integer(counts.get(key),1) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds')) and
+                      all(integer(counts.get(key),0) for key in ('skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits')))
+              if not common:
+                  return False
+              if code==0:
+                  natural=(value.get('runnerFailure') is None and value.get('caughtCode') is None and
+                           process.get('reason') is None and process.get('failurePhase') is None and
+                           integer(end_statuses.get('PASS'),1) and integer(end_statuses.get('FAIL'),0))
+                  if label=='compiled-debug':
+                      subtests=mapping(counts.get('subtestStatuses')).get('PASS')
+                      natural=(natural and mapping(harness.get('markers')).get('debug') is True and
+                               type(subtests) is int and subtests>=3)
+                  return natural
+              failure=mapping(value.get('runnerFailure'))
+              return (failure.get('stage')=='mozilla-xpcshell' and failure.get('code')=='nonzero-exit' and
+                      value.get('caughtCode')=='nonzero-exit' and process.get('reason')=='nonzero-exit' and
+                      process.get('failurePhase')=='wait' and integer(end_statuses.get('FAIL'),1) and
+                      integer(end_statuses.get('PASS'),0) and
+                      all(integer(counts.get(key),1) for key in ('unexpectedSubtests','unexpectedTestEnds',
+                                                                'unexpectedFailSubtests','unexpectedFailTestEnds')) and
+                      mapping(harness.get('markers')).get('failure') is True)
+          def sdk_ok(value):
+              if type(value) is not dict:
+                  return False
+              sdk=mapping(value.get('sdk'))
+              acquired=mapping(sdk.get('acquisitionSource'))
+              anchor=mapping(acquired.get('uncompressedTar'))
+              return (value.get('planSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460' and
+                      'sdkEvidenceError' not in value and
+                      integer(sdk.get('artifact'),12149860607) and integer(sdk.get('sourceRun'),39162639256) and
+                      integer(sdk.get('attempt'),1) and
+                      sdk.get('zipSHA256')=='2891f1867cd3e53a4cf6d25da9128b345a626a9b0aed97bdc25e283699c14e2b' and
+                      sdk.get('tarSHA256')=='f306df0484aa958803d50943e39dde51b740dca97ac44625b42c3839867a5328' and
+                      sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
+                      sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
+                      set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
+                      acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and
+                      acquired.get('sourceSHA256')=='844cd4f9b47e7a271fe8bdf0731c3731c49f236e22c1e26b5b2c249a8cbf3d25' and
+                      acquired.get('baselinePlanSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460' and
+                      integer(acquired.get('producerJob'),117779018335) and set(anchor)=={'bytes','sha256'} and
+                      integer(anchor.get('bytes'),760518144) and
+                      anchor.get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
+          def preflight_ok(value):
+              if type(value) is not dict:
+                  return False
+              preflight=mapping(value.get('monitorPreflight'))
+              if not (preflight.get('status')=='passed' and 'firstFailure' in preflight and
+                      preflight['firstFailure'] is None and 'monitorFailure' in preflight and
+                      preflight['monitorFailure'] is None):
+                  return False
+              for name,total in (('checkpoint-tests',403),('failure-recording-tests',14)):
+                  tests=mapping(preflight.get(name))
+                  if not (tests.get('complete') is True and tests.get('status')=='passed' and
+                          integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
+                              ('failures','errors','skipped'))):
+                      return False
+              return True
+          def final_ok(value):
+              if type(value) is not dict:
+                  return False
+              mozilla=mapping(value.get('mozilla'))
+              inputs=mapping(mozilla.get('inputs'))
+              cases=mozilla.get('cases')
+              expected=[('compiled-debug','positive',0,'passed'),
+                        ('failure-control','negative-control',1,'failed'),
+                        ('upstream-version-comparator','positive',0,'passed')]
+              return (sdk_ok(value) and preflight_ok(value) and
+                      value.get('status')=='mozilla-ready' and value.get('mozillaOnly') is True and
+                      'firstFailure' in value and value['firstFailure'] is None and
+                      'monitorFailure' in value and value['monitorFailure'] is None and
+                      value.get('resumedEffectiveConfigVerified') is True and
+                      mapping(value.get('checkpointRestore')).get('qualification')=='verified-origin-cross-run-checkpoint-replay-v1' and
+                      mapping(value.get('checkpointReplayContext')).get('status')=='passed' and
+                      value.get('qualification')=='verified-origin-current-mozilla-xpcshell-smoke' and
+                      value.get('fullHostXUL')=='passed' and value.get('stagePackage')=='NOT_TESTED' and
+                      value.get('nativeAuthentication')=='NOT_TESTED' and value.get('native') is None and
+                      all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and
+                      integer(value.get('newArtifacts'),0) and
+                      mozilla.get('status')=='passed' and mozilla.get('contract')=='current-source-mozilla-xpcshell-smoke-v1' and
+                      mozilla.get('monitorFailure') is None and mozilla.get('productQualification') is False and
+                      mozilla.get('nativeAuthentication')=='NOT_TESTED' and
+                      all(mozilla.get(key) is True for key in ('actualCompiledDebug','actualCurrentSourceUpstreamTest',
+                          'intentionalFailureDetected','allCasesExactReaped','allCasesGroupsGone','defaultUpstreamHeadLoaded',
+                          'verbose','sequential')) and mozilla.get('automaticRetry') is False and integer(mozilla.get('threads'),1) and
+                      inputs.get('sourceCommit')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                      integer(inputs.get('sourceFilesVerified'),18) and integer(inputs.get('fixtureFilesVerified'),4) and
+                      type(cases) is list and len(cases)==3 and
+                      all(case_ok(case,*spec) for case,spec in zip(cases,expected)))
+          passed=final_ok(value)
+          sdk_verified=sdk_ok(value)
           print(json.dumps({'role':'consumer','status':'passed' if passed else 'failed',
-                            'qualification':'verified-origin-cross-run-checkpoint-replay-v1','originRun':39197008470,
+                            'qualification':'verified-origin-current-mozilla-xpcshell-smoke','originRun':39197008470,
                             'existingArtifact':12164479528,'newArtifactUploads':0,
-                            'freshObjdir':False,'sameJob':False}),flush=True)
+                            'sdkSourceVerified':sdk_verified,
+                            'sdkArtifact':12149860607 if sdk_verified else None,
+                            'sdkSourceRun':39162639256 if sdk_verified else None,
+                            'sdkProducerJob':117779018335 if sdk_verified else None,
+                            'sdkSourceSHA256':'844cd4f9b47e7a271fe8bdf0731c3731c49f236e22c1e26b5b2c249a8cbf3d25' if sdk_verified else None,
+                            'sdkQualification':'official-artifact-identical-uncompressed-tar-v1' if sdk_verified else None,
+                            'nativeAuthentication':'NOT_TESTED','stagePackage':'NOT_TESTED',
+                            'productQualification':False,'freshObjdir':False,'sameJob':False}),flush=True)
           raise SystemExit(0 if passed else 1)
           PYCODE
