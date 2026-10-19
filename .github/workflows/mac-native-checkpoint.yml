@@ -2,7 +2,7 @@
 name: Bounded primitive-column tails on Intel Mac
 'on':
   push:
-    branches: [codex/mac-native-streaming-recovery54-20261019]
+    branches: [codex/mac-native-streaming-recovery55-20261019]
 permissions:
   contents: read
   actions: read
@@ -10,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 0c1537b862beab6cf4b10f29dd1956d540ab76ae
+  FLOORP_FIXTURE_SHA: 26b3dba870b43327da6dfd261df61bc96deed402
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
           [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery54-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery55-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -72,7 +72,7 @@ jobs:
           def density_continuation(qa,records,first_failure,monitor_failure,outstanding):
               if not (type(qa) is dict and qa.get('complete') is True and qa.get('status')=='failed' and
                   all(type(qa.get(k)) is int and qa[k]==n for k,n in
-                      (('total',522),('failures',1),('errors',0),('skipped',0)))):return False
+                      (('total',525),('failures',1),('errors',0),('skipped',0)))):return False
               expected={'outcome':'FAIL','test':DENSITY_ID,'phase':DENSITY_METHOD,
                   'frames':[{'file':'test_build_completion.py','line':450}],'exceptionType':'AssertionError'}
               if qa.get('cases')!=[expected]:return False
@@ -100,13 +100,19 @@ jobs:
               import math
               from unittest_receipt import density_public
               fields={'schema','scope','parserSHA256','instrumentedFunctionSHA256','densityObservation',
-                  'marks','lastReachedBoundary','secondPassRowsEntered','realBuildPerformed'}
+                  'marks','lastReachedBoundary','secondPassRowsEntered','realBuildPerformed','runtimeContext'}
               if type(value) is not dict or set(value)!=fields:raise ValueError('phase-shape')
               if not (type(value['schema']) is int and value['schema']==1 and
                   value['scope']=='same-controlled-input-phase-observation' and
-                  value['parserSHA256']=='7df902533104dec3d290987ed4cfb8e1b81aa293b178b65ea1835e7443831419' and
-                  value['instrumentedFunctionSHA256']=='acd805bea94b200376dcc2255a7a388e937907f3b3d95ce456e49954c8eaf9f5' and
+                  value['parserSHA256']=='37c17b48e57d910108996878e35445e46405b8afec0a3b20f3eb810db625af83' and
+                  value['instrumentedFunctionSHA256']=='db374c6398ee0bbf4dc6a7459442a274aef95fa8006d68591b700bdb7b403041' and
                   value['realBuildPerformed'] is False):raise ValueError('phase-binding')
+              context=value['runtimeContext']
+              if not (type(context) is dict and set(context)=={'pythonVersion','jsonScanner'} and
+                  type(context['pythonVersion']) is list and len(context['pythonVersion'])==3 and
+                  all(type(item) is int and 0<=item<=999 for item in context['pythonVersion']) and
+                  type(context['jsonScanner']) is str and context['jsonScanner'] in ('c','other')):
+                  raise ValueError('phase-runtime-context')
               density=density_public(value['densityObservation'])
               if not (density['inputBytes']==195000385 and
                   density['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7' and
@@ -129,7 +135,7 @@ jobs:
               if density['status']=='unconfirmed' and density['elapsedSeconds']<30:raise ValueError('phase-deadline')
               return value
           
-          PHASE_PROBE='import ast,hashlib,inspect,json,os,sys,tempfile,time\nfrom pathlib import Path\nimport build_completion as bc\nfrom test_build_completion import marker,phase,whole,NAME\nfrom unittest_receipt import DENSITY_ID,density_public\nfrom support import write_json\nPARSER=\'7df902533104dec3d290987ed4cfb8e1b81aa293b178b65ea1835e7443831419\'\nPHASES=(\'whole-document-validation\',\'profile-schema\',\'string-table\',\'marker-columns\')\ndef main():\n original=Path(bc.__file__).read_bytes()\n if hashlib.sha256(original).hexdigest()!=PARSER or bc.PROCESSING_SECONDS!=30:\n  raise RuntimeError()\n source=inspect.getsource(bc._whole_stream)\n edits=[\n ("    reader = _JSONStream(", "    _phase(\'whole-document-validation\', completed)\\n    reader = _JSONStream("),\n ("    index = reader.index", "    _phase(\'profile-schema\', completed)\\n    index = reader.index"),\n ("    for value in _array_values(reader.fd, strings, deadline):","    _phase(\'string-table\', completed)\\n    for value in _array_values(reader.fd, strings, deadline):"),\n ("    values = [_array_values", "    _phase(\'marker-columns\', completed)\\n    values = [_array_values")]\n state={\'marks\':[]}\n def enter(name,completed):\n  if name not in PHASES or len(state[\'marks\'])>=4:raise RuntimeError()\n  state[\'currentPhase\']=name;state[\'completed\']=completed\n  state[\'marks\'].append({\'phase\':name,\'elapsedSeconds\':time.monotonic()-state[\'start\']})\n for before,after in edits:\n  if source.count(before)!=1:raise RuntimeError()\n  source=source.replace(before,after)\n namespace=dict(vars(bc));namespace[\'_phase\']=enter\n exec(compile(ast.parse(source),\'<fixed-whole-stream-phase-observer>\',\'exec\'),namespace)\n bc._whole_stream=namespace[\'_whole_stream\']\n resource=marker(\'CPU\',\'unused\')\n resource[\'data\']={\'type\':\'CPU\',\'user\':1.25,\'system\':2.5,\'idle\':97.5,\'cores\':[1.0]*8,\'PRIVATE_SENTINEL\':\'x\'*64}\n raw=json.dumps(whole([phase(),marker(),*([resource]*1000000)]),separators=(\',\',\':\')).encode()\n input_sha=hashlib.sha256(raw).hexdigest()\n if len(raw)!=195000385 or input_sha!=\'0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7\':raise RuntimeError()\n with tempfile.TemporaryDirectory(prefix=\'density-phase-\',dir=os.environ[\'TMPDIR\']) as temporary:\n  task=Path(temporary).resolve();directory=task.joinpath(*bc.PARTS);directory.mkdir(parents=True)\n  snapshot=bc.start_snapshot(task);(directory/NAME).write_bytes(raw)\n  state[\'start\']=time.monotonic();collected=bc.collect(task,snapshot)\n  elapsed=time.monotonic()-state[\'start\']\n  density=density_public({\'schema\':1,\'case\':DENSITY_ID,\'status\':collected[\'status\'],\'reason\':collected[\'reason\'],\n   \'elapsedSeconds\':elapsed,\'inputBytes\':len(raw),\'inputSHA256\':input_sha,\'resourceRows\':1000000,\'processingSeconds\':bc.PROCESSING_SECONDS,\n   \'completeCoverage\':collected[\'completeCoverage\'],\'objectCount\':(collected[\'finishedTargetMarkers\']or{}).get(\'Object\'),\n   \'compileCount\':(collected[\'finishedTierMarkers\']or{}).get(\'compile\')})\n  value={\'schema\':1,\'scope\':\'same-controlled-input-phase-observation\',\'parserSHA256\':PARSER,\n   \'instrumentedFunctionSHA256\':hashlib.sha256(source.encode()).hexdigest(),\'densityObservation\':density,\n   \'marks\':state[\'marks\'],\'lastReachedBoundary\':state.get(\'currentPhase\'),\n   \'secondPassRowsEntered\':state[\'completed\'].rows if \'completed\'in state else None,\'realBuildPerformed\':False}\n write_json(Path(os.environ[\'TASK_ROOT\'])/\'density-phase-observation.json\',value)\n print(json.dumps({\'densityPhaseObservation\':value}),flush=True)\nif __name__==\'__main__\':\n try:main()\n except BaseException:\n  print(json.dumps({\'densityPhaseProbeFailure\':{\'code\':\'phase-probe-unavailable\'}}),flush=True)\n  raise SystemExit(1)\n\n'
+          PHASE_PROBE='import ast,hashlib,inspect,json,os,sys,tempfile,time\nfrom pathlib import Path\nimport build_completion as bc\nfrom test_build_completion import marker,phase,whole,NAME\nfrom unittest_receipt import DENSITY_ID,density_public\nfrom support import write_json\nPARSER=\'37c17b48e57d910108996878e35445e46405b8afec0a3b20f3eb810db625af83\'\nPHASES=(\'whole-document-validation\',\'profile-schema\',\'string-table\',\'marker-columns\')\ndef main():\n original=Path(bc.__file__).read_bytes()\n if hashlib.sha256(original).hexdigest()!=PARSER or bc.PROCESSING_SECONDS!=30:\n  raise RuntimeError()\n source=inspect.getsource(bc._whole_stream)\n edits=[\n ("    reader = _JSONStream(", "    _phase(\'whole-document-validation\', completed)\\n    reader = _JSONStream("),\n ("    index = reader.index", "    _phase(\'profile-schema\', completed)\\n    index = reader.index"),\n ("    for value in _array_values(reader.fd, strings, deadline):","    _phase(\'string-table\', completed)\\n    for value in _array_values(reader.fd, strings, deadline):"),\n ("    data_codes = columns[\'data\'].get(\'dataCodes\')", "    _phase(\'marker-columns\', completed)\\n    data_codes = columns[\'data\'].get(\'dataCodes\')")]\n state={\'marks\':[]}\n def enter(name,completed):\n  if name not in PHASES or len(state[\'marks\'])>=4:raise RuntimeError()\n  state[\'currentPhase\']=name;state[\'completed\']=completed\n  state[\'marks\'].append({\'phase\':name,\'elapsedSeconds\':time.monotonic()-state[\'start\']})\n for before,after in edits:\n  if source.count(before)!=1:raise RuntimeError()\n  source=source.replace(before,after)\n namespace=dict(vars(bc));namespace[\'_phase\']=enter\n exec(compile(ast.parse(source),\'<fixed-whole-stream-phase-observer>\',\'exec\'),namespace)\n bc._whole_stream=namespace[\'_whole_stream\']\n resource=marker(\'CPU\',\'unused\')\n resource[\'data\']={\'type\':\'CPU\',\'user\':1.25,\'system\':2.5,\'idle\':97.5,\'cores\':[1.0]*8,\'PRIVATE_SENTINEL\':\'x\'*64}\n raw=json.dumps(whole([phase(),marker(),*([resource]*1000000)]),separators=(\',\',\':\')).encode()\n input_sha=hashlib.sha256(raw).hexdigest()\n if len(raw)!=195000385 or input_sha!=\'0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7\':raise RuntimeError()\n with tempfile.TemporaryDirectory(prefix=\'density-phase-\',dir=os.environ[\'TMPDIR\']) as temporary:\n  task=Path(temporary).resolve();directory=task.joinpath(*bc.PARTS);directory.mkdir(parents=True)\n  snapshot=bc.start_snapshot(task);(directory/NAME).write_bytes(raw)\n  state[\'start\']=time.monotonic();collected=bc.collect(task,snapshot)\n  elapsed=time.monotonic()-state[\'start\']\n  density=density_public({\'schema\':1,\'case\':DENSITY_ID,\'status\':collected[\'status\'],\'reason\':collected[\'reason\'],\n   \'elapsedSeconds\':elapsed,\'inputBytes\':len(raw),\'inputSHA256\':input_sha,\'resourceRows\':1000000,\'processingSeconds\':bc.PROCESSING_SECONDS,\n   \'completeCoverage\':collected[\'completeCoverage\'],\'objectCount\':(collected[\'finishedTargetMarkers\']or{}).get(\'Object\'),\n   \'compileCount\':(collected[\'finishedTierMarkers\']or{}).get(\'compile\')})\n  value={\'schema\':1,\'scope\':\'same-controlled-input-phase-observation\',\'parserSHA256\':PARSER,\n   \'instrumentedFunctionSHA256\':hashlib.sha256(source.encode()).hexdigest(),\'densityObservation\':density,\n   \'marks\':state[\'marks\'],\'lastReachedBoundary\':state.get(\'currentPhase\'),\n   \'secondPassRowsEntered\':state[\'completed\'].rows if \'completed\'in state else None,\'realBuildPerformed\':False,\n   \'runtimeContext\':{\'pythonVersion\':[sys.version_info.major,sys.version_info.minor,sys.version_info.micro],\n    \'jsonScanner\':\'c\' if json.scanner.c_make_scanner is not None and type(bc._DECODER.scan_once) is json.scanner.c_make_scanner else \'other\'}}\n write_json(Path(os.environ[\'TASK_ROOT\'])/\'density-phase-observation.json\',value)\n print(json.dumps({\'densityPhaseObservation\':value}),flush=True)\nif __name__==\'__main__\':\n try:main()\n except BaseException:\n  print(json.dumps({\'densityPhaseProbeFailure\':{\'code\':\'phase-probe-unavailable\'}}),flush=True)\n  raise SystemExit(1)\n\n'
 
           task=pathlib.Path(os.environ['TASK_ROOT'])
           plan=json.loads((helper/'plan.json').read_text())
@@ -166,7 +172,7 @@ jobs:
                       'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
                       'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
                       'test_sdk_source','test_sdk_source_integration','test_consumer_time',
-                      'test_build_completion','test_build_completion_contract'],522,False),
+                      'test_build_completion','test_build_completion_contract'],525,False),
                       ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                       '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                   for test_stage,command,expected,recording in suites:
@@ -492,13 +498,19 @@ jobs:
               import math
               from unittest_receipt import density_public
               fields={'schema','scope','parserSHA256','instrumentedFunctionSHA256','densityObservation',
-                  'marks','lastReachedBoundary','secondPassRowsEntered','realBuildPerformed'}
+                  'marks','lastReachedBoundary','secondPassRowsEntered','realBuildPerformed','runtimeContext'}
               if type(value) is not dict or set(value)!=fields:raise ValueError('phase-shape')
               if not (type(value['schema']) is int and value['schema']==1 and
                   value['scope']=='same-controlled-input-phase-observation' and
-                  value['parserSHA256']=='7df902533104dec3d290987ed4cfb8e1b81aa293b178b65ea1835e7443831419' and
-                  value['instrumentedFunctionSHA256']=='acd805bea94b200376dcc2255a7a388e937907f3b3d95ce456e49954c8eaf9f5' and
+                  value['parserSHA256']=='37c17b48e57d910108996878e35445e46405b8afec0a3b20f3eb810db625af83' and
+                  value['instrumentedFunctionSHA256']=='db374c6398ee0bbf4dc6a7459442a274aef95fa8006d68591b700bdb7b403041' and
                   value['realBuildPerformed'] is False):raise ValueError('phase-binding')
+              context=value['runtimeContext']
+              if not (type(context) is dict and set(context)=={'pythonVersion','jsonScanner'} and
+                  type(context['pythonVersion']) is list and len(context['pythonVersion'])==3 and
+                  all(type(item) is int and 0<=item<=999 for item in context['pythonVersion']) and
+                  type(context['jsonScanner']) is str and context['jsonScanner'] in ('c','other')):
+                  raise ValueError('phase-runtime-context')
               density=density_public(value['densityObservation'])
               if not (density['inputBytes']==195000385 and
                   density['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7' and
@@ -544,7 +556,7 @@ jobs:
               try:phase_public(value.get('densityPhaseObservation'))
               except BaseException:return False
               if not phase_owned(value):return False
-              for label,total in (('checkpoint-tests',522),('failure-recording-tests',14)):
+              for label,total in (('checkpoint-tests',525),('failure-recording-tests',14)):
                   tests=value.get(label)
                   if not (type(tests) is dict and tests.get('complete') is True and tests.get('status')=='passed' and
                       integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
