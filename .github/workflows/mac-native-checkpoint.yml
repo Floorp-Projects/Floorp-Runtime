@@ -1,7 +1,7 @@
-name: Short Intel owned image and kernel readonly diagnosis
+name: Short Intel trusted completion and Shim failure recording
 'on':
   push:
-    branches: [codex/mac-native-boundary-recovery40-20261019]
+    branches: [codex/mac-native-completion-recovery41-20261019]
 permissions:
   contents: read
   actions: read
@@ -9,7 +9,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 361b16aec48366e17e752dc833c38341a901c596
+  FLOORP_FIXTURE_SHA: e473170251a03285727571657394ce05f2f4f2be
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-boundary-recovery40-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-completion-recovery41-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -48,11 +48,11 @@ jobs:
         shell: bash
         run: |
           "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role producer --task "$TASK_ROOT"
-      - name: Observe owned writer controls and native task APIs
+      - name: Test trusted completion and pre-cleanup recording contracts
         timeout-minutes: 16
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/boundary_diagnostic.py --task "$TASK_ROOT" --expected-tests 84
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/completion_preflight.py --task "$TASK_ROOT" --expected-qa-tests 151 --expected-recording-tests 14
       - name: Verify diagnostic receipt
         if: always()
         timeout-minutes: 1
@@ -60,14 +60,13 @@ jobs:
         run: |
           "$TASK_PYTHON" - <<'PYCODE'
           import json,os,pathlib
-          path=pathlib.Path(os.environ['TASK_ROOT'])/'boundary-diagnostic.json'
+          path=pathlib.Path(os.environ['TASK_ROOT'])/'completion-preflight.json'
           if not path.is_file():
-              print('{"status":"failed","code":"boundary-diagnostic-receipt-missing"}',flush=True)
+              print('{"status":"failed","code":"completion-preflight-receipt-missing"}',flush=True)
               raise SystemExit(1)
           value=json.loads(path.read_text())
           passed=value['status']=='passed' and value['firstFailure'] is None and value['monitorFailure'] is None
-          print(json.dumps({'boundaryDiagnosticStatus':'passed' if passed else 'failed','newArtifacts':0,
-                           'productionGateChanged':False,'checkpointEligibilityEstablished':False,
-                           'longExecution':'ON_HOLD'}),flush=True)
+          print(json.dumps({'qaCompletionPreflightStatus':'passed' if passed else 'failed','newArtifacts':0,
+                           'checkpointAdmissionChanged':True,'fullBuildQualification':'NOT_TESTED'}),flush=True)
           raise SystemExit(0 if passed else 1)
           PYCODE
