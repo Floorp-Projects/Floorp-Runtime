@@ -10,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 21f920f6790f78d923947886e0ddd8c6151da59a
+  FLOORP_FIXTURE_SHA: 563b9e1fe1a2ae0bece173e8173b4a6a62b6c485
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -96,7 +96,7 @@ jobs:
                       'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
                       'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
                       'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
-                      'test_sdk_source','test_sdk_source_integration'],403,False),
+                      'test_sdk_source','test_sdk_source_integration','test_consumer_time'],430,False),
                       ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                       '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                   for test_stage,command,expected,recording in suites:
@@ -171,7 +171,7 @@ jobs:
           CHECKPOINT_BUILD_DATE: '20261019035607'
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin --mozilla-only --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin --mozilla-only --consumer-shared-deadline --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json
       - name: Confirm current-source Mozilla xpcshell smoke evidence
         if: always()
         timeout-minutes: 2
@@ -259,13 +259,37 @@ jobs:
                       preflight['firstFailure'] is None and 'monitorFailure' in preflight and
                       preflight['monitorFailure'] is None):
                   return False
-              for name,total in (('checkpoint-tests',403),('failure-recording-tests',14)):
+              for name,total in (('checkpoint-tests',430),('failure-recording-tests',14)):
                   tests=mapping(preflight.get(name))
                   if not (tests.get('complete') is True and tests.get('status')=='passed' and
                           integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
                               ('failures','errors','skipped'))):
                       return False
               return True
+          def time_budget_ok(value):
+              if type(value) is not dict:
+                  return False
+              budget=mapping(value.get('executionTimeBudget'))
+              expected_keys={'schema','profile','baselinePlanSHA256','platformMinutes',
+                  'sharedWorkDeadlineMinutes','cleanupReserveMinutes','clock','deadlineReference',
+                  'deadlines','legacyDeadlines','onlyExecutionTimingChanged',
+                  'resourceAndCompilationInputsChanged','clockResetAllowed','stageBudgetsAreAdditive'}
+              deadlines=mapping(budget.get('deadlines'))
+              legacy=mapping(budget.get('legacyDeadlines'))
+              keys=('consumerRestoreDeadlineMinutes','consumerBuildDeadlineMinutes',
+                    'consumerPackageDeadlineMinutes','consumerNativeDeadlineMinutes','finalDeadlineMinutes')
+              strings={'profile':'consumer-shared-final-deadline-v1',
+                  'baselinePlanSHA256':'33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460',
+                  'clock':'fresh-job-monotonic-origin','deadlineReference':'absolute-from-existing-job-origin'}
+              return (set(budget)==expected_keys and set(deadlines)==set(legacy)==set(keys) and
+                      all(type(budget.get(key)) is str and budget[key]==expected for key,expected in strings.items()) and
+                      integer(budget.get('schema'),1) and integer(budget.get('platformMinutes'),360) and
+                      integer(budget.get('sharedWorkDeadlineMinutes'),345) and integer(budget.get('cleanupReserveMinutes'),15) and
+                      all(integer(deadlines.get(key),expected) for key,expected in zip(keys,(60,345,345,345,345))) and
+                      all(integer(legacy.get(key),expected) for key,expected in zip(keys,(60,300,315,335,345))) and
+                      budget.get('onlyExecutionTimingChanged') is True and
+                      all(budget.get(key) is False for key in ('resourceAndCompilationInputsChanged',
+                          'clockResetAllowed','stageBudgetsAreAdditive')))
           def final_ok(value):
               if type(value) is not dict:
                   return False
@@ -275,7 +299,7 @@ jobs:
               expected=[('compiled-debug','positive',0,'passed'),
                         ('failure-control','negative-control',1,'failed'),
                         ('upstream-version-comparator','positive',0,'passed')]
-              return (sdk_ok(value) and preflight_ok(value) and
+              return (time_budget_ok(value) and sdk_ok(value) and preflight_ok(value) and
                       value.get('status')=='mozilla-ready' and value.get('mozillaOnly') is True and
                       'firstFailure' in value and value['firstFailure'] is None and
                       'monitorFailure' in value and value['monitorFailure'] is None and
@@ -299,9 +323,14 @@ jobs:
                       all(case_ok(case,*spec) for case,spec in zip(cases,expected)))
           passed=final_ok(value)
           sdk_verified=sdk_ok(value)
+          time_verified=time_budget_ok(value)
           print(json.dumps({'role':'consumer','status':'passed' if passed else 'failed',
                             'qualification':'verified-origin-current-mozilla-xpcshell-smoke','originRun':39197008470,
                             'existingArtifact':12164479528,'newArtifactUploads':0,
+                            'executionTimeBudgetVerified':time_verified,
+                            'executionTimeProfile':'consumer-shared-final-deadline-v1' if time_verified else None,
+                            'sharedWorkDeadlineMinutes':345 if time_verified else None,
+                            'nominalCleanupReserveMinutes':15 if time_verified else None,
                             'sdkSourceVerified':sdk_verified,
                             'sdkArtifact':12149860607 if sdk_verified else None,
                             'sdkSourceRun':39162639256 if sdk_verified else None,
