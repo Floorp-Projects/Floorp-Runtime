@@ -1,8 +1,8 @@
-# SDKless fixed-upstream serializer contract; no real build or Mozilla qualification.
-name: Bounded primitive-column tails on Intel Mac
+name: Guarded existing checkpoint Firefox target graph observation
 'on':
   push:
-    branches: [codex/mac-native-streaming-recovery55-20261019]
+    branches:
+    - codex/mac-native-firefox-graph-recovery56-20261019
 permissions:
   contents: read
   actions: read
@@ -10,621 +10,808 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 26b3dba870b43327da6dfd261df61bc96deed402
+  FLOORP_FIXTURE_SHA: 5be48e693474744f8f87ba31aff3c591bb182bec
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
+  SDK_SOURCE_SHA256: ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688
 jobs:
   consumer:
     name: checkpoint-consumer
     runs-on: macos-15-intel
     timeout-minutes: 360
     steps:
-      - name: Bound the initial authorized execution
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery55-20261019
-          test "$GITHUB_EVENT_NAME" = push
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test '${{ github.event.created }}' = true
-          test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
-          TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
-          test -x "$TASK_PYTHON"
-          echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
-          echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-checkpoint" >> "$GITHUB_ENV"
-      - name: Checkout immutable reviewed fixture
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          repository: Floorp-Projects/Floorp
-          ref: ${{ env.FLOORP_FIXTURE_SHA }}
-          path: fixture
-          persist-credentials: false
-          fetch-depth: 1
-      - name: Establish this job's fresh clock and task root
-        timeout-minutes: 3
-        env:
-          CHECKPOINT_READ_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role consumer --task "$TASK_ROOT"
-      - name: Verify actual native process monitor before acquisition
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          "$TASK_PYTHON" - <<'PYCODE'
-          import json,os,pathlib,re,sys
-          helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
-          sys.path.insert(0,str(helper))
-          from support import Runner,clean_environment,require,write_json,Failure
-          from darwin_activity import probe
-          from unittest_receipt import receipt as unittest_receipt,density_public,DENSITY_ID,DENSITY_METHOD
-          from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
-          def density_input(value):
-              try:
-                  value=density_public(value)
-                  return (value['inputBytes']==195000385 and
-                      value['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7')
-              except BaseException:return False
+    - name: Bound the initial authorized execution
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
+        [[ "$SDK_SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+        test "$GITHUB_REF" = refs/heads/codex/mac-native-firefox-graph-recovery56-20261019
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test '${{ github.event.created }}' = true
+        test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+        TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+        test -x "$TASK_PYTHON"
+        echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+        echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-checkpoint" >> "$GITHUB_ENV"
+    - name: Checkout immutable reviewed fixture
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: Floorp-Projects/Floorp
+        ref: ${{ env.FLOORP_FIXTURE_SHA }}
+        path: fixture
+        persist-credentials: false
+        fetch-depth: 1
+    - name: Establish this job's fresh clock and task root
+      timeout-minutes: 3
+      env:
+        CHECKPOINT_READ_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role consumer --task "$TASK_ROOT"
+    - name: Verify actual native process monitor before acquisition
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - > "$TASK_ROOT/monitor-preflight-driver.private.log" 2>&1 <<'PYCODE'
+        import json,os,pathlib,re,sys
+        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+        sys.path.insert(0,str(helper))
+        from support import Runner,clean_environment,require,write_json
+        from darwin_activity import probe
+        from unittest_receipt import receipt as unittest_receipt
+        from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
+        task=pathlib.Path(os.environ['TASK_ROOT'])
+        plan=json.loads((helper/'plan.json').read_text())
+        runner=Runner(task,float((task/'started').read_text()),plan['limits'])
+        env=clean_environment(task)
+        temporary=task/'monitor-tmp'
+        temporary.mkdir(mode=0o700)
+        env['TMPDIR']=str(temporary)
+        env['PYTHONDONTWRITEBYTECODE']='1'
+        env['PYTHONWARNINGS']='error::ResourceWarning'
+        env['PATH']+=':/usr/local/bin'
+        result={'status':'failed'}
+        primary_error=None
+        phase='self-probe'
+        try:
+            own=probe().read(os.getpid(),os.getpgrp())
+            require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
+            result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
+            phase='abi'
+            abi=prepare_abi(task,runner,env)
+            os.environ['FLOORP_CENSUS_ABI']=str(abi)
+            env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
+            env['FLOORP_CENSUS_ABI']=str(abi)
+            phase='identity-snapshot'
+            result['census']=snapshot(load_abi(abi))['measurement']
+            with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
+                output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
+            if True:
+                suites=[('checkpoint-tests',[sys.executable,'-m','unittest','-v',
+                    'test_checkpoint','test_process_census','test_guards','test_shim_failure_patch',
+                    'test_completion_preflight','test_unittest_receipt','test_qa_core',
+                    'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',
+                    'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
+                    'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
+                    'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
+                    'test_sdk_source','test_sdk_source_integration','test_consumer_time',
+                    'test_build_completion','test_build_completion_contract'],529,False),
+                    ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
+                    '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
+                for test_stage,command,expected,recording in suites:
+                    phase=test_stage
+                    try:
+                        runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)
+                    finally:
+                        result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)
+                    tests=result[test_stage]
+                    require(tests['complete'] and tests['status']=='passed' and
+                            tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')
+            phase='owned-monitor-control'
+            script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
+            runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
+            require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
+                        (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for row in runner.records),
+                    'monitor-preflight-no-complete-sample')
+            result['status']='passed'
+        except BaseException as error:
+            primary_error=error
+            result.update(status='failed',failurePhase=phase)
+            runner.fail('monitor-preflight','checkpoint-preflight-failure')
+            raise
+        finally:
+            result.update(stages=runner.records,monitorFailure=runner.monitor_failure,
+                          monitorDiagnostics=runner.monitor_diagnostics,firstFailure=runner.failure)
+            evidence_error=False
+            try:
+                write_json(task/'monitor-preflight.json',result)
+            except OSError:
+                evidence_error=True
+                runner.fail('preflight-evidence','checkpoint-preflight-evidence-write')
+                result.update(status='failed',evidenceWriteFailure=True,firstFailure=runner.failure)
+            print(json.dumps({'monitorPreflight':result}),flush=True)
+            if evidence_error and primary_error is None:
+                require(False,'checkpoint-preflight-evidence-write')
+        PYCODE
+    - name: Acquire the official unexpired renewed content-matched SDK
+      timeout-minutes: 12
+      env:
+        SDK_READ_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - <<'PYCODE'
+        import hashlib,os,pathlib
+        path=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo/sdk_source.json'
+        raw=path.read_bytes()
+        if len(raw)>65536 or hashlib.sha256(raw).hexdigest()!=os.environ['SDK_SOURCE_SHA256']:
+            raise SystemExit('sdk-source-pin-mismatch')
+        PYCODE
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json --output "$TASK_ROOT/sdk-download"
+    - name: Checkout immutable Runtime source
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ env.RUNTIME_SHA }}
+        path: source
+        persist-credentials: false
+        fetch-depth: 1
+        submodules: false
+    - name: Checkout immutable native harness
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: Floorp-Projects/Floorp
+        ref: ${{ env.HARNESS_SHA }}
+        path: harness
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: tools/app-shim
+    - name: Download only the verified successful producer checkpoint
+      timeout-minutes: 25
+      env:
+        CHECKPOINT_READ_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py fetch --role consumer --task "$TASK_ROOT" --replay-origin
+    - name: Restore only the verified original checkpoint with all existing guards
+      id: pipeline
+      env:
+        CHECKPOINT_BUILD_DATE: '20261019035607'
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin --restore-only --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json > "$TASK_ROOT/restore-pipeline.private.log" 2>&1
+    - name: Read the fixed generated graph in an owned monitored stage
+      env:
+        GUARDED_RESTORE_OUTCOME: ${{ steps.pipeline.outcome }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - > "$TASK_ROOT/firefox-target-driver.private.log" 2>&1 <<'PYCODE'
+        """Unintegrated fixed-purpose guarded-restore graph caller code; no acquisition."""
+        import hashlib,json,math,os,stat,time,types
+        from pathlib import Path
+        QA_COUNT = 529
+        SDK_SOURCE_SHA = 'ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688'
+        PLAN_SHA = '33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'
+        RUNTIME_SHA = '7dd619742b25567e479eeda97ae071d10542ad0b'
+        PINS = {
+         'firefox_target_graph.py': (10361,'ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a'),
+         'firefox_target_observer.py': (22432,'fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb')}
+        class Unconfirmed(Exception):pass
 
-          def density_continuation(qa,records,first_failure,monitor_failure,outstanding):
-              if not (type(qa) is dict and qa.get('complete') is True and qa.get('status')=='failed' and
-                  all(type(qa.get(k)) is int and qa[k]==n for k,n in
-                      (('total',525),('failures',1),('errors',0),('skipped',0)))):return False
-              expected={'outcome':'FAIL','test':DENSITY_ID,'phase':DENSITY_METHOD,
-                  'frames':[{'file':'test_build_completion.py','line':450}],'exceptionType':'AssertionError'}
-              if qa.get('cases')!=[expected]:return False
-              diagnostics=qa.get('buildCompletionDensityDiagnostics')
-              if type(diagnostics) is not list or len(diagnostics)!=1:return False
-              diagnostic=diagnostics[0]
-              if not density_input(diagnostic) or diagnostic['status']!='unconfirmed':return False
-              if monitor_failure is not None or outstanding is not False:return False
-              if not (type(first_failure) is dict and set(first_failure)=={'stage','code','elapsedSeconds'} and
-                  first_failure['stage']=='checkpoint-tests' and first_failure['code']=='nonzero-exit' and
-                  type(first_failure['elapsedSeconds']) in (int,float) and
-                  0<=first_failure['elapsedSeconds']<=900):return False
-              if type(records) is not list or len(records)!=3:return False
-              for row,(name,code) in zip(records,(('census-abi-compile',0),('census-abi',0),('checkpoint-tests',1))):
-                  if not (type(row) is dict and row.get('stage')==name and type(row.get('exitCode')) is int and
-                      row['exitCode']==code and row.get('groupCleanup')=='verified-gone' and
-                      'cleanupFailure' in row and row['cleanupFailure'] is None and row.get('cleanupDiagnostics')==[] and
-                      type(row.get('leaderReap')) is dict and row['leaderReap'].get('status')=='reaped' and
-                      type(row['leaderReap'].get('exitCode')) is int and row['leaderReap']['exitCode']==code):return False
-              if not all('reason' in row and row['reason'] is None and
-                  'failurePhase' in row and row['failurePhase'] is None for row in records[:2]):return False
-              return records[-1].get('reason')=='nonzero-exit' and records[-1].get('failurePhase')=='wait'
+        def need(value,code):
+         if not value:raise Unconfirmed(code)
 
-          def phase_public(value):
-              import math
-              from unittest_receipt import density_public
-              fields={'schema','scope','parserSHA256','instrumentedFunctionSHA256','densityObservation',
-                  'marks','lastReachedBoundary','secondPassRowsEntered','realBuildPerformed','runtimeContext'}
-              if type(value) is not dict or set(value)!=fields:raise ValueError('phase-shape')
-              if not (type(value['schema']) is int and value['schema']==1 and
-                  value['scope']=='same-controlled-input-phase-observation' and
-                  value['parserSHA256']=='37c17b48e57d910108996878e35445e46405b8afec0a3b20f3eb810db625af83' and
-                  value['instrumentedFunctionSHA256']=='db374c6398ee0bbf4dc6a7459442a274aef95fa8006d68591b700bdb7b403041' and
-                  value['realBuildPerformed'] is False):raise ValueError('phase-binding')
-              context=value['runtimeContext']
-              if not (type(context) is dict and set(context)=={'pythonVersion','jsonScanner'} and
-                  type(context['pythonVersion']) is list and len(context['pythonVersion'])==3 and
-                  all(type(item) is int and 0<=item<=999 for item in context['pythonVersion']) and
-                  type(context['jsonScanner']) is str and context['jsonScanner'] in ('c','other')):
-                  raise ValueError('phase-runtime-context')
-              density=density_public(value['densityObservation'])
-              if not (density['inputBytes']==195000385 and
-                  density['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7' and
-                  density['status'] in ('observed','unconfirmed') and
-                  density['reason']==('build-completion-profile-parsed' if density['status']=='observed' else 'build-completion-processing-limit')):
-                  raise ValueError('phase-input')
-              phases=('whole-document-validation','profile-schema','string-table','marker-columns')
-              marks=value['marks'];rows=value['secondPassRowsEntered']
-              if not (type(marks) is list and 1<=len(marks)<=4 and type(rows) is int and 0<=rows<=1000002):
-                  raise ValueError('phase-progress')
-              previous=0
-              for mark,name in zip(marks,phases):
-                  if not (type(mark) is dict and set(mark)=={'phase','elapsedSeconds'} and mark['phase']==name and
-                      type(mark['elapsedSeconds']) in (int,float) and math.isfinite(mark['elapsedSeconds']) and
-                      previous<=mark['elapsedSeconds']<=density['elapsedSeconds']):raise ValueError('phase-order')
-                  previous=mark['elapsedSeconds']
-              if value['lastReachedBoundary']!=phases[len(marks)-1]:raise ValueError('phase-last')
-              if len(marks)<4 and rows!=0:raise ValueError('phase-rows')
-              if density['status']=='observed' and (len(marks)!=4 or rows!=1000002):raise ValueError('phase-complete')
-              if density['status']=='unconfirmed' and density['elapsedSeconds']<30:raise ValueError('phase-deadline')
-              return value
-          
-          PHASE_PROBE='import ast,hashlib,inspect,json,os,sys,tempfile,time\nfrom pathlib import Path\nimport build_completion as bc\nfrom test_build_completion import marker,phase,whole,NAME\nfrom unittest_receipt import DENSITY_ID,density_public\nfrom support import write_json\nPARSER=\'37c17b48e57d910108996878e35445e46405b8afec0a3b20f3eb810db625af83\'\nPHASES=(\'whole-document-validation\',\'profile-schema\',\'string-table\',\'marker-columns\')\ndef main():\n original=Path(bc.__file__).read_bytes()\n if hashlib.sha256(original).hexdigest()!=PARSER or bc.PROCESSING_SECONDS!=30:\n  raise RuntimeError()\n source=inspect.getsource(bc._whole_stream)\n edits=[\n ("    reader = _JSONStream(", "    _phase(\'whole-document-validation\', completed)\\n    reader = _JSONStream("),\n ("    index = reader.index", "    _phase(\'profile-schema\', completed)\\n    index = reader.index"),\n ("    for value in _array_values(reader.fd, strings, deadline):","    _phase(\'string-table\', completed)\\n    for value in _array_values(reader.fd, strings, deadline):"),\n ("    data_codes = columns[\'data\'].get(\'dataCodes\')", "    _phase(\'marker-columns\', completed)\\n    data_codes = columns[\'data\'].get(\'dataCodes\')")]\n state={\'marks\':[]}\n def enter(name,completed):\n  if name not in PHASES or len(state[\'marks\'])>=4:raise RuntimeError()\n  state[\'currentPhase\']=name;state[\'completed\']=completed\n  state[\'marks\'].append({\'phase\':name,\'elapsedSeconds\':time.monotonic()-state[\'start\']})\n for before,after in edits:\n  if source.count(before)!=1:raise RuntimeError()\n  source=source.replace(before,after)\n namespace=dict(vars(bc));namespace[\'_phase\']=enter\n exec(compile(ast.parse(source),\'<fixed-whole-stream-phase-observer>\',\'exec\'),namespace)\n bc._whole_stream=namespace[\'_whole_stream\']\n resource=marker(\'CPU\',\'unused\')\n resource[\'data\']={\'type\':\'CPU\',\'user\':1.25,\'system\':2.5,\'idle\':97.5,\'cores\':[1.0]*8,\'PRIVATE_SENTINEL\':\'x\'*64}\n raw=json.dumps(whole([phase(),marker(),*([resource]*1000000)]),separators=(\',\',\':\')).encode()\n input_sha=hashlib.sha256(raw).hexdigest()\n if len(raw)!=195000385 or input_sha!=\'0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7\':raise RuntimeError()\n with tempfile.TemporaryDirectory(prefix=\'density-phase-\',dir=os.environ[\'TMPDIR\']) as temporary:\n  task=Path(temporary).resolve();directory=task.joinpath(*bc.PARTS);directory.mkdir(parents=True)\n  snapshot=bc.start_snapshot(task);(directory/NAME).write_bytes(raw)\n  state[\'start\']=time.monotonic();collected=bc.collect(task,snapshot)\n  elapsed=time.monotonic()-state[\'start\']\n  density=density_public({\'schema\':1,\'case\':DENSITY_ID,\'status\':collected[\'status\'],\'reason\':collected[\'reason\'],\n   \'elapsedSeconds\':elapsed,\'inputBytes\':len(raw),\'inputSHA256\':input_sha,\'resourceRows\':1000000,\'processingSeconds\':bc.PROCESSING_SECONDS,\n   \'completeCoverage\':collected[\'completeCoverage\'],\'objectCount\':(collected[\'finishedTargetMarkers\']or{}).get(\'Object\'),\n   \'compileCount\':(collected[\'finishedTierMarkers\']or{}).get(\'compile\')})\n  value={\'schema\':1,\'scope\':\'same-controlled-input-phase-observation\',\'parserSHA256\':PARSER,\n   \'instrumentedFunctionSHA256\':hashlib.sha256(source.encode()).hexdigest(),\'densityObservation\':density,\n   \'marks\':state[\'marks\'],\'lastReachedBoundary\':state.get(\'currentPhase\'),\n   \'secondPassRowsEntered\':state[\'completed\'].rows if \'completed\'in state else None,\'realBuildPerformed\':False,\n   \'runtimeContext\':{\'pythonVersion\':[sys.version_info.major,sys.version_info.minor,sys.version_info.micro],\n    \'jsonScanner\':\'c\' if json.scanner.c_make_scanner is not None and type(bc._DECODER.scan_once) is json.scanner.c_make_scanner else \'other\'}}\n write_json(Path(os.environ[\'TASK_ROOT\'])/\'density-phase-observation.json\',value)\n print(json.dumps({\'densityPhaseObservation\':value}),flush=True)\nif __name__==\'__main__\':\n try:main()\n except BaseException:\n  print(json.dumps({\'densityPhaseProbeFailure\':{\'code\':\'phase-probe-unavailable\'}}),flush=True)\n  raise SystemExit(1)\n\n'
+        def integer(value,expected):return type(value) is int and value==expected
 
-          task=pathlib.Path(os.environ['TASK_ROOT'])
-          plan=json.loads((helper/'plan.json').read_text())
-          runner=Runner(task,float((task/'started').read_text()),plan['limits'])
-          env=clean_environment(task)
-          temporary=task/'monitor-tmp'
-          temporary.mkdir(mode=0o700)
-          env['TMPDIR']=str(temporary)
-          env['PYTHONDONTWRITEBYTECODE']='1'
-          env['PYTHONWARNINGS']='error::ResourceWarning'
-          env['PATH']+=':/usr/local/bin'
-          result={'status':'failed','diagnosticContinuation':False}
-          primary_error=None
-          phase='self-probe'
+        def identity(value):
+         return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
+
+        def read_fixed(path,cap):
+         path=Path(path)
+         need(path.is_absolute() and path.resolve()==path,'binding')
+         directory=path.parent.stat();before=path.lstat()
+         need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid() and
+          stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')
+         fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))
+         try:
+          need(identity(before)==identity(os.fstat(fd)),'binding')
+          blocks=[];count=0
+          while True:
+           data=os.read(fd,min(131072,cap-count+1))
+           if not data:break
+           blocks.append(data);count+=len(data);need(count<=cap,'binding')
+          need(count==before.st_size and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and
+           identity(directory)==identity(path.parent.stat()),'binding')
+          return b''.join(blocks)
+         finally:os.close(fd)
+
+        def decode(raw):
+         def pairs(items):
+          out={}
+          for key,value in items:
+           need(key not in out,'receipt');out[key]=value
+          return out
+         return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:need(False,'receipt'))
+
+        def load_helpers(helper):
+         helper=Path(helper)
+         raw={}
+         for name,(size,sha) in PINS.items():
+          data=read_fixed(helper/name,size)
+          need(len(data)==size and hashlib.sha256(data).hexdigest()==sha,'helper-pin')
+          raw[name]=data
+         modules=[]
+         for name in PINS:
+          module=types.ModuleType(name[:-3])
+          # Execute the verified bytes, rather than reopening a pathname during import.
+          exec(compile(raw[name],name,'exec'),module.__dict__)
+          modules.append(module)
+         return tuple(modules)
+
+        def preflight_ok(value):
+         if type(value) is not dict or value.get('status')!='passed' or not all(k in value and value[k] is None for k in ('firstFailure','monitorFailure')):return False
+         for label,count in (('checkpoint-tests',QA_COUNT),('failure-recording-tests',14)):
+          row=value.get(label)
+          if not (type(count) is int and type(row) is dict and row.get('complete') is True and row.get('status')=='passed' and
+           integer(row.get('total'),count) and all(integer(row.get(key),0) for key in ('failures','errors','skipped'))):return False
+         return True
+
+        def sdk_ok(value):
+         if type(value) is not dict:return False
+         sdk=value.get('sdk');acquired=sdk.get('acquisitionSource') if type(sdk) is dict else None
+         if type(sdk) is not dict or type(acquired) is not dict:return False
+         return (value.get('planSHA256')==PLAN_SHA and 'sdkEvidenceError' not in value and
+          integer(sdk.get('artifact'),12182302735) and integer(sdk.get('sourceRun'),39244172146) and integer(sdk.get('attempt'),1) and
+          sdk.get('zipSHA256')=='c2b125f6cba2e98aa6515d772b2300e458be8cc4236bf33028cd633ceb6624ee' and
+          sdk.get('tarSHA256')=='a190b3eee16abf546611a18c033c09ecc9e6bbb9b32ad83bb2c68f772ef95b6b' and
+          sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
+          sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
+          set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
+          acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and acquired.get('sourceSHA256')==SDK_SOURCE_SHA and
+          type(SDK_SOURCE_SHA) is str and len(SDK_SOURCE_SHA)==64 and acquired.get('baselinePlanSHA256')==PLAN_SHA and
+          integer(acquired.get('producerJob'),118032017226) and type(acquired.get('uncompressedTar')) is dict and
+          set(acquired['uncompressedTar'])=={'bytes','sha256'} and integer(acquired['uncompressedTar'].get('bytes'),760518144) and
+          acquired['uncompressedTar'].get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
+
+        def restore_ok(value,context,observer,pipeline_outcome):
+         try:
+          need(pipeline_outcome=='success','restore')
+          observer._restore_consistent(value,context)
+          need(value.get('qualification')=='verified-origin-checkpoint-restore-only' and value.get('checkpointRole')=='consumer' and
+           all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and integer(value.get('newArtifacts'),0) and
+           'executionTimeBudget' not in value and 'mozilla' not in value and value.get('mozillaFirst') is not True and
+           preflight_ok(value.get('monitorPreflight')) and sdk_ok(value) and
+           observer._same_json(value.get('checkpointReplayContext'),context) and type(value.get('harness')) is dict and
+           type(value.get('toolchains')) is list and len(value['toolchains'])==11,'restore')
+          return True
+         except BaseException:return False
+
+        def origin_ok(task,now=None):
+         value=float(read_fixed(Path(task)/'started-monotonic',4096));now=time.monotonic() if now is None else now
+         need(math.isfinite(value) and value<=now<value+3600,'clock')
+         return value
+
+        def receipts(task):
+         raw={name:read_fixed(Path(task)/name,2*1024**2 if name!='started-monotonic' else 4096)
+          for name in ('summary.json','checkpoint-replay-context.json','started-monotonic')}
+         return decode(raw['summary.json']),decode(raw['checkpoint-replay-context.json']),{
+          label:hashlib.sha256(raw[name]).hexdigest() for label,name in
+          (('summary','summary.json'),('context','checkpoint-replay-context.json'),('clock','started-monotonic'))}
+
+        def receipt_binding(before,after,observation):
+         if before!=after:return False
+         rows=observation['files']
+         values=[rows.get(label,{}).get('sha256') for label in before]
+         if any(value is None for value in values):return None
+         return all(value==sha for value,sha in zip(values,before.values()))
+
+        def observation_safe(value,observer):
+         fields={'schema','status','reason','failurePhase','files','graph','restoreReceiptConsistent','restoredConfigStillMatches',
+          'configConsistency','bindingsStable','bindingScope','bundleSpec','existingGuardsReexecuted','cleanupFailure',
+          'processingLimitSeconds','absoluteRestoreDeadlineMinutes','clockResetAllowed','makeOrRecipeExecuted',
+          'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed','durationToCompletion'}
+         need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status') in ('observed','unconfirmed'),'observation')
+         need(value.get('reason') is None or value['reason'] in observer.REASONS,'observation')
+         need(value.get('failurePhase') in (None,'guard','read','restore-consistency','config-consistency','bundle','graph','binding','cleanup'),'observation')
+         need(value.get('bindingScope')=='opened-fds-and-observed-fixed-entries-only' and integer(value.get('processingLimitSeconds'),30) and
+          integer(value.get('absoluteRestoreDeadlineMinutes'),60) and value.get('durationToCompletion')=='UNKNOWN' and
+          all(value.get(k) is False for k in ('existingGuardsReexecuted','clockResetAllowed','makeOrRecipeExecuted',
+          'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed')),'observation')
+         for key in ('restoreReceiptConsistent','restoredConfigStillMatches','bindingsStable'):
+          need(value.get(key) is None or type(value[key]) is bool,'observation')
+         need((value.get('configConsistency')=='matched' and value.get('restoredConfigStillMatches') is True) or
+          (value.get('configConsistency')=='unconfirmed' and value.get('restoredConfigStillMatches') is None),'observation')
+         files=value.get('files');need(type(files) is dict and set(files)<=({row[0] for row in observer.FIXED}|{'bundleSpec'}),'observation')
+         for row in files.values():
+          need(type(row) is dict and set(row)=={'status','reason','bytes','sha256','lineCount'} and row.get('status') in ('observed','unconfirmed') and
+           (row.get('reason') is None or row['reason'] in observer.REASONS),'observation')
+          for key in ('bytes','lineCount'):need(row[key] is None or (type(row[key]) is int and 0<=row[key]<=64*1024**2),'observation')
+          need(row['sha256'] is None or (type(row['sha256']) is str and len(row['sha256'])==64 and all(c in '0123456789abcdef' for c in row['sha256'])),'observation')
+         bundle=value['bundleSpec']
+         if bundle is not None:
+          need(type(bundle) is dict and set(bundle)=={'configuredBundleBinding','ownedStageBinding','binariesCount','extra_filesCount','movesCount','copiesCount'},'observation')
+          for key in ('configuredBundleBinding','ownedStageBinding'):need(bundle[key] is None or type(bundle[key]) is bool,'observation')
+          for key in ('binariesCount','extra_filesCount','movesCount','copiesCount'):need(bundle[key] is None or (type(bundle[key]) is int and 0<=bundle[key]<=1024**2),'observation')
+         cleanup=value['cleanupFailure']
+         if cleanup is not None:
+          need(type(cleanup) is dict and set(cleanup)=={'operation','kind','errno'} and cleanup['operation']=='close-owned-fds' and
+           cleanup['kind'] in ('os-error','exception') and (cleanup['errno'] is None or type(cleanup['errno']) is int),'observation')
+         if value['graph'] is not None:
+          try:observer._graph_safe(value['graph'])
+          except BaseException:need(False,'observation')
+         if value['status']=='observed':
+          need(value['graph'] is not None and value['graph']['status']=='observed' and value['bindingsStable'] is True and
+           value['restoreReceiptConsistent'] is True and value['cleanupFailure'] is None and value['reason'] is None and value['failurePhase'] is None,'observation')
+         else:need(value['graph'] is None,'observation')
+         return value
+
+        def stage_ok(row):
+         leader=row.get('leaderReap') if type(row) is dict else None
+         return (type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and
+          all(k in row and row[k] is None for k in ('reason','failurePhase','cleanupFailure')) and
+          row.get('groupCleanup')=='verified-gone' and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
+
+        def safe_error(error,phase):
+         return {'phase':phase if phase in ('helpers','restore','clock','environment','observe','binding','observation','cleanup','receipt') else 'unconfirmed',
+          'code':error.args[0] if type(error) is Unconfirmed and error.args and error.args[0] in ('binding','receipt','helper-pin','restore','clock','observation','cleanup') else 'driver-failed',
+          'kind':'os-error' if isinstance(error,OSError) else 'exception',
+          'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int else None}
+
+        def persisted_primary(task,project):
+         result={'status':'unconfirmed','failure':None,'observerStage':None}
+         try:
+          value=decode(read_fixed(Path(task)/'first-failure.json',65536))
+          need(type(value) is dict and type(value.get('stage')) is str and type(value.get('code')) is str and
+           type(value.get('elapsedSeconds')) in (int,float) and math.isfinite(value['elapsedSeconds']) and value['elapsedSeconds']>=0,'receipt')
+          failure=project(value);need(type(failure) is dict,'receipt')
+          observer=value['stage']=='firefox-target-observer'
+          if observer:failure['stage']='firefox-target-observer'
+          return {'status':'observed','failure':failure,'observerStage':observer}
+         except FileNotFoundError:result['status']='absent'
+         except BaseException:pass
+         return result
+
+        CHILD = r'''
+        import hashlib,json,os,stat,types
+        from pathlib import Path
+        PINS = {'firefox_target_graph.py':(10361,'ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a'),
+         'firefox_target_observer.py':(22432,'fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb')}
+        def ident(s):return tuple(getattr(s,k) for k in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
+        def load(helper,name):
+         size,sha=PINS[name];p=helper/name;s=p.lstat();d=helper.stat()
+         if p.resolve()!=p or not stat.S_ISREG(s.st_mode) or s.st_uid!=os.geteuid() or s.st_nlink!=1 or s.st_size!=size:raise ValueError()
+         fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0))
+         try:
+          if ident(s)!=ident(os.fstat(fd)):raise ValueError()
+          raw=b''
+          while len(raw)<=size:
+           part=os.read(fd,min(131072,size+1-len(raw)))
+           if not part:break
+           raw+=part
+          if len(raw)!=size or hashlib.sha256(raw).hexdigest()!=sha or ident(s)!=ident(os.fstat(fd)) or ident(s)!=ident(p.lstat()) or ident(d)!=ident(helper.stat()):raise ValueError()
+         finally:os.close(fd)
+         m=types.ModuleType(name[:-3]);exec(compile(raw,name,'exec'),m.__dict__);return m
+        result={'schema':1,'procedureCompleted':False,'observation':None,'firstFailure':None,'receiptWriteFailure':False}
+        phase='helpers'
+        try:
+         task=Path(os.environ['TASK_ROOT']);helper=Path(os.environ['FIREFOX_TARGET_HELPER'])
+         pure=load(helper,'firefox_target_graph.py');observer=load(helper,'firefox_target_observer.py')
+         phase='restore'
+         if os.environ.get('FIREFOX_RESTORE_VERIFIED')!='1':raise ValueError()
+         phase='observe';result['observation']=observer.observe_restored_task(task,pure.target_graph_proof,restore_guards_succeeded=True)
+         result['procedureCompleted']=True
+        except BaseException as error:
+         result['firstFailure']={'phase':phase,'kind':'os-error' if isinstance(error,OSError) else 'exception',
+          'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int else None}
+        finally:
+         try:
+          raw=json.dumps(result,sort_keys=True).encode()+b'\n'
+          if len(raw)>262144:raise ValueError()
+          fd=os.open(task/'firefox-target-observation.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
           try:
-              own=probe().read(os.getpid(),os.getpgrp())
-              require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
-              result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
-              phase='abi'
-              abi=prepare_abi(task,runner,env)
-              os.environ['FLOORP_CENSUS_ABI']=str(abi)
-              env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
-              env['FLOORP_CENSUS_ABI']=str(abi)
-              phase='identity-snapshot'
-              result['census']=snapshot(load_abi(abi))['measurement']
-              with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
-                  output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
-              if True:
-                  suites=[('checkpoint-tests',[sys.executable,'-m','unittest','-v',
-                      'test_checkpoint','test_process_census','test_guards','test_shim_failure_patch',
-                      'test_completion_preflight','test_unittest_receipt','test_qa_core',
-                      'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',
-                      'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
-                      'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
-                      'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
-                      'test_sdk_source','test_sdk_source_integration','test_consumer_time',
-                      'test_build_completion','test_build_completion_contract'],525,False),
-                      ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
-                      '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
-                  for test_stage,command,expected,recording in suites:
-                      phase=test_stage
-                      stage_error=None
-                      try:
-                          runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)
-                      except Failure as error:
-                          stage_error=error
-                      finally:
-                          result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)
-                      tests=result[test_stage]
-                      if stage_error is not None:
-                          if not (test_stage=='checkpoint-tests' and str(stage_error)=='nonzero-exit' and
-                              density_continuation(tests,runner.records,runner.failure,runner.monitor_failure,bool(runner.groups))):
-                              raise stage_error
-                          result['diagnosticContinuation']=True
-                          continue
-                      require(tests['complete'] and tests['status']=='passed' and
-                              tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')
-                      if test_stage=='checkpoint-tests':
-                          controls=tests.get('buildCompletionDensityDiagnostics')
-                          require(type(controls) is list and len(controls)==1 and density_input(controls[0]) and
-                              controls[0]['status']=='observed','checkpoint-density-observation')
-              phase='owned-monitor-control'
-              script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
-              runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
-              require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
-                          (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for row in runner.records),
-                      'monitor-preflight-no-complete-sample')
-              phase='density-phase-observation'
-              runner.run('density-phase-observation',[sys.executable,'-c',PHASE_PROBE],helper,env,360,phase_deadline_minutes=15)
-              try:
-                  observed=json.loads((task/'density-phase-observation.json').read_text())
-                  result['densityPhaseObservation']=phase_public(observed)
-              except BaseException:
-                  raise Failure('density-phase-evidence-invalid') from None
-              result['status']='failed' if result['diagnosticContinuation'] else 'passed'
-          except BaseException as error:
-              primary_error=error
-              result.update(status='failed',failurePhase=phase)
-              runner.fail('monitor-preflight','checkpoint-preflight-failure')
-              raise
+           offset=0
+           while offset<len(raw):
+            n=os.write(fd,raw[offset:])
+            if n<=0:raise OSError()
+            offset+=n
+          finally:os.close(fd)
+         except BaseException:result['receiptWriteFailure']=True
+         finally:print(json.dumps({'firefoxTargetObservation':result}),flush=True)
+        if not result['procedureCompleted'] or result['receiptWriteFailure']:raise SystemExit(1)
+        '''
+
+        def child_result(task,observer):
+         try:value=decode(read_fixed(Path(task)/'firefox-target-observation.json',262144))
+         except BaseException:
+          # Fixed child emits exactly one JSON marker; this fallback retains its safe
+          # primary if independent receipt writing failed. No arbitrary log lines escape.
+          raw=read_fixed(Path(task)/'firefox-target-observer.private.log',1048576)
+          marker=decode(raw.strip());need(type(marker) is dict and set(marker)=={'firefoxTargetObservation'},'receipt')
+          value=marker['firefoxTargetObservation']
+          # Fallback retains a safe primary, never qualifies an unavailable receipt.
+          if type(value) is dict:value={**value,'receiptWriteFailure':True}
+         need(type(value) is dict and set(value)=={'schema','procedureCompleted','observation','firstFailure','receiptWriteFailure'} and
+          integer(value.get('schema'),1) and type(value['procedureCompleted']) is bool and type(value['receiptWriteFailure']) is bool,'receipt')
+         if value['observation'] is not None:observation_safe(value['observation'],observer)
+         failure=value['firstFailure']
+         if failure is not None:
+          need(type(failure) is dict and set(failure)=={'phase','kind','errno'} and failure['phase'] in ('helpers','restore','observe') and
+           failure['kind'] in ('os-error','exception') and (failure['errno'] is None or type(failure['errno']) is int),'receipt')
+         return value
+
+        def run_driver(task,helper,pipeline_outcome,runner,make_env,bindings,load_abi,write_json,stage_projection,monitor_projection,runner_failure):
+         task=Path(task);helper=Path(helper)
+         result={'schema':1,'status':'failed','restoreGuardedVerified':False,'helperPinsVerified':False,'restoreReceiptHashBinding':None,
+          'observation':None,'childFailure':None,'driverFailure':None,'restoreFirstFailure':None,'observerFirstFailure':None,
+          'restoreMonitorFailure':None,'monitorFailure':None,'monitorFailureObserved':False,'monitorDiagnostics':[],
+          'restoreMonitorDiagnostics':[],'stages':[],'outstandingGroups':None,'evidenceWriteFailure':False,
+          'absoluteRestoreDeadlineMinutes':60,'observerProcessingSeconds':30,'clockResetAllowed':False,
+          'realBuildPerformed':False,'fullHostQualification':False,'minimalSufficientSuffixEstablished':False,'newArtifacts':0}
+         phase='helpers';observer=None;summary=None
+         try:
+          pure,observer=load_helpers(helper);result['helperPinsVerified']=True
+          phase='restore';summary,context,before=receipts(task)
+          result['restoreGuardedVerified']=restore_ok(summary,context,observer,pipeline_outcome)
+          need(result['restoreGuardedVerified'],'restore')
+          phase='clock';origin_ok(task)
+          phase='environment';load_abi(Path(os.environ['FLOORP_CENSUS_ABI']))
+          env=make_env(task)
+          env.update({key:os.environ[key] for key in (*bindings,'TASK_ROOT','FLOORP_CENSUS_ABI')})
+          env.update(PYTHONDONTWRITEBYTECODE='1',PYTHONWARNINGS='error::ResourceWarning',FIREFOX_RESTORE_VERIFIED='1',FIREFOX_TARGET_HELPER=str(helper))
+          env['PATH']+=':/usr/local/bin';env['TMPDIR']=str(task/'monitor-tmp')
+          phase='observe'
+          try:runner.run('firefox-target-observer',[os.sys.executable,'-c',CHILD],task,env,360,phase_deadline_minutes=60)
           finally:
-              result.update(stages=runner.records,monitorFailure=runner.monitor_failure,
-                            monitorDiagnostics=runner.monitor_diagnostics,firstFailure=runner.failure)
-              evidence_error=False
-              try:
-                  write_json(task/'monitor-preflight.json',result)
-              except OSError:
-                  evidence_error=True
-                  runner.fail('preflight-evidence','checkpoint-preflight-evidence-write')
-                  result.update(status='failed',evidenceWriteFailure=True,firstFailure=runner.failure)
-              print(json.dumps({'monitorPreflight':result}),flush=True)
-              if evidence_error and primary_error is None:
-                  require(False,'checkpoint-preflight-evidence-write')
-          PYCODE
-      - name: Fetch only the immutable upstream serializer source
-        timeout-minutes: 3
-        env:
-          PROFILE_SOURCE_READ_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          "$TASK_PYTHON" - <<'PYCODE'
-          import hashlib,json,os,pathlib,time,urllib.request
-          from urllib.error import HTTPError,URLError
-
-          task=pathlib.Path(os.environ['TASK_ROOT'])
-          result={'schema':1,'status':'failed','runtimeRef':'7dd619742b25567e479eeda97ae071d10542ad0b',
-                  'bytes':None,'sha256':None,'officialContentsAPI':True,'tokenPublished':False}
-          class NoRedirect(urllib.request.HTTPRedirectHandler):
-              def redirect_request(self,*args,**kwargs):
-                  raise RuntimeError('redirect-rejected')
+           try:
+            child=child_result(task,observer);result['observation']=child['observation'];result['childFailure']=child['firstFailure']
+            need(child['procedureCompleted'] and not child['receiptWriteFailure'] and child['firstFailure'] is None,'observation')
+           except BaseException as error:
+            result['driverFailure']=safe_error(error,'observation')
+          need(result['driverFailure'] is None,'observation')
           try:
-              started=time.monotonic()
-              url=('https://api.github.com/repos/Floorp-Projects/Floorp-Runtime/contents/'
-                   'testing/mozbase/mozsystemmonitor/mozsystemmonitor/resourcemonitor.py'
-                   '?ref=7dd619742b25567e479eeda97ae071d10542ad0b')
-              request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['PROFILE_SOURCE_READ_TOKEN'],
-                  'Accept':'application/vnd.github.raw+json','X-GitHub-Api-Version':'2022-11-28'})
-              with urllib.request.build_opener(NoRedirect).open(request,timeout=30) as response:
-                  if response.status!=200:raise RuntimeError('status')
-                  raw=response.read(1024**2+1)
-              if time.monotonic()-started>90 or len(raw)!=126050:raise RuntimeError('size-or-deadline')
-              sha=hashlib.sha256(raw).hexdigest()
-              if sha!='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf':raise RuntimeError('hash')
-              destination=task/'profile-serializer-source'
-              destination.mkdir(mode=0o700,exist_ok=False)
-              with (destination/'resourcemonitor.py').open('xb') as output:
-                  os.fchmod(output.fileno(),0o600);output.write(raw)
-              result.update(status='passed',bytes=len(raw),sha256=sha)
+           phase='clock';origin_ok(task)
+           phase='binding';_,_,after=receipts(task)
+           phase='clock';origin_ok(task)
+           phase='binding';observation=observation_safe(result['observation'],observer)
+           result['restoreReceiptHashBinding']=receipt_binding(before,after,observation)
+           need(result['restoreReceiptHashBinding'] is True,'binding')
           except BaseException:
-              result['code']='fixed-profile-source-acquisition-failed'
-          finally:
-              try:
-                  receipt=task/'profile-serializer-source.json'
-                  receipt.write_text(json.dumps(result,sort_keys=True)+'\n');receipt.chmod(0o600)
-              except BaseException:
-                  result.update(status='failed',code='fixed-profile-source-evidence-write-failed')
-              finally:
-                  print(json.dumps({'upstreamSerializerSourceAcquisition':result}),flush=True)
-          if result['status']!='passed':raise SystemExit(1)
-          PYCODE
-      - name: Observe the actual serializer contract in an owned monitored stage
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          "$TASK_PYTHON" - <<'PYCODE'
-          def integer(value,expected):
-              return type(value) is int and value==expected
+           # The raw child receipt remains private. A parent binding/deadline failure
+           # must never publish that child's graph as a qualified guarded observation.
+           result['observation']=None
+           raise
+          phase='cleanup';need(runner.failure is None and runner.monitor_failure is None and not runner.groups and
+           len(runner.records)==1 and stage_ok(runner.records[0]),'cleanup')
+          phase='observation'
+          result['status']='observed' if observation['status']=='observed' else 'unconfirmed'
+         except BaseException as error:
+          if result['driverFailure'] is None:result['driverFailure']=safe_error(error,phase)
+         finally:
+          if type(summary) is dict:
+           result.update(restoreFirstFailure=runner_failure(summary.get('firstFailure')),
+            restoreMonitorFailure=monitor_projection(summary.get('monitorFailure')),
+            restoreMonitorDiagnostics=[monitor_projection(row) for row in summary.get('monitorDiagnostics',[])[-16:]] if type(summary.get('monitorDiagnostics')) is list else [])
+          result.update(observerFirstFailure=runner_failure(runner.failure),monitorFailure=monitor_projection(runner.monitor_failure),
+           monitorFailureObserved=runner.monitor_failure is not None,monitorDiagnostics=[monitor_projection(row) for row in runner.monitor_diagnostics[-16:]],
+           outstandingGroups=bool(runner.groups),stages=[{**stage_projection(row),'stage':'firefox-target-observer' if row.get('stage')=='firefox-target-observer' else 'other'} for row in runner.records])
+          try:write_json(task/'firefox-target-driver.json',result)
+          except BaseException:result.update(status='failed',evidenceWriteFailure=True)
+          finally:print(json.dumps({'firefoxTargetDriver':result}),flush=True)
+         return result
 
-          def contract_ok(value):
-              if type(value) is not dict:return False
-              fixed={'schema','status','qualification','runtimeRef','sourceSHA256','sourceBytes',
-                  'actualSerializerSourceVerified','serializerBackend','syntheticClockAndMarkers',
-                  'resourceSamplesCollected','workerStarted','realBuildPerformed','mozillaQualification',
-                  'fullBuildQualification','resourceQualification','bothFormatsObserved',
-                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure',
-                  'largeWholeRequested','largeWholeObserved'}
-              if set(value)!=fixed:return False
-              if not (integer(value.get('schema'),1) and integer(value.get('sourceBytes'),126050) and
-                  value.get('status')=='observed-both-formats' and
-                  value.get('qualification')=='synthetic-serializer-contract-actual-source' and
-                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
-                  value.get('sourceSHA256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
-                  value.get('serializerBackend')=='upstream-PsutilStub' and
-                  all(value.get(k) is True for k in ('actualSerializerSourceVerified','syntheticClockAndMarkers',
-                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated',
-                      'largeWholeRequested','largeWholeObserved')) and
-                  all(value.get(k) is False for k in ('resourceSamplesCollected','workerStarted','realBuildPerformed',
-                      'mozillaQualification','fullBuildQualification','resourceQualification')) and
-                  value.get('firstFailure') is None and value.get('receiptWriteFailure') is None):return False
-              cases=value.get('cases')
-              if type(cases) is not list or len(cases)!=9:return False
-              expected=[(f,c,False) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
-              expected += [('whole-profile',c,True) for c in ('positive','no-end','truncated')]
-              for row,(profile_format,control,large) in zip(cases,expected):
-                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied','largeProfile','inputBytes'}:return False
-                  if row.get('format')!=profile_format or row.get('control')!=control or row.get('expectationSatisfied') is not True:return False
-                  if row.get('largeProfile') is not large or type(row.get('inputBytes')) is not int:return False
-                  if not 0 < row['inputBytes'] <= 2*1024**3 or (large and row['inputBytes'] <= 16*1024**2):return False
-                  cleanup=row.get('cleanup')
-                  keys={'streamClosed','parentPipeClosed','childPipeClosed','processClosed','workerNeverStarted','failures'}
-                  if type(cleanup) is not dict or set(cleanup)!=keys or cleanup.get('failures')!=[]:return False
-                  if not all(cleanup.get(k) is True for k in keys-{'failures'}):return False
-                  observed=row.get('observation')
-                  if type(observed) is not dict or set(observed)!={'status','profileFormat','completeCoverage','lastFinishedTier',
-                      'targets','finishedTargetCounts','provesBuildCompletion','provesCacheHit'}:return False
-                  if observed.get('provesBuildCompletion') is not False or observed.get('provesCacheHit') is not False:return False
-                  targets=observed.get('targets');counts=observed.get('finishedTargetCounts');last=observed.get('lastFinishedTier')
-                  if type(targets) is not dict or set(targets)!={'XUL','xpcshell'}:return False
-                  if type(counts) is not dict or set(counts)!={'SharedLib','Program'}:return False
-                  if type(last) is not dict or set(last)!={'tier','endTimeMs'}:return False
-                  for target in targets.values():
-                      if type(target) is not dict or set(target)!={'status','endTimeMs'}:return False
-                  if control=='positive':
-                      if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
-                          observed.get('completeCoverage') is True and last=={'tier':'compile','endTimeMs':40000.0} and
-                          targets=={'XUL':{'status':'observed-finished','endTimeMs':35000.0},
-                                   'xpcshell':{'status':'observed-finished','endTimeMs':30000.0}} and
-                          all(integer(counts[k],2) for k in counts)):return False
-                  else:
-                      if last!={'tier':None,'endTimeMs':None}:return False
-                      if any(t!={'status':'unconfirmed','endTimeMs':None} for t in targets.values()):return False
-                      if control=='no-end':
-                          if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
-                              observed.get('completeCoverage') is True and all(integer(counts[k],0) for k in counts)):return False
-                      elif not (observed.get('status')=='unconfirmed' and observed.get('profileFormat') is None and
-                          observed.get('completeCoverage') is False and all(counts[k] is None for k in counts)):return False
+        def driver_ok(value,observer):
+         try:
+          fields={'schema','status','restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding','observation',
+           'childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure',
+           'monitorFailureObserved','monitorDiagnostics','restoreMonitorDiagnostics','stages','outstandingGroups',
+           'evidenceWriteFailure','absoluteRestoreDeadlineMinutes','observerProcessingSeconds','clockResetAllowed',
+           'realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished','newArtifacts'}
+          need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status')=='observed' and
+           all(value.get(k) is True for k in ('restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding')) and
+           all(value.get(k) is False for k in ('monitorFailureObserved','outstandingGroups','evidenceWriteFailure','clockResetAllowed','realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished')) and
+           all(k in value and value[k] is None for k in ('childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure')) and
+           integer(value.get('absoluteRestoreDeadlineMinutes'),60) and integer(value.get('observerProcessingSeconds'),30) and integer(value.get('newArtifacts'),0),'observation')
+          observation_safe(value.get('observation'),observer);need(value['observation']['status']=='observed','observation')
+          rows=value.get('stages');need(type(rows) is list and len(rows)==1,'cleanup')
+          row=rows[0];leader=row.get('leaderReap') if type(row) is dict else None
+          need(type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and row.get('groupCleanup')=='verified-gone' and
+           row.get('cleanupFailurePresent') is False and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0),'cleanup')
+          return True
+         except BaseException:return False
+
+        import pathlib,sys
+        helper=(pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()
+        sys.path.insert(0,str(helper))
+        from support import Runner,clean_environment,write_json
+        from process_census import BINDING_KEYS,load_abi
+        from helper_import_preflight import stage_projection,monitor_projection,runner_failure
+        task=pathlib.Path(os.environ['TASK_ROOT']).resolve()
+        plan_raw=read_fixed(helper/'plan.json',65536)
+        need(hashlib.sha256(plan_raw).hexdigest()==PLAN_SHA,'restore')
+        plan=json.loads(plan_raw)
+        runner=Runner(task,float(read_fixed(task/'started',4096)),plan['limits'])
+        result=run_driver(task,helper,os.environ.get('GUARDED_RESTORE_OUTCOME'),runner,clean_environment,
+            BINDING_KEYS,load_abi,write_json,stage_projection,monitor_projection,runner_failure)
+        if result['status']!='observed':raise SystemExit(1)
+        PYCODE
+    - name: Verify guarded restore, graph-only observation and independent cleanup
+      if: always()
+      timeout-minutes: 2
+      env:
+        GUARDED_RESTORE_OUTCOME: ${{ steps.pipeline.outcome }}
+      shell: bash
+      run: |
+        if [[ ! -x "${TASK_PYTHON:-}" || -z "${TASK_ROOT:-}" ]]; then
+          echo '{"status":"unconfirmed","code":"initial-setup-incomplete"}'
+          exit 1
+        fi
+        "$TASK_PYTHON" - <<'PYCODE'
+        import json
+        try:
+            """Unintegrated fixed-purpose guarded-restore graph caller code; no acquisition."""
+            import hashlib,json,math,os,stat,time,types
+            from pathlib import Path
+            QA_COUNT = 529
+            SDK_SOURCE_SHA = 'ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688'
+            PLAN_SHA = '33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'
+            RUNTIME_SHA = '7dd619742b25567e479eeda97ae071d10542ad0b'
+            PINS = {
+             'firefox_target_graph.py': (10361,'ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a'),
+             'firefox_target_observer.py': (22432,'fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb')}
+            class Unconfirmed(Exception):pass
+            def need(value,code):
+             if not value:raise Unconfirmed(code)
+            def integer(value,expected):return type(value) is int and value==expected
+            def identity(value):
+             return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
+            def read_fixed(path,cap):
+             path=Path(path)
+             need(path.is_absolute() and path.resolve()==path,'binding')
+             directory=path.parent.stat();before=path.lstat()
+             need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid() and
+              stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')
+             fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))
+             try:
+              need(identity(before)==identity(os.fstat(fd)),'binding')
+              blocks=[];count=0
+              while True:
+               data=os.read(fd,min(131072,cap-count+1))
+               if not data:break
+               blocks.append(data);count+=len(data);need(count<=cap,'binding')
+              need(count==before.st_size and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and
+               identity(directory)==identity(path.parent.stat()),'binding')
+              return b''.join(blocks)
+             finally:os.close(fd)
+            def decode(raw):
+             def pairs(items):
+              out={}
+              for key,value in items:
+               need(key not in out,'receipt');out[key]=value
+              return out
+             return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:need(False,'receipt'))
+            def load_helpers(helper):
+             helper=Path(helper)
+             raw={}
+             for name,(size,sha) in PINS.items():
+              data=read_fixed(helper/name,size)
+              need(len(data)==size and hashlib.sha256(data).hexdigest()==sha,'helper-pin')
+              raw[name]=data
+             modules=[]
+             for name in PINS:
+              module=types.ModuleType(name[:-3])
+              # Execute the verified bytes, rather than reopening a pathname during import.
+              exec(compile(raw[name],name,'exec'),module.__dict__)
+              modules.append(module)
+             return tuple(modules)
+            def preflight_ok(value):
+             if type(value) is not dict or value.get('status')!='passed' or not all(k in value and value[k] is None for k in ('firstFailure','monitorFailure')):return False
+             for label,count in (('checkpoint-tests',QA_COUNT),('failure-recording-tests',14)):
+              row=value.get(label)
+              if not (type(count) is int and type(row) is dict and row.get('complete') is True and row.get('status')=='passed' and
+               integer(row.get('total'),count) and all(integer(row.get(key),0) for key in ('failures','errors','skipped'))):return False
+             return True
+            def sdk_ok(value):
+             if type(value) is not dict:return False
+             sdk=value.get('sdk');acquired=sdk.get('acquisitionSource') if type(sdk) is dict else None
+             if type(sdk) is not dict or type(acquired) is not dict:return False
+             return (value.get('planSHA256')==PLAN_SHA and 'sdkEvidenceError' not in value and
+              integer(sdk.get('artifact'),12182302735) and integer(sdk.get('sourceRun'),39244172146) and integer(sdk.get('attempt'),1) and
+              sdk.get('zipSHA256')=='c2b125f6cba2e98aa6515d772b2300e458be8cc4236bf33028cd633ceb6624ee' and
+              sdk.get('tarSHA256')=='a190b3eee16abf546611a18c033c09ecc9e6bbb9b32ad83bb2c68f772ef95b6b' and
+              sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
+              sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
+              set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
+              acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and acquired.get('sourceSHA256')==SDK_SOURCE_SHA and
+              type(SDK_SOURCE_SHA) is str and len(SDK_SOURCE_SHA)==64 and acquired.get('baselinePlanSHA256')==PLAN_SHA and
+              integer(acquired.get('producerJob'),118032017226) and type(acquired.get('uncompressedTar')) is dict and
+              set(acquired['uncompressedTar'])=={'bytes','sha256'} and integer(acquired['uncompressedTar'].get('bytes'),760518144) and
+              acquired['uncompressedTar'].get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
+            def restore_ok(value,context,observer,pipeline_outcome):
+             try:
+              need(pipeline_outcome=='success','restore')
+              observer._restore_consistent(value,context)
+              need(value.get('qualification')=='verified-origin-checkpoint-restore-only' and value.get('checkpointRole')=='consumer' and
+               all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and integer(value.get('newArtifacts'),0) and
+               'executionTimeBudget' not in value and 'mozilla' not in value and value.get('mozillaFirst') is not True and
+               preflight_ok(value.get('monitorPreflight')) and sdk_ok(value) and
+               observer._same_json(value.get('checkpointReplayContext'),context) and type(value.get('harness')) is dict and
+               type(value.get('toolchains')) is list and len(value['toolchains'])==11,'restore')
               return True
-
-          def source_ok(value):
-              return (type(value) is dict and set(value)=={'schema','status','runtimeRef','bytes','sha256','officialContentsAPI','tokenPublished'} and
-                  integer(value.get('schema'),1) and integer(value.get('bytes'),126050) and value.get('status')=='passed' and
-                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
-                  value.get('sha256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
-                  value.get('officialContentsAPI') is True and value.get('tokenPublished') is False)
-
-          import json,os,pathlib,sys
-          helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
-          sys.path.insert(0,str(helper))
-          from support import Runner,clean_environment,require,write_json
-          from process_census import BINDING_KEYS,load_abi
-          from helper_import_preflight import stage_projection,monitor_projection,runner_failure
-          from build_completion_contract import safe_error
-
-          task=pathlib.Path(os.environ['TASK_ROOT']).resolve()
-          plan=json.loads((helper/'plan.json').read_text())
-          runner=Runner(task,float((task/'started').read_text()),plan['limits'])
-          result={'schema':1,'status':'failed','contractVerified':False,'firstFailure':None,'driverFailure':None,
-                  'monitorFailure':None,'monitorFailureObserved':False,'monitorDiagnostics':[],
-                  'stages':[],'outstandingGroups':None,'evidenceWriteFailure':False}
-          phase='source'
-          try:
-              require(source_ok(json.loads((task/'profile-serializer-source.json').read_text())),'contract-source-hash')
-              phase='snapshot'
-              load_abi(pathlib.Path(os.environ['FLOORP_CENSUS_ABI']))
-              env=clean_environment(task)
-              env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT','FLOORP_CENSUS_ABI')})
-              env.update(PYTHONDONTWRITEBYTECODE='1',PYTHONWARNINGS='error::ResourceWarning')
-              env['PATH']+=':/usr/local/bin';env['TMPDIR']=str(task/'monitor-tmp')
-              phase='serializer'
-              runner.run('build-completion-contract',[sys.executable,str(helper/'build_completion_contract.py'),
-                  '--runtime-profile-source',str(task/'profile-serializer-source/resourcemonitor.py'),
-                  '--task',str(task/'build-completion-contract-probe'),'--large-whole'],task,env,360,phase_deadline_minutes=15)
-              phase='observation'
-              value=json.loads((task/'build-completion-contract-probe/build-completion-contract.json').read_text())
-              result['contractVerified']=contract_ok(value)
-              require(result['contractVerified'],'contract-observation')
-              phase='cleanup'
-              require(runner.failure is None and runner.monitor_failure is None and not runner.groups and len(runner.records)==1 and
-                  all(row['exitCode']==0 and row['groupCleanup']=='verified-gone' and row['leaderReap']=={'status':'reaped','exitCode':0} and
-                  row['cleanupFailure'] is None for row in runner.records),'contract-cleanup')
-              result['status']='passed'
-          except BaseException as error:
-              result['driverFailure']=safe_error(error,phase)
-              runner.fail('build-completion-contract','build-completion-contract-driver-failed')
-          finally:
-              result.update(firstFailure=runner_failure(runner.failure),monitorFailure=monitor_projection(runner.monitor_failure),
-                  monitorFailureObserved=runner.monitor_failure is not None,
-                  monitorDiagnostics=[monitor_projection(row) for row in runner.monitor_diagnostics[-16:]],
-                  outstandingGroups=bool(runner.groups),
-                  stages=[{**stage_projection(row),'stage':'build-completion-contract' if row.get('stage')=='build-completion-contract' else 'other'}
-                          for row in runner.records])
-              try:
-                  write_json(task/'build-completion-contract-driver.json',result)
-              except BaseException:
-                  result.update(status='failed',evidenceWriteFailure=True)
-                  runner.fail('build-completion-contract','contract-receipt-write')
-                  result['firstFailure']=runner_failure(runner.failure)
-              finally:
-                  print(json.dumps({'buildCompletionContractDriver':result}),flush=True)
-          if result['status']!='passed':raise SystemExit(1)
-          PYCODE
-      - name: Verify SDKless serializer proof and independent cleanup
-        if: always()
-        timeout-minutes: 2
-        shell: bash
-        run: |
-          if [[ ! -x "${TASK_PYTHON:-}" || -z "${TASK_ROOT:-}" ]]; then
-            echo '{"status":"failed","code":"initial-setup-incomplete"}'
-            exit 1
-          fi
-          "$TASK_PYTHON" - <<'PYCODE'
-          def integer(value,expected):
-              return type(value) is int and value==expected
-
-          def contract_ok(value):
-              if type(value) is not dict:return False
-              fixed={'schema','status','qualification','runtimeRef','sourceSHA256','sourceBytes',
-                  'actualSerializerSourceVerified','serializerBackend','syntheticClockAndMarkers',
-                  'resourceSamplesCollected','workerStarted','realBuildPerformed','mozillaQualification',
-                  'fullBuildQualification','resourceQualification','bothFormatsObserved',
-                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure',
-                  'largeWholeRequested','largeWholeObserved'}
-              if set(value)!=fixed:return False
-              if not (integer(value.get('schema'),1) and integer(value.get('sourceBytes'),126050) and
-                  value.get('status')=='observed-both-formats' and
-                  value.get('qualification')=='synthetic-serializer-contract-actual-source' and
-                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
-                  value.get('sourceSHA256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
-                  value.get('serializerBackend')=='upstream-PsutilStub' and
-                  all(value.get(k) is True for k in ('actualSerializerSourceVerified','syntheticClockAndMarkers',
-                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated',
-                      'largeWholeRequested','largeWholeObserved')) and
-                  all(value.get(k) is False for k in ('resourceSamplesCollected','workerStarted','realBuildPerformed',
-                      'mozillaQualification','fullBuildQualification','resourceQualification')) and
-                  value.get('firstFailure') is None and value.get('receiptWriteFailure') is None):return False
-              cases=value.get('cases')
-              if type(cases) is not list or len(cases)!=9:return False
-              expected=[(f,c,False) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
-              expected += [('whole-profile',c,True) for c in ('positive','no-end','truncated')]
-              for row,(profile_format,control,large) in zip(cases,expected):
-                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied','largeProfile','inputBytes'}:return False
-                  if row.get('format')!=profile_format or row.get('control')!=control or row.get('expectationSatisfied') is not True:return False
-                  if row.get('largeProfile') is not large or type(row.get('inputBytes')) is not int:return False
-                  if not 0 < row['inputBytes'] <= 2*1024**3 or (large and row['inputBytes'] <= 16*1024**2):return False
-                  cleanup=row.get('cleanup')
-                  keys={'streamClosed','parentPipeClosed','childPipeClosed','processClosed','workerNeverStarted','failures'}
-                  if type(cleanup) is not dict or set(cleanup)!=keys or cleanup.get('failures')!=[]:return False
-                  if not all(cleanup.get(k) is True for k in keys-{'failures'}):return False
-                  observed=row.get('observation')
-                  if type(observed) is not dict or set(observed)!={'status','profileFormat','completeCoverage','lastFinishedTier',
-                      'targets','finishedTargetCounts','provesBuildCompletion','provesCacheHit'}:return False
-                  if observed.get('provesBuildCompletion') is not False or observed.get('provesCacheHit') is not False:return False
-                  targets=observed.get('targets');counts=observed.get('finishedTargetCounts');last=observed.get('lastFinishedTier')
-                  if type(targets) is not dict or set(targets)!={'XUL','xpcshell'}:return False
-                  if type(counts) is not dict or set(counts)!={'SharedLib','Program'}:return False
-                  if type(last) is not dict or set(last)!={'tier','endTimeMs'}:return False
-                  for target in targets.values():
-                      if type(target) is not dict or set(target)!={'status','endTimeMs'}:return False
-                  if control=='positive':
-                      if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
-                          observed.get('completeCoverage') is True and last=={'tier':'compile','endTimeMs':40000.0} and
-                          targets=={'XUL':{'status':'observed-finished','endTimeMs':35000.0},
-                                   'xpcshell':{'status':'observed-finished','endTimeMs':30000.0}} and
-                          all(integer(counts[k],2) for k in counts)):return False
-                  else:
-                      if last!={'tier':None,'endTimeMs':None}:return False
-                      if any(t!={'status':'unconfirmed','endTimeMs':None} for t in targets.values()):return False
-                      if control=='no-end':
-                          if not (observed.get('status')=='observed' and observed.get('profileFormat')==profile_format and
-                              observed.get('completeCoverage') is True and all(integer(counts[k],0) for k in counts)):return False
-                      elif not (observed.get('status')=='unconfirmed' and observed.get('profileFormat') is None and
-                          observed.get('completeCoverage') is False and all(counts[k] is None for k in counts)):return False
+             except BaseException:return False
+            def origin_ok(task,now=None):
+             value=float(read_fixed(Path(task)/'started-monotonic',4096));now=time.monotonic() if now is None else now
+             need(math.isfinite(value) and value<=now<value+3600,'clock')
+             return value
+            def receipts(task):
+             raw={name:read_fixed(Path(task)/name,2*1024**2 if name!='started-monotonic' else 4096)
+              for name in ('summary.json','checkpoint-replay-context.json','started-monotonic')}
+             return decode(raw['summary.json']),decode(raw['checkpoint-replay-context.json']),{
+              label:hashlib.sha256(raw[name]).hexdigest() for label,name in
+              (('summary','summary.json'),('context','checkpoint-replay-context.json'),('clock','started-monotonic'))}
+            def receipt_binding(before,after,observation):
+             if before!=after:return False
+             rows=observation['files']
+             values=[rows.get(label,{}).get('sha256') for label in before]
+             if any(value is None for value in values):return None
+             return all(value==sha for value,sha in zip(values,before.values()))
+            def observation_safe(value,observer):
+             fields={'schema','status','reason','failurePhase','files','graph','restoreReceiptConsistent','restoredConfigStillMatches',
+              'configConsistency','bindingsStable','bindingScope','bundleSpec','existingGuardsReexecuted','cleanupFailure',
+              'processingLimitSeconds','absoluteRestoreDeadlineMinutes','clockResetAllowed','makeOrRecipeExecuted',
+              'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed','durationToCompletion'}
+             need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status') in ('observed','unconfirmed'),'observation')
+             need(value.get('reason') is None or value['reason'] in observer.REASONS,'observation')
+             need(value.get('failurePhase') in (None,'guard','read','restore-consistency','config-consistency','bundle','graph','binding','cleanup'),'observation')
+             need(value.get('bindingScope')=='opened-fds-and-observed-fixed-entries-only' and integer(value.get('processingLimitSeconds'),30) and
+              integer(value.get('absoluteRestoreDeadlineMinutes'),60) and value.get('durationToCompletion')=='UNKNOWN' and
+              all(value.get(k) is False for k in ('existingGuardsReexecuted','clockResetAllowed','makeOrRecipeExecuted',
+              'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed')),'observation')
+             for key in ('restoreReceiptConsistent','restoredConfigStillMatches','bindingsStable'):
+              need(value.get(key) is None or type(value[key]) is bool,'observation')
+             need((value.get('configConsistency')=='matched' and value.get('restoredConfigStillMatches') is True) or
+              (value.get('configConsistency')=='unconfirmed' and value.get('restoredConfigStillMatches') is None),'observation')
+             files=value.get('files');need(type(files) is dict and set(files)<=({row[0] for row in observer.FIXED}|{'bundleSpec'}),'observation')
+             for row in files.values():
+              need(type(row) is dict and set(row)=={'status','reason','bytes','sha256','lineCount'} and row.get('status') in ('observed','unconfirmed') and
+               (row.get('reason') is None or row['reason'] in observer.REASONS),'observation')
+              for key in ('bytes','lineCount'):need(row[key] is None or (type(row[key]) is int and 0<=row[key]<=64*1024**2),'observation')
+              need(row['sha256'] is None or (type(row['sha256']) is str and len(row['sha256'])==64 and all(c in '0123456789abcdef' for c in row['sha256'])),'observation')
+             bundle=value['bundleSpec']
+             if bundle is not None:
+              need(type(bundle) is dict and set(bundle)=={'configuredBundleBinding','ownedStageBinding','binariesCount','extra_filesCount','movesCount','copiesCount'},'observation')
+              for key in ('configuredBundleBinding','ownedStageBinding'):need(bundle[key] is None or type(bundle[key]) is bool,'observation')
+              for key in ('binariesCount','extra_filesCount','movesCount','copiesCount'):need(bundle[key] is None or (type(bundle[key]) is int and 0<=bundle[key]<=1024**2),'observation')
+             cleanup=value['cleanupFailure']
+             if cleanup is not None:
+              need(type(cleanup) is dict and set(cleanup)=={'operation','kind','errno'} and cleanup['operation']=='close-owned-fds' and
+               cleanup['kind'] in ('os-error','exception') and (cleanup['errno'] is None or type(cleanup['errno']) is int),'observation')
+             if value['graph'] is not None:
+              try:observer._graph_safe(value['graph'])
+              except BaseException:need(False,'observation')
+             if value['status']=='observed':
+              need(value['graph'] is not None and value['graph']['status']=='observed' and value['bindingsStable'] is True and
+               value['restoreReceiptConsistent'] is True and value['cleanupFailure'] is None and value['reason'] is None and value['failurePhase'] is None,'observation')
+             else:need(value['graph'] is None,'observation')
+             return value
+            def stage_ok(row):
+             leader=row.get('leaderReap') if type(row) is dict else None
+             return (type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and
+              all(k in row and row[k] is None for k in ('reason','failurePhase','cleanupFailure')) and
+              row.get('groupCleanup')=='verified-gone' and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
+            def safe_error(error,phase):
+             return {'phase':phase if phase in ('helpers','restore','clock','environment','observe','binding','observation','cleanup','receipt') else 'unconfirmed',
+              'code':error.args[0] if type(error) is Unconfirmed and error.args and error.args[0] in ('binding','receipt','helper-pin','restore','clock','observation','cleanup') else 'driver-failed',
+              'kind':'os-error' if isinstance(error,OSError) else 'exception',
+              'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int else None}
+            def persisted_primary(task,project):
+             result={'status':'unconfirmed','failure':None,'observerStage':None}
+             try:
+              value=decode(read_fixed(Path(task)/'first-failure.json',65536))
+              need(type(value) is dict and type(value.get('stage')) is str and type(value.get('code')) is str and
+               type(value.get('elapsedSeconds')) in (int,float) and math.isfinite(value['elapsedSeconds']) and value['elapsedSeconds']>=0,'receipt')
+              failure=project(value);need(type(failure) is dict,'receipt')
+              observer=value['stage']=='firefox-target-observer'
+              if observer:failure['stage']='firefox-target-observer'
+              return {'status':'observed','failure':failure,'observerStage':observer}
+             except FileNotFoundError:result['status']='absent'
+             except BaseException:pass
+             return result
+            def driver_ok(value,observer):
+             try:
+              fields={'schema','status','restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding','observation',
+               'childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure',
+               'monitorFailureObserved','monitorDiagnostics','restoreMonitorDiagnostics','stages','outstandingGroups',
+               'evidenceWriteFailure','absoluteRestoreDeadlineMinutes','observerProcessingSeconds','clockResetAllowed',
+               'realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished','newArtifacts'}
+              need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status')=='observed' and
+               all(value.get(k) is True for k in ('restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding')) and
+               all(value.get(k) is False for k in ('monitorFailureObserved','outstandingGroups','evidenceWriteFailure','clockResetAllowed','realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished')) and
+               all(k in value and value[k] is None for k in ('childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure')) and
+               integer(value.get('absoluteRestoreDeadlineMinutes'),60) and integer(value.get('observerProcessingSeconds'),30) and integer(value.get('newArtifacts'),0),'observation')
+              observation_safe(value.get('observation'),observer);need(value['observation']['status']=='observed','observation')
+              rows=value.get('stages');need(type(rows) is list and len(rows)==1,'cleanup')
+              row=rows[0];leader=row.get('leaderReap') if type(row) is dict else None
+              need(type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and row.get('groupCleanup')=='verified-gone' and
+               row.get('cleanupFailurePresent') is False and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0),'cleanup')
               return True
-
-          def source_ok(value):
-              return (type(value) is dict and set(value)=={'schema','status','runtimeRef','bytes','sha256','officialContentsAPI','tokenPublished'} and
-                  integer(value.get('schema'),1) and integer(value.get('bytes'),126050) and value.get('status')=='passed' and
-                  value.get('runtimeRef')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
-                  value.get('sha256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
-                  value.get('officialContentsAPI') is True and value.get('tokenPublished') is False)
-
-          import json,os,pathlib
-
-          task=pathlib.Path(os.environ['TASK_ROOT'])
-          def read(name):
-              try:return json.loads((task/name).read_text())
-              except BaseException:return None
-
-          def phase_public(value):
-              import math
-              from unittest_receipt import density_public
-              fields={'schema','scope','parserSHA256','instrumentedFunctionSHA256','densityObservation',
-                  'marks','lastReachedBoundary','secondPassRowsEntered','realBuildPerformed','runtimeContext'}
-              if type(value) is not dict or set(value)!=fields:raise ValueError('phase-shape')
-              if not (type(value['schema']) is int and value['schema']==1 and
-                  value['scope']=='same-controlled-input-phase-observation' and
-                  value['parserSHA256']=='37c17b48e57d910108996878e35445e46405b8afec0a3b20f3eb810db625af83' and
-                  value['instrumentedFunctionSHA256']=='db374c6398ee0bbf4dc6a7459442a274aef95fa8006d68591b700bdb7b403041' and
-                  value['realBuildPerformed'] is False):raise ValueError('phase-binding')
-              context=value['runtimeContext']
-              if not (type(context) is dict and set(context)=={'pythonVersion','jsonScanner'} and
-                  type(context['pythonVersion']) is list and len(context['pythonVersion'])==3 and
-                  all(type(item) is int and 0<=item<=999 for item in context['pythonVersion']) and
-                  type(context['jsonScanner']) is str and context['jsonScanner'] in ('c','other')):
-                  raise ValueError('phase-runtime-context')
-              density=density_public(value['densityObservation'])
-              if not (density['inputBytes']==195000385 and
-                  density['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7' and
-                  density['status'] in ('observed','unconfirmed') and
-                  density['reason']==('build-completion-profile-parsed' if density['status']=='observed' else 'build-completion-processing-limit')):
-                  raise ValueError('phase-input')
-              phases=('whole-document-validation','profile-schema','string-table','marker-columns')
-              marks=value['marks'];rows=value['secondPassRowsEntered']
-              if not (type(marks) is list and 1<=len(marks)<=4 and type(rows) is int and 0<=rows<=1000002):
-                  raise ValueError('phase-progress')
-              previous=0
-              for mark,name in zip(marks,phases):
-                  if not (type(mark) is dict and set(mark)=={'phase','elapsedSeconds'} and mark['phase']==name and
-                      type(mark['elapsedSeconds']) in (int,float) and math.isfinite(mark['elapsedSeconds']) and
-                      previous<=mark['elapsedSeconds']<=density['elapsedSeconds']):raise ValueError('phase-order')
-                  previous=mark['elapsedSeconds']
-              if value['lastReachedBoundary']!=phases[len(marks)-1]:raise ValueError('phase-last')
-              if len(marks)<4 and rows!=0:raise ValueError('phase-rows')
-              if density['status']=='observed' and (len(marks)!=4 or rows!=1000002):raise ValueError('phase-complete')
-              if density['status']=='unconfirmed' and density['elapsedSeconds']<30:raise ValueError('phase-deadline')
-              return value
-          
-          def phase_owned(value):
-              if type(value) is not dict or 'monitorFailure' not in value or value['monitorFailure'] is not None:return False
-              continued=value.get('diagnosticContinuation')
-              if type(continued) is not bool:return False
-              expected=(('census-abi-compile',0),('census-abi',0),('checkpoint-tests',1 if continued else 0),
-                  ('failure-recording-tests',0),('monitor-preflight',0),('density-phase-observation',0))
-              rows=value.get('stages')
-              if type(rows) is not list or len(rows)!=len(expected):return False
-              for row,(name,code) in zip(rows,expected):
-                  if not (type(row) is dict and row.get('stage')==name and type(row.get('exitCode')) is int and
-                      row['exitCode']==code and row.get('groupCleanup')=='verified-gone' and
-                      'cleanupFailure' in row and row['cleanupFailure'] is None and row.get('cleanupDiagnostics')==[] and
-                      type(row.get('leaderReap')) is dict and row['leaderReap'].get('status')=='reaped' and
-                      type(row['leaderReap'].get('exitCode')) is int and row['leaderReap']['exitCode']==code):return False
-              return True
-          def preflight_ok(value):
-              if (type(value) is not dict or value.get('status')!='passed' or
-                  'firstFailure' not in value or value['firstFailure'] is not None or
-                  'monitorFailure' not in value or value['monitorFailure'] is not None or
-                  value.get('diagnosticContinuation') is not False):return False
-              try:phase_public(value.get('densityPhaseObservation'))
-              except BaseException:return False
-              if not phase_owned(value):return False
-              for label,total in (('checkpoint-tests',525),('failure-recording-tests',14)):
-                  tests=value.get(label)
-                  if not (type(tests) is dict and tests.get('complete') is True and tests.get('status')=='passed' and
-                      integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
-                          ('failures','errors','skipped'))):return False
-              stages=value.get('stages')
-              return (type(stages) is list and len(stages)>=3 and all(type(row) is dict and integer(row.get('exitCode'),0) and
-                  row.get('groupCleanup')=='verified-gone' and type(row.get('leaderReap')) is dict and
-                  row['leaderReap'].get('status')=='reaped' and integer(row['leaderReap'].get('exitCode'),0) and
-                  'cleanupFailure' in row and row['cleanupFailure'] is None for row in stages))
-
-          def driver_ok(value):
-              if type(value) is not dict:return False
-              if not (integer(value.get('schema'),1) and value.get('status')=='passed' and value.get('contractVerified') is True and
-                  all(key in value and value[key] is None for key in ('firstFailure','driverFailure','monitorFailure')) and
-                  value.get('monitorFailureObserved') is False and value.get('outstandingGroups') is False and
-                  value.get('evidenceWriteFailure') is False):return False
-              stages=value.get('stages')
-              if type(stages) is not list or len(stages)!=1:return False
-              row=stages[0];leader=row.get('leaderReap') if type(row) is dict else None
-              return (type(row) is dict and row.get('stage')=='build-completion-contract' and integer(row.get('exitCode'),0) and
-                  row.get('groupCleanup')=='verified-gone' and row.get('cleanupFailurePresent') is False and
-                  type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
-
-          import sys
-          helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
-          sys.path.insert(0,str(helper))
-          from unittest_receipt import density_public
-          preflight_value=read('monitor-preflight.json')
-          phase_observation=None
-          try:phase_observation=phase_public(preflight_value.get('densityPhaseObservation'))
-          except BaseException:pass
-          phase_reaped=phase_owned(preflight_value)
-          density=None
-          try:
-              controls=preflight_value['checkpoint-tests']['buildCompletionDensityDiagnostics']
-              if type(controls) is list and len(controls)==1:
-                  candidate=density_public(controls[0])
-                  if (candidate['inputBytes']==195000385 and
-                      candidate['inputSHA256']=='0615e94cd59a7e5da8d98decc2b1a48f74a0415fedda610fd3b67c7cbebae8d7'):
-                      density=candidate
-          except BaseException:pass
-          recording=False
-          try:
-              tests=preflight_value['failure-recording-tests']
-              recording=(tests['complete'] is True and tests['status']=='passed' and integer(tests['total'],14) and
-                  all(integer(tests[k],0) for k in ('failures','errors','skipped')))
-          except BaseException:pass
-          first_preserved=False
-          try:
-              first=preflight_value['firstFailure'];file=task/'first-failure.json'
-              first_preserved=(not file.exists()) if first is None else read('first-failure.json')==first
-          except BaseException:pass
-          preflight=preflight_ok(preflight_value)
-          source=source_ok(read('profile-serializer-source.json'))
-          contract=contract_ok(read('build-completion-contract-probe/build-completion-contract.json'))
-          driver=driver_ok(read('build-completion-contract-driver.json'))
-          passed=(preflight and source and contract and driver and density is not None and
-              density['status']=='observed' and first_preserved and recording and phase_observation is not None and phase_reaped)
-          print(json.dumps({'status':'passed' if passed else 'failed','monitorPreflightVerified':preflight,
-              'officialPinnedSerializerSourceVerified':source,'bothSerializerFormatsAndNegativesVerified':contract,
-              'ownedStageReapedAndGroupGone':driver,'qualification':'synthetic-serializer-contract-actual-source',
-              'realBuildPerformed':False,'mozillaQualification':False,'resourceQualification':False,
-              'sdkAcquired':False,'checkpointDownloaded':False,'newArtifacts':0,
-              'largeWholeProfilesAndNegativesVerified':contract,
-              'densityPhaseObservation':phase_observation,'densityPhaseOwnedStageVerified':phase_reaped,
-              'densityObservation':density,'recordingSuiteVerified':recording,
-              'diagnosticContinuation':preflight_value.get('diagnosticContinuation') is True if type(preflight_value) is dict else False,
-              'firstFailurePreserved':first_preserved,
-              'serializerCases':read('build-completion-contract-probe/build-completion-contract.json')['cases'] if contract else []}),flush=True)
-          if not passed:raise SystemExit(1)
-          PYCODE
+             except BaseException:return False
+            import pathlib,sys
+            helper=(pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()
+            sys.path.insert(0,str(helper))
+            from helper_import_preflight import monitor_projection,runner_failure,stage_projection
+            # These receipts remain separate; observer errors never overwrite summary.json.
+            task=pathlib.Path(os.environ['TASK_ROOT']).resolve()
+            def read(name,cap):
+                try:return decode(read_fixed(task/name,cap))
+                except BaseException:return None
+            summary=read('summary.json',2*1024**2)
+            context=read('checkpoint-replay-context.json',2*1024**2)
+            preflight=read('monitor-preflight.json',2*1024**2)
+            driver=read('firefox-target-driver.json',262144)
+            persisted=persisted_primary(task,runner_failure)
+            helpers=False;restored=False;observed=False;observation_status='unconfirmed';safe_observation=None
+            try:
+                pure,observer=load_helpers(helper);helpers=True
+                restored=restore_ok(summary,context,observer,os.environ.get('GUARDED_RESTORE_OUTCOME'))
+                observed=driver_ok(driver,observer)
+                if type(driver) is dict and type(driver.get('observation')) is dict:
+                    safe_observation=observation_safe(driver['observation'],observer)
+                    observation_status=driver['observation']['status']
+            except BaseException:pass
+            preflight_verified=preflight_ok(preflight)
+            passed=helpers and preflight_verified and restored and observed
+            mapping=lambda v:v if type(v) is dict else {}
+            fixed_codes=('binding','receipt','helper-pin','restore','clock','observation','cleanup','driver-failed')
+            failure=mapping(mapping(driver).get('driverFailure'))
+            code=failure.get('code')
+            def diagnostics(value):
+                return [monitor_projection(row) for row in value[-16:]] if type(value) is list else []
+            safe_stages=[]
+            for row in mapping(driver).get('stages',[])[:4] if type(mapping(driver).get('stages')) is list else []:
+                if type(row) is not dict:continue
+                safe=stage_projection(row)
+                safe['stage']='firefox-target-observer' if row.get('stage')=='firefox-target-observer' else 'other'
+                safe['cleanupFailurePresent']=row.get('cleanupFailurePresent') if type(row.get('cleanupFailurePresent')) is bool else None
+                safe_stages.append(safe)
+            child=mapping(mapping(driver).get('childFailure'))
+            safe_child=None
+            if child:
+                safe_child={'phase':child.get('phase') if child.get('phase') in ('helpers','restore','observe') else 'unconfirmed',
+                    'kind':child.get('kind') if child.get('kind') in ('os-error','exception') else 'unconfirmed',
+                    'errno':child.get('errno') if type(child.get('errno')) is int else None}
+            observer_primary=runner_failure(mapping(driver).get('observerFirstFailure'))
+            if type(driver) is not dict and persisted['observerStage'] is True:
+                observer_primary=persisted['failure']
+            print(json.dumps({'status':'observed' if passed else 'unconfirmed',
+                'monitorPreflightVerified':preflight_verified,'guardedRestoreVerified':restored,
+                'fixedObserverHelpersVerified':helpers,'graphObservationVerified':observed,
+                'observationStatus':observation_status,'restoreSummaryAvailable':type(summary) is dict,
+                'observerReceiptAvailable':type(driver) is dict,
+                'restoreFirstFailure':runner_failure(mapping(summary).get('firstFailure')),
+                'restoreMonitorFailure':monitor_projection(mapping(summary).get('monitorFailure')),
+                'preflightFirstFailure':runner_failure(mapping(preflight).get('firstFailure')),
+                'preflightMonitorFailure':monitor_projection(mapping(preflight).get('monitorFailure')),
+                'observerFirstFailure':observer_primary,
+                'persistedFirstFailure':persisted['failure'],'persistedFirstFailureStatus':persisted['status'],
+                'observerMonitorFailure':monitor_projection(mapping(driver).get('monitorFailure')),
+                'restoreMonitorDiagnostics':diagnostics(mapping(summary).get('monitorDiagnostics')),
+                'observerMonitorDiagnostics':diagnostics(mapping(driver).get('monitorDiagnostics')),
+                'observerStages':safe_stages,'observerChildFailure':safe_child,
+                'observation':safe_observation,
+                'observerDriverFailureCode':code if code in fixed_codes else None,
+                'checkpointArtifact':12164479528,'checkpointOriginRun':39197008470,
+                'sdkSourceArtifact':12182302735,'sdkProducerJob':118032017226,
+                'qualification':'literal-generated-build-order-graph-observation',
+                'absoluteRestoreDeadlineMinutes':60,'observerProcessingSeconds':30,'clockResetAllowed':False,
+                'realBuildPerformed':False,'minimalSufficientSuffixEstablished':False,'fullHostQualification':False,
+                'durationToCompletion':'UNKNOWN','newArtifactUploads':0}),flush=True)
+            if not passed:raise SystemExit(1)
+        except SystemExit:
+            raise
+        except BaseException:
+            print(json.dumps({'status':'unconfirmed','code':'graph-final-evidence-unavailable',
+                'realBuildPerformed':False,'fullHostQualification':False,'newArtifactUploads':0}),flush=True)
+            raise SystemExit(1)
+        PYCODE
