@@ -390,14 +390,18 @@ jobs:
               except BaseException:return None
 
           def preflight_ok(value):
-              if type(value) is not dict or value.get('status')!='passed' or value.get('firstFailure') is not None or value.get('monitorFailure') is not None:return False
+              if (type(value) is not dict or value.get('status')!='passed' or
+                  'firstFailure' not in value or value['firstFailure'] is not None or
+                  'monitorFailure' not in value or value['monitorFailure'] is not None):return False
               for label,total in (('checkpoint-tests',491),('failure-recording-tests',14)):
                   tests=value.get(label)
                   if not (type(tests) is dict and tests.get('complete') is True and tests.get('status')=='passed' and
-                      integer(tests.get('total'),total) and integer(tests.get('skipped'),0)):return False
+                      integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
+                          ('failures','errors','skipped'))):return False
               stages=value.get('stages')
               return (type(stages) is list and len(stages)>=3 and all(type(row) is dict and integer(row.get('exitCode'),0) and
-                  row.get('groupCleanup')=='verified-gone' and row.get('leaderReap')=={'status':'reaped','exitCode':0} and
+                  row.get('groupCleanup')=='verified-gone' and type(row.get('leaderReap')) is dict and
+                  row['leaderReap'].get('status')=='reaped' and integer(row['leaderReap'].get('exitCode'),0) and
                   row.get('cleanupFailure') is None for row in stages))
 
           def driver_ok(value):
