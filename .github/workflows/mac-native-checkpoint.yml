@@ -1,8 +1,8 @@
 # SDKless fixed-upstream serializer contract; no real build or Mozilla qualification.
-name: Fixed upstream build completion serializer contract
+name: Bounded streaming build completion serializer contract
 'on':
   push:
-    branches: [codex/mac-native-build-completion-recovery49-20261019]
+    branches: [codex/mac-native-streaming-recovery50-20261019]
 permissions:
   contents: read
   actions: read
@@ -10,7 +10,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 73b5c6b71be98104bfaa8ba641602b603838d5d5
+  FLOORP_FIXTURE_SHA: de18c22f3a7e79eb2890f5e63ee6f466f574af98
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
           [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-build-completion-recovery49-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-streaming-recovery50-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -97,7 +97,7 @@ jobs:
                       'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
                       'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
                       'test_sdk_source','test_sdk_source_integration','test_consumer_time',
-                      'test_build_completion','test_build_completion_contract'],491,False),
+                      'test_build_completion','test_build_completion_contract'],514,False),
                       ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                       '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                   for test_stage,command,expected,recording in suites:
@@ -195,7 +195,8 @@ jobs:
                   'actualSerializerSourceVerified','serializerBackend','syntheticClockAndMarkers',
                   'resourceSamplesCollected','workerStarted','realBuildPerformed','mozillaQualification',
                   'fullBuildQualification','resourceQualification','bothFormatsObserved',
-                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure'}
+                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure',
+                  'largeWholeRequested','largeWholeObserved'}
               if set(value)!=fixed:return False
               if not (integer(value.get('schema'),1) and integer(value.get('sourceBytes'),126050) and
                   value.get('status')=='observed-both-formats' and
@@ -204,16 +205,20 @@ jobs:
                   value.get('sourceSHA256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
                   value.get('serializerBackend')=='upstream-PsutilStub' and
                   all(value.get(k) is True for k in ('actualSerializerSourceVerified','syntheticClockAndMarkers',
-                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated')) and
+                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated',
+                      'largeWholeRequested','largeWholeObserved')) and
                   all(value.get(k) is False for k in ('resourceSamplesCollected','workerStarted','realBuildPerformed',
                       'mozillaQualification','fullBuildQualification','resourceQualification')) and
                   value.get('firstFailure') is None and value.get('receiptWriteFailure') is None):return False
               cases=value.get('cases')
-              if type(cases) is not list or len(cases)!=6:return False
-              expected=[(f,c) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
-              for row,(profile_format,control) in zip(cases,expected):
-                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied'}:return False
+              if type(cases) is not list or len(cases)!=9:return False
+              expected=[(f,c,False) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
+              expected += [('whole-profile',c,True) for c in ('positive','no-end','truncated')]
+              for row,(profile_format,control,large) in zip(cases,expected):
+                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied','largeProfile','inputBytes'}:return False
                   if row.get('format')!=profile_format or row.get('control')!=control or row.get('expectationSatisfied') is not True:return False
+                  if row.get('largeProfile') is not large or type(row.get('inputBytes')) is not int:return False
+                  if not 0 < row['inputBytes'] <= 2*1024**3 or (large and row['inputBytes'] <= 16*1024**2):return False
                   cleanup=row.get('cleanup')
                   keys={'streamClosed','parentPipeClosed','childPipeClosed','processClosed','workerNeverStarted','failures'}
                   if type(cleanup) is not dict or set(cleanup)!=keys or cleanup.get('failures')!=[]:return False
@@ -277,7 +282,7 @@ jobs:
               phase='serializer'
               runner.run('build-completion-contract',[sys.executable,str(helper/'build_completion_contract.py'),
                   '--runtime-profile-source',str(task/'profile-serializer-source/resourcemonitor.py'),
-                  '--task',str(task/'build-completion-contract-probe')],task,env,360,phase_deadline_minutes=15)
+                  '--task',str(task/'build-completion-contract-probe'),'--large-whole'],task,env,360,phase_deadline_minutes=15)
               phase='observation'
               value=json.loads((task/'build-completion-contract-probe/build-completion-contract.json').read_text())
               result['contractVerified']=contract_ok(value)
@@ -326,7 +331,8 @@ jobs:
                   'actualSerializerSourceVerified','serializerBackend','syntheticClockAndMarkers',
                   'resourceSamplesCollected','workerStarted','realBuildPerformed','mozillaQualification',
                   'fullBuildQualification','resourceQualification','bothFormatsObserved',
-                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure'}
+                  'negativeInputsDidNotConfirmTargets','cases','firstFailure','taskCreated','receiptWriteFailure',
+                  'largeWholeRequested','largeWholeObserved'}
               if set(value)!=fixed:return False
               if not (integer(value.get('schema'),1) and integer(value.get('sourceBytes'),126050) and
                   value.get('status')=='observed-both-formats' and
@@ -335,16 +341,20 @@ jobs:
                   value.get('sourceSHA256')=='5f2f9572658fc19d342b5e56904ce110eeb258ff57c4e5d8614a8b0b5b7d1eaf' and
                   value.get('serializerBackend')=='upstream-PsutilStub' and
                   all(value.get(k) is True for k in ('actualSerializerSourceVerified','syntheticClockAndMarkers',
-                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated')) and
+                      'bothFormatsObserved','negativeInputsDidNotConfirmTargets','taskCreated',
+                      'largeWholeRequested','largeWholeObserved')) and
                   all(value.get(k) is False for k in ('resourceSamplesCollected','workerStarted','realBuildPerformed',
                       'mozillaQualification','fullBuildQualification','resourceQualification')) and
                   value.get('firstFailure') is None and value.get('receiptWriteFailure') is None):return False
               cases=value.get('cases')
-              if type(cases) is not list or len(cases)!=6:return False
-              expected=[(f,c) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
-              for row,(profile_format,control) in zip(cases,expected):
-                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied'}:return False
+              if type(cases) is not list or len(cases)!=9:return False
+              expected=[(f,c,False) for f in ('jsonl','whole-profile') for c in ('positive','no-end','truncated')]
+              expected += [('whole-profile',c,True) for c in ('positive','no-end','truncated')]
+              for row,(profile_format,control,large) in zip(cases,expected):
+                  if type(row) is not dict or set(row)!={'format','control','cleanup','observation','expectationSatisfied','largeProfile','inputBytes'}:return False
                   if row.get('format')!=profile_format or row.get('control')!=control or row.get('expectationSatisfied') is not True:return False
+                  if row.get('largeProfile') is not large or type(row.get('inputBytes')) is not int:return False
+                  if not 0 < row['inputBytes'] <= 2*1024**3 or (large and row['inputBytes'] <= 16*1024**2):return False
                   cleanup=row.get('cleanup')
                   keys={'streamClosed','parentPipeClosed','childPipeClosed','processClosed','workerNeverStarted','failures'}
                   if type(cleanup) is not dict or set(cleanup)!=keys or cleanup.get('failures')!=[]:return False
@@ -393,7 +403,7 @@ jobs:
               if (type(value) is not dict or value.get('status')!='passed' or
                   'firstFailure' not in value or value['firstFailure'] is not None or
                   'monitorFailure' not in value or value['monitorFailure'] is not None):return False
-              for label,total in (('checkpoint-tests',491),('failure-recording-tests',14)):
+              for label,total in (('checkpoint-tests',514),('failure-recording-tests',14)):
                   tests=value.get(label)
                   if not (type(tests) is dict and tests.get('complete') is True and tests.get('status')=='passed' and
                       integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
@@ -402,12 +412,12 @@ jobs:
               return (type(stages) is list and len(stages)>=3 and all(type(row) is dict and integer(row.get('exitCode'),0) and
                   row.get('groupCleanup')=='verified-gone' and type(row.get('leaderReap')) is dict and
                   row['leaderReap'].get('status')=='reaped' and integer(row['leaderReap'].get('exitCode'),0) and
-                  row.get('cleanupFailure') is None for row in stages))
+                  'cleanupFailure' in row and row['cleanupFailure'] is None for row in stages))
 
           def driver_ok(value):
               if type(value) is not dict:return False
               if not (integer(value.get('schema'),1) and value.get('status')=='passed' and value.get('contractVerified') is True and
-                  value.get('firstFailure') is None and value.get('driverFailure') is None and value.get('monitorFailure') is None and
+                  all(key in value and value[key] is None for key in ('firstFailure','driverFailure','monitorFailure')) and
                   value.get('monitorFailureObserved') is False and value.get('outstandingGroups') is False and
                   value.get('evidenceWriteFailure') is False):return False
               stages=value.get('stages')
@@ -426,6 +436,8 @@ jobs:
               'officialPinnedSerializerSourceVerified':source,'bothSerializerFormatsAndNegativesVerified':contract,
               'ownedStageReapedAndGroupGone':driver,'qualification':'synthetic-serializer-contract-actual-source',
               'realBuildPerformed':False,'mozillaQualification':False,'resourceQualification':False,
-              'sdkAcquired':False,'checkpointDownloaded':False,'newArtifacts':0}),flush=True)
+              'sdkAcquired':False,'checkpointDownloaded':False,'newArtifacts':0,
+              'largeWholeProfilesAndNegativesVerified':contract,
+              'serializerCases':read('build-completion-contract-probe/build-completion-contract.json')['cases'] if contract else []}),flush=True)
           if not passed:raise SystemExit(1)
           PYCODE
