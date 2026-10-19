@@ -1,7 +1,7 @@
 name: Short Intel helper import and contention controls
 'on':
   push:
-    branches: [codex/mac-native-helper-import-recovery43-20261019]
+    branches: [codex/mac-native-helper-import-recovery44-20261019]
 permissions:
   contents: read
   actions: read
@@ -9,7 +9,7 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 8135abdafa050694c32cf87dce680bd61816fb22
+  FLOORP_FIXTURE_SHA: 4337d51a228834f4b2cbee1f4ef0771eb45737a8
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
 jobs:
@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/codex/mac-native-helper-import-recovery43-20261019
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-helper-import-recovery44-20261019
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test '${{ github.event.created }}' = true
@@ -52,7 +52,7 @@ jobs:
         timeout-minutes: 16
         shell: bash
         run: |
-          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/completion_preflight.py --task "$TASK_ROOT" --expected-qa-tests 210 --expected-recording-tests 14
+          "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/completion_preflight.py --task "$TASK_ROOT" --expected-qa-tests 226 --expected-recording-tests 14
       - name: Compare fresh helper imports under bounded owned contention
         timeout-minutes: 5
         shell: bash
