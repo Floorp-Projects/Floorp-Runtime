@@ -1,8 +1,8 @@
-name: Guarded existing checkpoint Firefox target graph observation
+name: Prioritized restored Firefox targets and current Mozilla smoke
 'on':
   push:
     branches:
-    - codex/mac-native-firefox-graph-recovery56-20261019
+    - codex/mac-native-mozilla-target-recovery57-20261019
 permissions:
   contents: read
   actions: read
@@ -10,10 +10,12 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 5be48e693474744f8f87ba31aff3c591bb182bec
+  FLOORP_FIXTURE_SHA: 4e6d275a52619cdb06e4a0995d914d2931c0eb6d
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
   SDK_SOURCE_SHA256: ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688
+  TARGET_HELPER_SHA256: b9a5debecd559aed8550e3a5e5a102fdbb3646cb57e5cef94f2bf8e2e0658eb3
+  PIPELINE_SHA256: e0f750a8905ee49f32ed0cb4f5b78b3b56e6c3ac122ce85e780856db06368eb5
 jobs:
   consumer:
     name: checkpoint-consumer
@@ -23,20 +25,37 @@ jobs:
     - name: Bound the initial authorized execution
       timeout-minutes: 1
       shell: bash
-      run: |
-        set -euo pipefail
+      run: 'set -euo pipefail
+
         test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+
         [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
         [[ "$SDK_SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
-        test "$GITHUB_REF" = refs/heads/codex/mac-native-firefox-graph-recovery56-20261019
+
+        test "$GITHUB_REF" = refs/heads/codex/mac-native-mozilla-target-recovery57-20261019
+
         test "$GITHUB_EVENT_NAME" = push
+
         test "$GITHUB_RUN_ATTEMPT" = 1
-        test '${{ github.event.created }}' = true
-        test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+
+        test ''${{ github.event.created }}'' = true
+
+        test ''${{ github.event.before }}'' = 0000000000000000000000000000000000000000
+
         TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+
         test -x "$TASK_PYTHON"
+
         echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+
         echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-checkpoint" >> "$GITHUB_ENV"
+
+        [[ "$TARGET_HELPER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+
+        [[ "$PIPELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+
+        '
     - name: Checkout immutable reviewed fixture
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       with:
@@ -50,107 +69,59 @@ jobs:
       env:
         CHECKPOINT_READ_TOKEN: ${{ github.token }}
       shell: bash
-      run: |
-        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role consumer --task "$TASK_ROOT"
+      run: '"$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role consumer --task "$TASK_ROOT"
+
+        '
     - name: Verify actual native process monitor before acquisition
       timeout-minutes: 10
       shell: bash
-      run: |
-        "$TASK_PYTHON" - > "$TASK_ROOT/monitor-preflight-driver.private.log" 2>&1 <<'PYCODE'
-        import json,os,pathlib,re,sys
-        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
-        sys.path.insert(0,str(helper))
-        from support import Runner,clean_environment,require,write_json
-        from darwin_activity import probe
-        from unittest_receipt import receipt as unittest_receipt
-        from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
-        task=pathlib.Path(os.environ['TASK_ROOT'])
-        plan=json.loads((helper/'plan.json').read_text())
-        runner=Runner(task,float((task/'started').read_text()),plan['limits'])
-        env=clean_environment(task)
-        temporary=task/'monitor-tmp'
-        temporary.mkdir(mode=0o700)
-        env['TMPDIR']=str(temporary)
-        env['PYTHONDONTWRITEBYTECODE']='1'
-        env['PYTHONWARNINGS']='error::ResourceWarning'
-        env['PATH']+=':/usr/local/bin'
-        result={'status':'failed'}
-        primary_error=None
-        phase='self-probe'
-        try:
-            own=probe().read(os.getpid(),os.getpgrp())
-            require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
-            result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
-            phase='abi'
-            abi=prepare_abi(task,runner,env)
-            os.environ['FLOORP_CENSUS_ABI']=str(abi)
-            env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
-            env['FLOORP_CENSUS_ABI']=str(abi)
-            phase='identity-snapshot'
-            result['census']=snapshot(load_abi(abi))['measurement']
-            with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
-                output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
-            if True:
-                suites=[('checkpoint-tests',[sys.executable,'-m','unittest','-v',
-                    'test_checkpoint','test_process_census','test_guards','test_shim_failure_patch',
-                    'test_completion_preflight','test_unittest_receipt','test_qa_core',
-                    'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',
-                    'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
-                    'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
-                    'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
-                    'test_sdk_source','test_sdk_source_integration','test_consumer_time',
-                    'test_build_completion','test_build_completion_contract'],529,False),
-                    ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
-                    '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
-                for test_stage,command,expected,recording in suites:
-                    phase=test_stage
-                    try:
-                        runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)
-                    finally:
-                        result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)
-                    tests=result[test_stage]
-                    require(tests['complete'] and tests['status']=='passed' and
-                            tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')
-            phase='owned-monitor-control'
-            script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
-            runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
-            require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
-                        (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for row in runner.records),
-                    'monitor-preflight-no-complete-sample')
-            result['status']='passed'
-        except BaseException as error:
-            primary_error=error
-            result.update(status='failed',failurePhase=phase)
-            runner.fail('monitor-preflight','checkpoint-preflight-failure')
-            raise
-        finally:
-            result.update(stages=runner.records,monitorFailure=runner.monitor_failure,
-                          monitorDiagnostics=runner.monitor_diagnostics,firstFailure=runner.failure)
-            evidence_error=False
-            try:
-                write_json(task/'monitor-preflight.json',result)
-            except OSError:
-                evidence_error=True
-                runner.fail('preflight-evidence','checkpoint-preflight-evidence-write')
-                result.update(status='failed',evidenceWriteFailure=True,firstFailure=runner.failure)
-            print(json.dumps({'monitorPreflight':result}),flush=True)
-            if evidence_error and primary_error is None:
-                require(False,'checkpoint-preflight-evidence-write')
-        PYCODE
+      run: "\"$TASK_PYTHON\" - > \"$TASK_ROOT/monitor-preflight-driver.private.log\" 2>&1 <<'PYCODE'\nimport json,os,pathlib,re,sys\n\
+        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'\nsys.path.insert(0,str(helper))\n\
+        from support import Runner,clean_environment,require,write_json\nfrom darwin_activity import probe\nfrom\
+        \ unittest_receipt import receipt as unittest_receipt\nfrom process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot\n\
+        task=pathlib.Path(os.environ['TASK_ROOT'])\nplan=json.loads((helper/'plan.json').read_text())\nrunner=Runner(task,float((task/'started').read_text()),plan['limits'])\n\
+        env=clean_environment(task)\ntemporary=task/'monitor-tmp'\ntemporary.mkdir(mode=0o700)\nenv['TMPDIR']=str(temporary)\n\
+        env['PYTHONDONTWRITEBYTECODE']='1'\nenv['PYTHONWARNINGS']='error::ResourceWarning'\nenv['PATH']+=':/usr/local/bin'\n\
+        result={'status':'failed'}\nprimary_error=None\nphase='self-probe'\ntry:\n    own=probe().read(os.getpid(),os.getpgrp())\n\
+        \    require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')\n    result['self']={key:own[key]\
+        \ for key in ('status','rssMiB','cpuSeconds','state')}\n    phase='abi'\n    abi=prepare_abi(task,runner,env)\n\
+        \    os.environ['FLOORP_CENSUS_ABI']=str(abi)\n    env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})\n\
+        \    env['FLOORP_CENSUS_ABI']=str(abi)\n    phase='identity-snapshot'\n    result['census']=snapshot(load_abi(abi))['measurement']\n\
+        \    with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:\n        output.write('FLOORP_CENSUS_ABI='+str(abi)+'\\\
+        n')\n    if True:\n        suites=[('checkpoint-tests',[sys.executable,'-m','unittest','-v',\n         \
+        \   'test_checkpoint','test_process_census','test_guards','test_shim_failure_patch',\n            'test_completion_preflight','test_unittest_receipt','test_qa_core',\n\
+        \            'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',\n        \
+        \    'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',\n            'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',\n\
+        \            'test_mozilla_harness_receipt','test_mozilla_harness_smoke',\n            'test_sdk_source','test_sdk_source_integration','test_consumer_time',\n\
+        \            'test_build_completion','test_build_completion_contract','test_mozilla_target_build'],543,False),\n\
+        \            ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',\n            '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]\n\
+        \        for test_stage,command,expected,recording in suites:\n            phase=test_stage\n          \
+        \  try:\n                runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)\n     \
+        \       finally:\n                result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)\n\
+        \            tests=result[test_stage]\n            require(tests['complete'] and tests['status']=='passed'\
+        \ and\n                    tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')\n  \
+        \  phase='owned-monitor-control'\n    script=\"import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep\
+        \ 0.1'],check=True) for _ in range(20)]\"\n    runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)\n\
+        \    require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete')\
+        \ is True and\n                (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for\
+        \ row in runner.records),\n            'monitor-preflight-no-complete-sample')\n    result['status']='passed'\n\
+        except BaseException as error:\n    primary_error=error\n    result.update(status='failed',failurePhase=phase)\n\
+        \    runner.fail('monitor-preflight','checkpoint-preflight-failure')\n    raise\nfinally:\n    result.update(stages=runner.records,monitorFailure=runner.monitor_failure,\n\
+        \                  monitorDiagnostics=runner.monitor_diagnostics,firstFailure=runner.failure)\n    evidence_error=False\n\
+        \    try:\n        write_json(task/'monitor-preflight.json',result)\n    except OSError:\n        evidence_error=True\n\
+        \        runner.fail('preflight-evidence','checkpoint-preflight-evidence-write')\n        result.update(status='failed',evidenceWriteFailure=True,firstFailure=runner.failure)\n\
+        \    print(json.dumps({'monitorPreflight':result}),flush=True)\n    if evidence_error and primary_error\
+        \ is None:\n        require(False,'checkpoint-preflight-evidence-write')\nPYCODE\n"
     - name: Acquire the official unexpired renewed content-matched SDK
       timeout-minutes: 12
       env:
         SDK_READ_TOKEN: ${{ github.token }}
       shell: bash
-      run: |
-        "$TASK_PYTHON" - <<'PYCODE'
-        import hashlib,os,pathlib
-        path=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo/sdk_source.json'
-        raw=path.read_bytes()
-        if len(raw)>65536 or hashlib.sha256(raw).hexdigest()!=os.environ['SDK_SOURCE_SHA256']:
-            raise SystemExit('sdk-source-pin-mismatch')
-        PYCODE
-        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json --output "$TASK_ROOT/sdk-download"
+      run: "\"$TASK_PYTHON\" - <<'PYCODE'\nimport hashlib,os,pathlib\npath=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo/sdk_source.json'\n\
+        raw=path.read_bytes()\nif len(raw)>65536 or hashlib.sha256(raw).hexdigest()!=os.environ['SDK_SOURCE_SHA256']:\n\
+        \    raise SystemExit('sdk-source-pin-mismatch')\nPYCODE\n\"$TASK_PYTHON\" fixture/tools/qa/native-nonpgo/fetch_sdk.py\
+        \ --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json\
+        \ --output \"$TASK_ROOT/sdk-download\"\n"
     - name: Checkout immutable Runtime source
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       with:
@@ -173,645 +144,224 @@ jobs:
       env:
         CHECKPOINT_READ_TOKEN: ${{ github.token }}
       shell: bash
-      run: |
-        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py fetch --role consumer --task "$TASK_ROOT" --replay-origin
-    - name: Restore only the verified original checkpoint with all existing guards
+      run: '"$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py fetch --role consumer --task "$TASK_ROOT"
+        --replay-origin
+
+        '
+    - name: Restore guarded state and build six Firefox roots plus Faster resources, then run three Mozilla cases
       id: pipeline
       env:
         CHECKPOINT_BUILD_DATE: '20261019035607'
       shell: bash
-      run: |
-        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role consumer --replay-origin --restore-only --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json > "$TASK_ROOT/restore-pipeline.private.log" 2>&1
-    - name: Read the fixed generated graph in an owned monitored stage
-      env:
-        GUARDED_RESTORE_OUTCOME: ${{ steps.pipeline.outcome }}
-      shell: bash
-      run: |
-        "$TASK_PYTHON" - > "$TASK_ROOT/firefox-target-driver.private.log" 2>&1 <<'PYCODE'
-        """Unintegrated fixed-purpose guarded-restore graph caller code; no acquisition."""
-        import hashlib,json,math,os,stat,time,types
-        from pathlib import Path
-        QA_COUNT = 529
-        SDK_SOURCE_SHA = 'ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688'
-        PLAN_SHA = '33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'
-        RUNTIME_SHA = '7dd619742b25567e479eeda97ae071d10542ad0b'
-        PINS = {
-         'firefox_target_graph.py': (10361,'ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a'),
-         'firefox_target_observer.py': (22432,'fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb')}
-        class Unconfirmed(Exception):pass
+      run: '"$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture
+        "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --checkpoint-role
+        consumer --replay-origin --mozilla-targeted --consumer-shared-deadline --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json
+        > "$TASK_ROOT/pipeline.private.log"
 
-        def need(value,code):
-         if not value:raise Unconfirmed(code)
-
-        def integer(value,expected):return type(value) is int and value==expected
-
-        def identity(value):
-         return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
-
-        def read_fixed(path,cap):
-         path=Path(path)
-         need(path.is_absolute() and path.resolve()==path,'binding')
-         directory=path.parent.stat();before=path.lstat()
-         need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid() and
-          stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')
-         fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))
-         try:
-          need(identity(before)==identity(os.fstat(fd)),'binding')
-          blocks=[];count=0
-          while True:
-           data=os.read(fd,min(131072,cap-count+1))
-           if not data:break
-           blocks.append(data);count+=len(data);need(count<=cap,'binding')
-          need(count==before.st_size and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and
-           identity(directory)==identity(path.parent.stat()),'binding')
-          return b''.join(blocks)
-         finally:os.close(fd)
-
-        def decode(raw):
-         def pairs(items):
-          out={}
-          for key,value in items:
-           need(key not in out,'receipt');out[key]=value
-          return out
-         return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:need(False,'receipt'))
-
-        def load_helpers(helper):
-         helper=Path(helper)
-         raw={}
-         for name,(size,sha) in PINS.items():
-          data=read_fixed(helper/name,size)
-          need(len(data)==size and hashlib.sha256(data).hexdigest()==sha,'helper-pin')
-          raw[name]=data
-         modules=[]
-         for name in PINS:
-          module=types.ModuleType(name[:-3])
-          # Execute the verified bytes, rather than reopening a pathname during import.
-          exec(compile(raw[name],name,'exec'),module.__dict__)
-          modules.append(module)
-         return tuple(modules)
-
-        def preflight_ok(value):
-         if type(value) is not dict or value.get('status')!='passed' or not all(k in value and value[k] is None for k in ('firstFailure','monitorFailure')):return False
-         for label,count in (('checkpoint-tests',QA_COUNT),('failure-recording-tests',14)):
-          row=value.get(label)
-          if not (type(count) is int and type(row) is dict and row.get('complete') is True and row.get('status')=='passed' and
-           integer(row.get('total'),count) and all(integer(row.get(key),0) for key in ('failures','errors','skipped'))):return False
-         return True
-
-        def sdk_ok(value):
-         if type(value) is not dict:return False
-         sdk=value.get('sdk');acquired=sdk.get('acquisitionSource') if type(sdk) is dict else None
-         if type(sdk) is not dict or type(acquired) is not dict:return False
-         return (value.get('planSHA256')==PLAN_SHA and 'sdkEvidenceError' not in value and
-          integer(sdk.get('artifact'),12182302735) and integer(sdk.get('sourceRun'),39244172146) and integer(sdk.get('attempt'),1) and
-          sdk.get('zipSHA256')=='c2b125f6cba2e98aa6515d772b2300e458be8cc4236bf33028cd633ceb6624ee' and
-          sdk.get('tarSHA256')=='a190b3eee16abf546611a18c033c09ecc9e6bbb9b32ad83bb2c68f772ef95b6b' and
-          sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
-          sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
-          set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
-          acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and acquired.get('sourceSHA256')==SDK_SOURCE_SHA and
-          type(SDK_SOURCE_SHA) is str and len(SDK_SOURCE_SHA)==64 and acquired.get('baselinePlanSHA256')==PLAN_SHA and
-          integer(acquired.get('producerJob'),118032017226) and type(acquired.get('uncompressedTar')) is dict and
-          set(acquired['uncompressedTar'])=={'bytes','sha256'} and integer(acquired['uncompressedTar'].get('bytes'),760518144) and
-          acquired['uncompressedTar'].get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
-
-        def restore_ok(value,context,observer,pipeline_outcome):
-         try:
-          need(pipeline_outcome=='success','restore')
-          observer._restore_consistent(value,context)
-          need(value.get('qualification')=='verified-origin-checkpoint-restore-only' and value.get('checkpointRole')=='consumer' and
-           all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and integer(value.get('newArtifacts'),0) and
-           'executionTimeBudget' not in value and 'mozilla' not in value and value.get('mozillaFirst') is not True and
-           preflight_ok(value.get('monitorPreflight')) and sdk_ok(value) and
-           observer._same_json(value.get('checkpointReplayContext'),context) and type(value.get('harness')) is dict and
-           type(value.get('toolchains')) is list and len(value['toolchains'])==11,'restore')
-          return True
-         except BaseException:return False
-
-        def origin_ok(task,now=None):
-         value=float(read_fixed(Path(task)/'started-monotonic',4096));now=time.monotonic() if now is None else now
-         need(math.isfinite(value) and value<=now<value+3600,'clock')
-         return value
-
-        def receipts(task):
-         raw={name:read_fixed(Path(task)/name,2*1024**2 if name!='started-monotonic' else 4096)
-          for name in ('summary.json','checkpoint-replay-context.json','started-monotonic')}
-         return decode(raw['summary.json']),decode(raw['checkpoint-replay-context.json']),{
-          label:hashlib.sha256(raw[name]).hexdigest() for label,name in
-          (('summary','summary.json'),('context','checkpoint-replay-context.json'),('clock','started-monotonic'))}
-
-        def receipt_binding(before,after,observation):
-         if before!=after:return False
-         rows=observation['files']
-         values=[rows.get(label,{}).get('sha256') for label in before]
-         if any(value is None for value in values):return None
-         return all(value==sha for value,sha in zip(values,before.values()))
-
-        def observation_safe(value,observer):
-         fields={'schema','status','reason','failurePhase','files','graph','restoreReceiptConsistent','restoredConfigStillMatches',
-          'configConsistency','bindingsStable','bindingScope','bundleSpec','existingGuardsReexecuted','cleanupFailure',
-          'processingLimitSeconds','absoluteRestoreDeadlineMinutes','clockResetAllowed','makeOrRecipeExecuted',
-          'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed','durationToCompletion'}
-         need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status') in ('observed','unconfirmed'),'observation')
-         need(value.get('reason') is None or value['reason'] in observer.REASONS,'observation')
-         need(value.get('failurePhase') in (None,'guard','read','restore-consistency','config-consistency','bundle','graph','binding','cleanup'),'observation')
-         need(value.get('bindingScope')=='opened-fds-and-observed-fixed-entries-only' and integer(value.get('processingLimitSeconds'),30) and
-          integer(value.get('absoluteRestoreDeadlineMinutes'),60) and value.get('durationToCompletion')=='UNKNOWN' and
-          all(value.get(k) is False for k in ('existingGuardsReexecuted','clockResetAllowed','makeOrRecipeExecuted',
-          'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed')),'observation')
-         for key in ('restoreReceiptConsistent','restoredConfigStillMatches','bindingsStable'):
-          need(value.get(key) is None or type(value[key]) is bool,'observation')
-         need((value.get('configConsistency')=='matched' and value.get('restoredConfigStillMatches') is True) or
-          (value.get('configConsistency')=='unconfirmed' and value.get('restoredConfigStillMatches') is None),'observation')
-         files=value.get('files');need(type(files) is dict and set(files)<=({row[0] for row in observer.FIXED}|{'bundleSpec'}),'observation')
-         for row in files.values():
-          need(type(row) is dict and set(row)=={'status','reason','bytes','sha256','lineCount'} and row.get('status') in ('observed','unconfirmed') and
-           (row.get('reason') is None or row['reason'] in observer.REASONS),'observation')
-          for key in ('bytes','lineCount'):need(row[key] is None or (type(row[key]) is int and 0<=row[key]<=64*1024**2),'observation')
-          need(row['sha256'] is None or (type(row['sha256']) is str and len(row['sha256'])==64 and all(c in '0123456789abcdef' for c in row['sha256'])),'observation')
-         bundle=value['bundleSpec']
-         if bundle is not None:
-          need(type(bundle) is dict and set(bundle)=={'configuredBundleBinding','ownedStageBinding','binariesCount','extra_filesCount','movesCount','copiesCount'},'observation')
-          for key in ('configuredBundleBinding','ownedStageBinding'):need(bundle[key] is None or type(bundle[key]) is bool,'observation')
-          for key in ('binariesCount','extra_filesCount','movesCount','copiesCount'):need(bundle[key] is None or (type(bundle[key]) is int and 0<=bundle[key]<=1024**2),'observation')
-         cleanup=value['cleanupFailure']
-         if cleanup is not None:
-          need(type(cleanup) is dict and set(cleanup)=={'operation','kind','errno'} and cleanup['operation']=='close-owned-fds' and
-           cleanup['kind'] in ('os-error','exception') and (cleanup['errno'] is None or type(cleanup['errno']) is int),'observation')
-         if value['graph'] is not None:
-          try:observer._graph_safe(value['graph'])
-          except BaseException:need(False,'observation')
-         if value['status']=='observed':
-          need(value['graph'] is not None and value['graph']['status']=='observed' and value['bindingsStable'] is True and
-           value['restoreReceiptConsistent'] is True and value['cleanupFailure'] is None and value['reason'] is None and value['failurePhase'] is None,'observation')
-         else:need(value['graph'] is None,'observation')
-         return value
-
-        def stage_ok(row):
-         leader=row.get('leaderReap') if type(row) is dict else None
-         return (type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and
-          all(k in row and row[k] is None for k in ('reason','failurePhase','cleanupFailure')) and
-          row.get('groupCleanup')=='verified-gone' and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
-
-        def safe_error(error,phase):
-         return {'phase':phase if phase in ('helpers','restore','clock','environment','observe','binding','observation','cleanup','receipt') else 'unconfirmed',
-          'code':error.args[0] if type(error) is Unconfirmed and error.args and error.args[0] in ('binding','receipt','helper-pin','restore','clock','observation','cleanup') else 'driver-failed',
-          'kind':'os-error' if isinstance(error,OSError) else 'exception',
-          'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int else None}
-
-        def persisted_primary(task,project):
-         result={'status':'unconfirmed','failure':None,'observerStage':None}
-         try:
-          value=decode(read_fixed(Path(task)/'first-failure.json',65536))
-          need(type(value) is dict and type(value.get('stage')) is str and type(value.get('code')) is str and
-           type(value.get('elapsedSeconds')) in (int,float) and math.isfinite(value['elapsedSeconds']) and value['elapsedSeconds']>=0,'receipt')
-          failure=project(value);need(type(failure) is dict,'receipt')
-          observer=value['stage']=='firefox-target-observer'
-          if observer:failure['stage']='firefox-target-observer'
-          return {'status':'observed','failure':failure,'observerStage':observer}
-         except FileNotFoundError:result['status']='absent'
-         except BaseException:pass
-         return result
-
-        CHILD = r'''
-        import hashlib,json,os,stat,types
-        from pathlib import Path
-        PINS = {'firefox_target_graph.py':(10361,'ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a'),
-         'firefox_target_observer.py':(22432,'fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb')}
-        def ident(s):return tuple(getattr(s,k) for k in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
-        def load(helper,name):
-         size,sha=PINS[name];p=helper/name;s=p.lstat();d=helper.stat()
-         if p.resolve()!=p or not stat.S_ISREG(s.st_mode) or s.st_uid!=os.geteuid() or s.st_nlink!=1 or s.st_size!=size:raise ValueError()
-         fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0))
-         try:
-          if ident(s)!=ident(os.fstat(fd)):raise ValueError()
-          raw=b''
-          while len(raw)<=size:
-           part=os.read(fd,min(131072,size+1-len(raw)))
-           if not part:break
-           raw+=part
-          if len(raw)!=size or hashlib.sha256(raw).hexdigest()!=sha or ident(s)!=ident(os.fstat(fd)) or ident(s)!=ident(p.lstat()) or ident(d)!=ident(helper.stat()):raise ValueError()
-         finally:os.close(fd)
-         m=types.ModuleType(name[:-3]);exec(compile(raw,name,'exec'),m.__dict__);return m
-        result={'schema':1,'procedureCompleted':False,'observation':None,'firstFailure':None,'receiptWriteFailure':False}
-        phase='helpers'
-        try:
-         task=Path(os.environ['TASK_ROOT']);helper=Path(os.environ['FIREFOX_TARGET_HELPER'])
-         pure=load(helper,'firefox_target_graph.py');observer=load(helper,'firefox_target_observer.py')
-         phase='restore'
-         if os.environ.get('FIREFOX_RESTORE_VERIFIED')!='1':raise ValueError()
-         phase='observe';result['observation']=observer.observe_restored_task(task,pure.target_graph_proof,restore_guards_succeeded=True)
-         result['procedureCompleted']=True
-        except BaseException as error:
-         result['firstFailure']={'phase':phase,'kind':'os-error' if isinstance(error,OSError) else 'exception',
-          'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int else None}
-        finally:
-         try:
-          raw=json.dumps(result,sort_keys=True).encode()+b'\n'
-          if len(raw)>262144:raise ValueError()
-          fd=os.open(task/'firefox-target-observation.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-          try:
-           offset=0
-           while offset<len(raw):
-            n=os.write(fd,raw[offset:])
-            if n<=0:raise OSError()
-            offset+=n
-          finally:os.close(fd)
-         except BaseException:result['receiptWriteFailure']=True
-         finally:print(json.dumps({'firefoxTargetObservation':result}),flush=True)
-        if not result['procedureCompleted'] or result['receiptWriteFailure']:raise SystemExit(1)
-        '''
-
-        def child_result(task,observer):
-         try:value=decode(read_fixed(Path(task)/'firefox-target-observation.json',262144))
-         except BaseException:
-          # Fixed child emits exactly one JSON marker; this fallback retains its safe
-          # primary if independent receipt writing failed. No arbitrary log lines escape.
-          raw=read_fixed(Path(task)/'firefox-target-observer.private.log',1048576)
-          marker=decode(raw.strip());need(type(marker) is dict and set(marker)=={'firefoxTargetObservation'},'receipt')
-          value=marker['firefoxTargetObservation']
-          # Fallback retains a safe primary, never qualifies an unavailable receipt.
-          if type(value) is dict:value={**value,'receiptWriteFailure':True}
-         need(type(value) is dict and set(value)=={'schema','procedureCompleted','observation','firstFailure','receiptWriteFailure'} and
-          integer(value.get('schema'),1) and type(value['procedureCompleted']) is bool and type(value['receiptWriteFailure']) is bool,'receipt')
-         if value['observation'] is not None:observation_safe(value['observation'],observer)
-         failure=value['firstFailure']
-         if failure is not None:
-          need(type(failure) is dict and set(failure)=={'phase','kind','errno'} and failure['phase'] in ('helpers','restore','observe') and
-           failure['kind'] in ('os-error','exception') and (failure['errno'] is None or type(failure['errno']) is int),'receipt')
-         return value
-
-        def run_driver(task,helper,pipeline_outcome,runner,make_env,bindings,load_abi,write_json,stage_projection,monitor_projection,runner_failure):
-         task=Path(task);helper=Path(helper)
-         result={'schema':1,'status':'failed','restoreGuardedVerified':False,'helperPinsVerified':False,'restoreReceiptHashBinding':None,
-          'observation':None,'childFailure':None,'driverFailure':None,'restoreFirstFailure':None,'observerFirstFailure':None,
-          'restoreMonitorFailure':None,'monitorFailure':None,'monitorFailureObserved':False,'monitorDiagnostics':[],
-          'restoreMonitorDiagnostics':[],'stages':[],'outstandingGroups':None,'evidenceWriteFailure':False,
-          'absoluteRestoreDeadlineMinutes':60,'observerProcessingSeconds':30,'clockResetAllowed':False,
-          'realBuildPerformed':False,'fullHostQualification':False,'minimalSufficientSuffixEstablished':False,'newArtifacts':0}
-         phase='helpers';observer=None;summary=None
-         try:
-          pure,observer=load_helpers(helper);result['helperPinsVerified']=True
-          phase='restore';summary,context,before=receipts(task)
-          result['restoreGuardedVerified']=restore_ok(summary,context,observer,pipeline_outcome)
-          need(result['restoreGuardedVerified'],'restore')
-          phase='clock';origin_ok(task)
-          phase='environment';load_abi(Path(os.environ['FLOORP_CENSUS_ABI']))
-          env=make_env(task)
-          env.update({key:os.environ[key] for key in (*bindings,'TASK_ROOT','FLOORP_CENSUS_ABI')})
-          env.update(PYTHONDONTWRITEBYTECODE='1',PYTHONWARNINGS='error::ResourceWarning',FIREFOX_RESTORE_VERIFIED='1',FIREFOX_TARGET_HELPER=str(helper))
-          env['PATH']+=':/usr/local/bin';env['TMPDIR']=str(task/'monitor-tmp')
-          phase='observe'
-          try:runner.run('firefox-target-observer',[os.sys.executable,'-c',CHILD],task,env,360,phase_deadline_minutes=60)
-          finally:
-           try:
-            child=child_result(task,observer);result['observation']=child['observation'];result['childFailure']=child['firstFailure']
-            need(child['procedureCompleted'] and not child['receiptWriteFailure'] and child['firstFailure'] is None,'observation')
-           except BaseException as error:
-            result['driverFailure']=safe_error(error,'observation')
-          need(result['driverFailure'] is None,'observation')
-          try:
-           phase='clock';origin_ok(task)
-           phase='binding';_,_,after=receipts(task)
-           phase='clock';origin_ok(task)
-           phase='binding';observation=observation_safe(result['observation'],observer)
-           result['restoreReceiptHashBinding']=receipt_binding(before,after,observation)
-           need(result['restoreReceiptHashBinding'] is True,'binding')
-          except BaseException:
-           # The raw child receipt remains private. A parent binding/deadline failure
-           # must never publish that child's graph as a qualified guarded observation.
-           result['observation']=None
-           raise
-          phase='cleanup';need(runner.failure is None and runner.monitor_failure is None and not runner.groups and
-           len(runner.records)==1 and stage_ok(runner.records[0]),'cleanup')
-          phase='observation'
-          result['status']='observed' if observation['status']=='observed' else 'unconfirmed'
-         except BaseException as error:
-          if result['driverFailure'] is None:result['driverFailure']=safe_error(error,phase)
-         finally:
-          if type(summary) is dict:
-           result.update(restoreFirstFailure=runner_failure(summary.get('firstFailure')),
-            restoreMonitorFailure=monitor_projection(summary.get('monitorFailure')),
-            restoreMonitorDiagnostics=[monitor_projection(row) for row in summary.get('monitorDiagnostics',[])[-16:]] if type(summary.get('monitorDiagnostics')) is list else [])
-          result.update(observerFirstFailure=runner_failure(runner.failure),monitorFailure=monitor_projection(runner.monitor_failure),
-           monitorFailureObserved=runner.monitor_failure is not None,monitorDiagnostics=[monitor_projection(row) for row in runner.monitor_diagnostics[-16:]],
-           outstandingGroups=bool(runner.groups),stages=[{**stage_projection(row),'stage':'firefox-target-observer' if row.get('stage')=='firefox-target-observer' else 'other'} for row in runner.records])
-          try:write_json(task/'firefox-target-driver.json',result)
-          except BaseException:result.update(status='failed',evidenceWriteFailure=True)
-          finally:print(json.dumps({'firefoxTargetDriver':result}),flush=True)
-         return result
-
-        def driver_ok(value,observer):
-         try:
-          fields={'schema','status','restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding','observation',
-           'childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure',
-           'monitorFailureObserved','monitorDiagnostics','restoreMonitorDiagnostics','stages','outstandingGroups',
-           'evidenceWriteFailure','absoluteRestoreDeadlineMinutes','observerProcessingSeconds','clockResetAllowed',
-           'realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished','newArtifacts'}
-          need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status')=='observed' and
-           all(value.get(k) is True for k in ('restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding')) and
-           all(value.get(k) is False for k in ('monitorFailureObserved','outstandingGroups','evidenceWriteFailure','clockResetAllowed','realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished')) and
-           all(k in value and value[k] is None for k in ('childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure')) and
-           integer(value.get('absoluteRestoreDeadlineMinutes'),60) and integer(value.get('observerProcessingSeconds'),30) and integer(value.get('newArtifacts'),0),'observation')
-          observation_safe(value.get('observation'),observer);need(value['observation']['status']=='observed','observation')
-          rows=value.get('stages');need(type(rows) is list and len(rows)==1,'cleanup')
-          row=rows[0];leader=row.get('leaderReap') if type(row) is dict else None
-          need(type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and row.get('groupCleanup')=='verified-gone' and
-           row.get('cleanupFailurePresent') is False and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0),'cleanup')
-          return True
-         except BaseException:return False
-
-        import pathlib,sys
-        helper=(pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()
-        sys.path.insert(0,str(helper))
-        from support import Runner,clean_environment,write_json
-        from process_census import BINDING_KEYS,load_abi
-        from helper_import_preflight import stage_projection,monitor_projection,runner_failure
-        task=pathlib.Path(os.environ['TASK_ROOT']).resolve()
-        plan_raw=read_fixed(helper/'plan.json',65536)
-        need(hashlib.sha256(plan_raw).hexdigest()==PLAN_SHA,'restore')
-        plan=json.loads(plan_raw)
-        runner=Runner(task,float(read_fixed(task/'started',4096)),plan['limits'])
-        result=run_driver(task,helper,os.environ.get('GUARDED_RESTORE_OUTCOME'),runner,clean_environment,
-            BINDING_KEYS,load_abi,write_json,stage_projection,monitor_projection,runner_failure)
-        if result['status']!='observed':raise SystemExit(1)
-        PYCODE
-    - name: Verify guarded restore, graph-only observation and independent cleanup
+        '
+    - name: Verify targeted Firefox smoke, source pins and independent stage cleanup
       if: always()
-      timeout-minutes: 2
       env:
-        GUARDED_RESTORE_OUTCOME: ${{ steps.pipeline.outcome }}
+        PIPELINE_OUTCOME: ${{ steps.pipeline.outcome }}
       shell: bash
-      run: |
-        if [[ ! -x "${TASK_PYTHON:-}" || -z "${TASK_ROOT:-}" ]]; then
-          echo '{"status":"unconfirmed","code":"initial-setup-incomplete"}'
-          exit 1
-        fi
-        "$TASK_PYTHON" - <<'PYCODE'
-        import json
-        try:
-            """Unintegrated fixed-purpose guarded-restore graph caller code; no acquisition."""
-            import hashlib,json,math,os,stat,time,types
-            from pathlib import Path
-            QA_COUNT = 529
-            SDK_SOURCE_SHA = 'ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688'
-            PLAN_SHA = '33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'
-            RUNTIME_SHA = '7dd619742b25567e479eeda97ae071d10542ad0b'
-            PINS = {
-             'firefox_target_graph.py': (10361,'ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a'),
-             'firefox_target_observer.py': (22432,'fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb')}
-            class Unconfirmed(Exception):pass
-            def need(value,code):
-             if not value:raise Unconfirmed(code)
-            def integer(value,expected):return type(value) is int and value==expected
-            def identity(value):
-             return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
-            def read_fixed(path,cap):
-             path=Path(path)
-             need(path.is_absolute() and path.resolve()==path,'binding')
-             directory=path.parent.stat();before=path.lstat()
-             need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid() and
-              stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')
-             fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))
-             try:
-              need(identity(before)==identity(os.fstat(fd)),'binding')
-              blocks=[];count=0
-              while True:
-               data=os.read(fd,min(131072,cap-count+1))
-               if not data:break
-               blocks.append(data);count+=len(data);need(count<=cap,'binding')
-              need(count==before.st_size and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and
-               identity(directory)==identity(path.parent.stat()),'binding')
-              return b''.join(blocks)
-             finally:os.close(fd)
-            def decode(raw):
-             def pairs(items):
-              out={}
-              for key,value in items:
-               need(key not in out,'receipt');out[key]=value
-              return out
-             return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:need(False,'receipt'))
-            def load_helpers(helper):
-             helper=Path(helper)
-             raw={}
-             for name,(size,sha) in PINS.items():
-              data=read_fixed(helper/name,size)
-              need(len(data)==size and hashlib.sha256(data).hexdigest()==sha,'helper-pin')
-              raw[name]=data
-             modules=[]
-             for name in PINS:
-              module=types.ModuleType(name[:-3])
-              # Execute the verified bytes, rather than reopening a pathname during import.
-              exec(compile(raw[name],name,'exec'),module.__dict__)
-              modules.append(module)
-             return tuple(modules)
-            def preflight_ok(value):
-             if type(value) is not dict or value.get('status')!='passed' or not all(k in value and value[k] is None for k in ('firstFailure','monitorFailure')):return False
-             for label,count in (('checkpoint-tests',QA_COUNT),('failure-recording-tests',14)):
-              row=value.get(label)
-              if not (type(count) is int and type(row) is dict and row.get('complete') is True and row.get('status')=='passed' and
-               integer(row.get('total'),count) and all(integer(row.get(key),0) for key in ('failures','errors','skipped'))):return False
-             return True
-            def sdk_ok(value):
-             if type(value) is not dict:return False
-             sdk=value.get('sdk');acquired=sdk.get('acquisitionSource') if type(sdk) is dict else None
-             if type(sdk) is not dict or type(acquired) is not dict:return False
-             return (value.get('planSHA256')==PLAN_SHA and 'sdkEvidenceError' not in value and
-              integer(sdk.get('artifact'),12182302735) and integer(sdk.get('sourceRun'),39244172146) and integer(sdk.get('attempt'),1) and
-              sdk.get('zipSHA256')=='c2b125f6cba2e98aa6515d772b2300e458be8cc4236bf33028cd633ceb6624ee' and
-              sdk.get('tarSHA256')=='a190b3eee16abf546611a18c033c09ecc9e6bbb9b32ad83bb2c68f772ef95b6b' and
-              sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
-              sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
-              set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
-              acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and acquired.get('sourceSHA256')==SDK_SOURCE_SHA and
-              type(SDK_SOURCE_SHA) is str and len(SDK_SOURCE_SHA)==64 and acquired.get('baselinePlanSHA256')==PLAN_SHA and
-              integer(acquired.get('producerJob'),118032017226) and type(acquired.get('uncompressedTar')) is dict and
-              set(acquired['uncompressedTar'])=={'bytes','sha256'} and integer(acquired['uncompressedTar'].get('bytes'),760518144) and
-              acquired['uncompressedTar'].get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
-            def restore_ok(value,context,observer,pipeline_outcome):
-             try:
-              need(pipeline_outcome=='success','restore')
-              observer._restore_consistent(value,context)
-              need(value.get('qualification')=='verified-origin-checkpoint-restore-only' and value.get('checkpointRole')=='consumer' and
-               all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and integer(value.get('newArtifacts'),0) and
-               'executionTimeBudget' not in value and 'mozilla' not in value and value.get('mozillaFirst') is not True and
-               preflight_ok(value.get('monitorPreflight')) and sdk_ok(value) and
-               observer._same_json(value.get('checkpointReplayContext'),context) and type(value.get('harness')) is dict and
-               type(value.get('toolchains')) is list and len(value['toolchains'])==11,'restore')
-              return True
-             except BaseException:return False
-            def origin_ok(task,now=None):
-             value=float(read_fixed(Path(task)/'started-monotonic',4096));now=time.monotonic() if now is None else now
-             need(math.isfinite(value) and value<=now<value+3600,'clock')
-             return value
-            def receipts(task):
-             raw={name:read_fixed(Path(task)/name,2*1024**2 if name!='started-monotonic' else 4096)
-              for name in ('summary.json','checkpoint-replay-context.json','started-monotonic')}
-             return decode(raw['summary.json']),decode(raw['checkpoint-replay-context.json']),{
-              label:hashlib.sha256(raw[name]).hexdigest() for label,name in
-              (('summary','summary.json'),('context','checkpoint-replay-context.json'),('clock','started-monotonic'))}
-            def receipt_binding(before,after,observation):
-             if before!=after:return False
-             rows=observation['files']
-             values=[rows.get(label,{}).get('sha256') for label in before]
-             if any(value is None for value in values):return None
-             return all(value==sha for value,sha in zip(values,before.values()))
-            def observation_safe(value,observer):
-             fields={'schema','status','reason','failurePhase','files','graph','restoreReceiptConsistent','restoredConfigStillMatches',
-              'configConsistency','bindingsStable','bindingScope','bundleSpec','existingGuardsReexecuted','cleanupFailure',
-              'processingLimitSeconds','absoluteRestoreDeadlineMinutes','clockResetAllowed','makeOrRecipeExecuted',
-              'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed','durationToCompletion'}
-             need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status') in ('observed','unconfirmed'),'observation')
-             need(value.get('reason') is None or value['reason'] in observer.REASONS,'observation')
-             need(value.get('failurePhase') in (None,'guard','read','restore-consistency','config-consistency','bundle','graph','binding','cleanup'),'observation')
-             need(value.get('bindingScope')=='opened-fds-and-observed-fixed-entries-only' and integer(value.get('processingLimitSeconds'),30) and
-              integer(value.get('absoluteRestoreDeadlineMinutes'),60) and value.get('durationToCompletion')=='UNKNOWN' and
-              all(value.get(k) is False for k in ('existingGuardsReexecuted','clockResetAllowed','makeOrRecipeExecuted',
-              'minimalSufficientSuffixEstablished','fullHostQualification','realBuildPerformed')),'observation')
-             for key in ('restoreReceiptConsistent','restoredConfigStillMatches','bindingsStable'):
-              need(value.get(key) is None or type(value[key]) is bool,'observation')
-             need((value.get('configConsistency')=='matched' and value.get('restoredConfigStillMatches') is True) or
-              (value.get('configConsistency')=='unconfirmed' and value.get('restoredConfigStillMatches') is None),'observation')
-             files=value.get('files');need(type(files) is dict and set(files)<=({row[0] for row in observer.FIXED}|{'bundleSpec'}),'observation')
-             for row in files.values():
-              need(type(row) is dict and set(row)=={'status','reason','bytes','sha256','lineCount'} and row.get('status') in ('observed','unconfirmed') and
-               (row.get('reason') is None or row['reason'] in observer.REASONS),'observation')
-              for key in ('bytes','lineCount'):need(row[key] is None or (type(row[key]) is int and 0<=row[key]<=64*1024**2),'observation')
-              need(row['sha256'] is None or (type(row['sha256']) is str and len(row['sha256'])==64 and all(c in '0123456789abcdef' for c in row['sha256'])),'observation')
-             bundle=value['bundleSpec']
-             if bundle is not None:
-              need(type(bundle) is dict and set(bundle)=={'configuredBundleBinding','ownedStageBinding','binariesCount','extra_filesCount','movesCount','copiesCount'},'observation')
-              for key in ('configuredBundleBinding','ownedStageBinding'):need(bundle[key] is None or type(bundle[key]) is bool,'observation')
-              for key in ('binariesCount','extra_filesCount','movesCount','copiesCount'):need(bundle[key] is None or (type(bundle[key]) is int and 0<=bundle[key]<=1024**2),'observation')
-             cleanup=value['cleanupFailure']
-             if cleanup is not None:
-              need(type(cleanup) is dict and set(cleanup)=={'operation','kind','errno'} and cleanup['operation']=='close-owned-fds' and
-               cleanup['kind'] in ('os-error','exception') and (cleanup['errno'] is None or type(cleanup['errno']) is int),'observation')
-             if value['graph'] is not None:
-              try:observer._graph_safe(value['graph'])
-              except BaseException:need(False,'observation')
-             if value['status']=='observed':
-              need(value['graph'] is not None and value['graph']['status']=='observed' and value['bindingsStable'] is True and
-               value['restoreReceiptConsistent'] is True and value['cleanupFailure'] is None and value['reason'] is None and value['failurePhase'] is None,'observation')
-             else:need(value['graph'] is None,'observation')
-             return value
-            def stage_ok(row):
-             leader=row.get('leaderReap') if type(row) is dict else None
-             return (type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and
-              all(k in row and row[k] is None for k in ('reason','failurePhase','cleanupFailure')) and
-              row.get('groupCleanup')=='verified-gone' and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0))
-            def safe_error(error,phase):
-             return {'phase':phase if phase in ('helpers','restore','clock','environment','observe','binding','observation','cleanup','receipt') else 'unconfirmed',
-              'code':error.args[0] if type(error) is Unconfirmed and error.args and error.args[0] in ('binding','receipt','helper-pin','restore','clock','observation','cleanup') else 'driver-failed',
-              'kind':'os-error' if isinstance(error,OSError) else 'exception',
-              'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int else None}
-            def persisted_primary(task,project):
-             result={'status':'unconfirmed','failure':None,'observerStage':None}
-             try:
-              value=decode(read_fixed(Path(task)/'first-failure.json',65536))
-              need(type(value) is dict and type(value.get('stage')) is str and type(value.get('code')) is str and
-               type(value.get('elapsedSeconds')) in (int,float) and math.isfinite(value['elapsedSeconds']) and value['elapsedSeconds']>=0,'receipt')
-              failure=project(value);need(type(failure) is dict,'receipt')
-              observer=value['stage']=='firefox-target-observer'
-              if observer:failure['stage']='firefox-target-observer'
-              return {'status':'observed','failure':failure,'observerStage':observer}
-             except FileNotFoundError:result['status']='absent'
-             except BaseException:pass
-             return result
-            def driver_ok(value,observer):
-             try:
-              fields={'schema','status','restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding','observation',
-               'childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure',
-               'monitorFailureObserved','monitorDiagnostics','restoreMonitorDiagnostics','stages','outstandingGroups',
-               'evidenceWriteFailure','absoluteRestoreDeadlineMinutes','observerProcessingSeconds','clockResetAllowed',
-               'realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished','newArtifacts'}
-              need(type(value) is dict and set(value)==fields and integer(value.get('schema'),1) and value.get('status')=='observed' and
-               all(value.get(k) is True for k in ('restoreGuardedVerified','helperPinsVerified','restoreReceiptHashBinding')) and
-               all(value.get(k) is False for k in ('monitorFailureObserved','outstandingGroups','evidenceWriteFailure','clockResetAllowed','realBuildPerformed','fullHostQualification','minimalSufficientSuffixEstablished')) and
-               all(k in value and value[k] is None for k in ('childFailure','driverFailure','restoreFirstFailure','observerFirstFailure','restoreMonitorFailure','monitorFailure')) and
-               integer(value.get('absoluteRestoreDeadlineMinutes'),60) and integer(value.get('observerProcessingSeconds'),30) and integer(value.get('newArtifacts'),0),'observation')
-              observation_safe(value.get('observation'),observer);need(value['observation']['status']=='observed','observation')
-              rows=value.get('stages');need(type(rows) is list and len(rows)==1,'cleanup')
-              row=rows[0];leader=row.get('leaderReap') if type(row) is dict else None
-              need(type(row) is dict and row.get('stage')=='firefox-target-observer' and integer(row.get('exitCode'),0) and row.get('groupCleanup')=='verified-gone' and
-               row.get('cleanupFailurePresent') is False and type(leader) is dict and leader.get('status')=='reaped' and integer(leader.get('exitCode'),0),'cleanup')
-              return True
-             except BaseException:return False
-            import pathlib,sys
-            helper=(pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()
-            sys.path.insert(0,str(helper))
-            from helper_import_preflight import monitor_projection,runner_failure,stage_projection
-            # These receipts remain separate; observer errors never overwrite summary.json.
-            task=pathlib.Path(os.environ['TASK_ROOT']).resolve()
-            def read(name,cap):
-                try:return decode(read_fixed(task/name,cap))
-                except BaseException:return None
-            summary=read('summary.json',2*1024**2)
-            context=read('checkpoint-replay-context.json',2*1024**2)
-            preflight=read('monitor-preflight.json',2*1024**2)
-            driver=read('firefox-target-driver.json',262144)
-            persisted=persisted_primary(task,runner_failure)
-            helpers=False;restored=False;observed=False;observation_status='unconfirmed';safe_observation=None
-            try:
-                pure,observer=load_helpers(helper);helpers=True
-                restored=restore_ok(summary,context,observer,os.environ.get('GUARDED_RESTORE_OUTCOME'))
-                observed=driver_ok(driver,observer)
-                if type(driver) is dict and type(driver.get('observation')) is dict:
-                    safe_observation=observation_safe(driver['observation'],observer)
-                    observation_status=driver['observation']['status']
-            except BaseException:pass
-            preflight_verified=preflight_ok(preflight)
-            passed=helpers and preflight_verified and restored and observed
-            mapping=lambda v:v if type(v) is dict else {}
-            fixed_codes=('binding','receipt','helper-pin','restore','clock','observation','cleanup','driver-failed')
-            failure=mapping(mapping(driver).get('driverFailure'))
-            code=failure.get('code')
-            def diagnostics(value):
-                return [monitor_projection(row) for row in value[-16:]] if type(value) is list else []
-            safe_stages=[]
-            for row in mapping(driver).get('stages',[])[:4] if type(mapping(driver).get('stages')) is list else []:
-                if type(row) is not dict:continue
-                safe=stage_projection(row)
-                safe['stage']='firefox-target-observer' if row.get('stage')=='firefox-target-observer' else 'other'
-                safe['cleanupFailurePresent']=row.get('cleanupFailurePresent') if type(row.get('cleanupFailurePresent')) is bool else None
-                safe_stages.append(safe)
-            child=mapping(mapping(driver).get('childFailure'))
-            safe_child=None
-            if child:
-                safe_child={'phase':child.get('phase') if child.get('phase') in ('helpers','restore','observe') else 'unconfirmed',
-                    'kind':child.get('kind') if child.get('kind') in ('os-error','exception') else 'unconfirmed',
-                    'errno':child.get('errno') if type(child.get('errno')) is int else None}
-            observer_primary=runner_failure(mapping(driver).get('observerFirstFailure'))
-            if type(driver) is not dict and persisted['observerStage'] is True:
-                observer_primary=persisted['failure']
-            print(json.dumps({'status':'observed' if passed else 'unconfirmed',
-                'monitorPreflightVerified':preflight_verified,'guardedRestoreVerified':restored,
-                'fixedObserverHelpersVerified':helpers,'graphObservationVerified':observed,
-                'observationStatus':observation_status,'restoreSummaryAvailable':type(summary) is dict,
-                'observerReceiptAvailable':type(driver) is dict,
-                'restoreFirstFailure':runner_failure(mapping(summary).get('firstFailure')),
-                'restoreMonitorFailure':monitor_projection(mapping(summary).get('monitorFailure')),
-                'preflightFirstFailure':runner_failure(mapping(preflight).get('firstFailure')),
-                'preflightMonitorFailure':monitor_projection(mapping(preflight).get('monitorFailure')),
-                'observerFirstFailure':observer_primary,
-                'persistedFirstFailure':persisted['failure'],'persistedFirstFailureStatus':persisted['status'],
-                'observerMonitorFailure':monitor_projection(mapping(driver).get('monitorFailure')),
-                'restoreMonitorDiagnostics':diagnostics(mapping(summary).get('monitorDiagnostics')),
-                'observerMonitorDiagnostics':diagnostics(mapping(driver).get('monitorDiagnostics')),
-                'observerStages':safe_stages,'observerChildFailure':safe_child,
-                'observation':safe_observation,
-                'observerDriverFailureCode':code if code in fixed_codes else None,
-                'checkpointArtifact':12164479528,'checkpointOriginRun':39197008470,
-                'sdkSourceArtifact':12182302735,'sdkProducerJob':118032017226,
-                'qualification':'literal-generated-build-order-graph-observation',
-                'absoluteRestoreDeadlineMinutes':60,'observerProcessingSeconds':30,'clockResetAllowed':False,
-                'realBuildPerformed':False,'minimalSufficientSuffixEstablished':False,'fullHostQualification':False,
-                'durationToCompletion':'UNKNOWN','newArtifactUploads':0}),flush=True)
-            if not passed:raise SystemExit(1)
-        except SystemExit:
-            raise
-        except BaseException:
-            print(json.dumps({'status':'unconfirmed','code':'graph-final-evidence-unavailable',
-                'realBuildPerformed':False,'fullHostQualification':False,'newArtifactUploads':0}),flush=True)
-            raise SystemExit(1)
-        PYCODE
+      run: "if [[ ! -x \"${TASK_PYTHON:-}\" || -z \"${TASK_ROOT:-}\" ]]; then\n  echo '{\"status\":\"failed\",\"\
+        code\":\"initial-setup-incomplete\",\"rawSummaryPublished\":false}'\n  exit 1\nfi\n\"$TASK_PYTHON\" - <<'PYCODE'\n\
+        import ast,hashlib,json,math,os,re,stat,sys,time,types\nfrom pathlib import Path\nsys.dont_write_bytecode=True\n\
+        class Unconfirmed(Exception):pass\ndef need(value,code):\n    if not value:raise Unconfirmed(code)\n\ndef\
+        \ identity(value):\n return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))\n\
+        \ndef read_fixed(path,cap):\n path=Path(path)\n need(path.is_absolute() and path.resolve()==path,'binding')\n\
+        \ directory=path.parent.stat();before=path.lstat()\n need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid()\
+        \ and\n  stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')\n\
+        \ fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))\n try:\n\
+        \  need(identity(before)==identity(os.fstat(fd)),'binding')\n  blocks=[];count=0\n  while True:\n   data=os.read(fd,min(131072,cap-count+1))\n\
+        \   if not data:break\n   blocks.append(data);count+=len(data);need(count<=cap,'binding')\n  need(count==before.st_size\
+        \ and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and\n   identity(directory)==identity(path.parent.stat()),'binding')\n\
+        \  return b''.join(blocks)\n finally:os.close(fd)\n\ndef decode(raw):\n def pairs(items):\n  out={}\n  for\
+        \ key,value in items:\n   need(key not in out,'receipt');out[key]=value\n  return out\n return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda\
+        \ _:need(False,'receipt'))\ndef mapping(value):\n    return value if type(value) is dict else {}\n\ndef\
+        \ integer(value, expected):\n    return type(value) is int and value == expected\n\ndef case_ok(value, label,\
+        \ mode, code, status):\n    if type(value) is not dict:\n        return False\n    process=mapping(value.get('process'))\n\
+        \    harness=mapping(value.get('harness'))\n    counts=mapping(harness.get('counts'))\n    end_statuses=mapping(counts.get('testEndStatuses'))\n\
+        \    common=(value.get('case')==label and value.get('mode')==mode and\n            integer(value.get('expectedExitCode'),code)\
+        \ and value.get('expectationSatisfied') is True and\n            value.get('monitorFailure') is None and\
+        \ value.get('monitorFailureObserved') is False and\n            all(value.get(key) is None for key in ('caseError','evidenceWriteFailure','evidenceCollectionFailure'))\
+        \ and\n            harness.get('status')==status and harness.get('expectationSatisfied') is True and\n \
+        \           harness.get('completeLog') is True and harness.get('nativeQualification') is False and\n   \
+        \         harness.get('buildQualification') is False and\n            all(process.get(key) is True for key\
+        \ in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')) and\n            integer(process.get('exitCode'),code)\
+        \ and\n            all(integer(counts.get(key),1) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds'))\
+        \ and\n            all(integer(counts.get(key),0) for key in ('skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits')))\n\
+        \    if not common:\n        return False\n    if code==0:\n        natural=(value.get('runnerFailure')\
+        \ is None and value.get('caughtCode') is None and\n                 process.get('reason') is None and process.get('failurePhase')\
+        \ is None and\n                 integer(end_statuses.get('PASS'),1) and integer(end_statuses.get('FAIL'),0))\n\
+        \        if label=='compiled-debug':\n            subtests=mapping(counts.get('subtestStatuses')).get('PASS')\n\
+        \            natural=(natural and mapping(harness.get('markers')).get('debug') is True and\n           \
+        \          type(subtests) is int and subtests>=3)\n        return natural\n    failure=mapping(value.get('runnerFailure'))\n\
+        \    return (failure.get('stage')=='mozilla-xpcshell' and failure.get('code')=='nonzero-exit' and\n    \
+        \        value.get('caughtCode')=='nonzero-exit' and process.get('reason')=='nonzero-exit' and\n       \
+        \     process.get('failurePhase')=='wait' and integer(end_statuses.get('FAIL'),1) and\n            integer(end_statuses.get('PASS'),0)\
+        \ and\n            all(integer(counts.get(key),1) for key in ('unexpectedSubtests','unexpectedTestEnds',\n\
+        \                                                      'unexpectedFailSubtests','unexpectedFailTestEnds'))\
+        \ and\n            mapping(harness.get('markers')).get('failure') is True)\n\ndef sdk_ok(value):\n    if\
+        \ type(value) is not dict:\n        return False\n    sdk=mapping(value.get('sdk'))\n    acquired=mapping(sdk.get('acquisitionSource'))\n\
+        \    anchor=mapping(acquired.get('uncompressedTar'))\n    return (value.get('planSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'\
+        \ and\n            'sdkEvidenceError' not in value and\n            integer(sdk.get('artifact'),12182302735)\
+        \ and integer(sdk.get('sourceRun'),39244172146) and\n            integer(sdk.get('attempt'),1) and\n   \
+        \         sdk.get('zipSHA256')=='c2b125f6cba2e98aa6515d772b2300e458be8cc4236bf33028cd633ceb6624ee' and\n\
+        \            sdk.get('tarSHA256')=='a190b3eee16abf546611a18c033c09ecc9e6bbb9b32ad83bb2c68f772ef95b6b' and\n\
+        \            sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4'\
+        \ and\n            sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f'\
+        \ and\n            set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'}\
+        \ and\n            acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and\n\
+        \            acquired.get('sourceSHA256')=='ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688'\
+        \ and\n            acquired.get('baselinePlanSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'\
+        \ and\n            integer(acquired.get('producerJob'),118032017226) and set(anchor)=={'bytes','sha256'}\
+        \ and\n            integer(anchor.get('bytes'),760518144) and\n            anchor.get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')\n\
+        \ndef preflight_ok(value):\n    if type(value) is not dict:\n        return False\n    preflight=mapping(value.get('monitorPreflight'))\n\
+        \    if not (preflight.get('status')=='passed' and 'firstFailure' in preflight and\n            preflight['firstFailure']\
+        \ is None and 'monitorFailure' in preflight and\n            preflight['monitorFailure'] is None):\n   \
+        \     return False\n    for name,total in (('checkpoint-tests',543),('failure-recording-tests',14)):\n \
+        \       tests=mapping(preflight.get(name))\n        if not (tests.get('complete') is True and tests.get('status')=='passed'\
+        \ and\n                integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in\n\
+        \                    ('failures','errors','skipped'))):\n            return False\n    return True\n\ndef\
+        \ time_budget_ok(value):\n    if type(value) is not dict:\n        return False\n    budget=mapping(value.get('executionTimeBudget'))\n\
+        \    expected_keys={'schema','profile','baselinePlanSHA256','platformMinutes',\n        'sharedWorkDeadlineMinutes','cleanupReserveMinutes','clock','deadlineReference',\n\
+        \        'deadlines','legacyDeadlines','onlyExecutionTimingChanged',\n        'resourceAndCompilationInputsChanged','clockResetAllowed','stageBudgetsAreAdditive'}\n\
+        \    deadlines=mapping(budget.get('deadlines'))\n    legacy=mapping(budget.get('legacyDeadlines'))\n   \
+        \ keys=('consumerRestoreDeadlineMinutes','consumerBuildDeadlineMinutes',\n          'consumerPackageDeadlineMinutes','consumerNativeDeadlineMinutes','finalDeadlineMinutes')\n\
+        \    strings={'profile':'consumer-shared-final-deadline-v1',\n        'baselinePlanSHA256':'33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460',\n\
+        \        'clock':'fresh-job-monotonic-origin','deadlineReference':'absolute-from-existing-job-origin'}\n\
+        \    return (set(budget)==expected_keys and set(deadlines)==set(legacy)==set(keys) and\n            all(type(budget.get(key))\
+        \ is str and budget[key]==expected for key,expected in strings.items()) and\n            integer(budget.get('schema'),1)\
+        \ and integer(budget.get('platformMinutes'),360) and\n            integer(budget.get('sharedWorkDeadlineMinutes'),345)\
+        \ and integer(budget.get('cleanupReserveMinutes'),15) and\n            all(integer(deadlines.get(key),expected)\
+        \ for key,expected in zip(keys,(60,345,345,345,345))) and\n            all(integer(legacy.get(key),expected)\
+        \ for key,expected in zip(keys,(60,300,315,335,345))) and\n            budget.get('onlyExecutionTimingChanged')\
+        \ is True and\n            all(budget.get(key) is False for key in ('resourceAndCompilationInputsChanged',\n\
+        \                'clockResetAllowed','stageBudgetsAreAdditive')))\n\ndef final_ok(value):\n    if type(value)\
+        \ is not dict:\n        return False\n    mozilla=mapping(value.get('mozilla'))\n    inputs=mapping(mozilla.get('inputs'))\n\
+        \    cases=mozilla.get('cases')\n    expected=[('compiled-debug','positive',0,'passed'),\n             \
+        \ ('failure-control','negative-control',1,'failed'),\n              ('upstream-version-comparator','positive',0,'passed')]\n\
+        \    return (time_budget_ok(value) and sdk_ok(value) and preflight_ok(value) and\n            value.get('status')=='mozilla-target-ready'\
+        \ and value.get('mozillaTargeted') is True and\n            'firstFailure' in value and value['firstFailure']\
+        \ is None and\n            'monitorFailure' in value and value['monitorFailure'] is None and\n         \
+        \   value.get('resumedEffectiveConfigVerified') is True and\n            mapping(value.get('checkpointRestore')).get('qualification')=='verified-origin-cross-run-checkpoint-replay-v1'\
+        \ and\n            mapping(value.get('checkpointReplayContext')).get('status')=='passed' and\n         \
+        \   value.get('qualification')=='verified-origin-root-target-mozilla-smoke-v1' and\n            value.get('fullHostXUL')=='NOT_TESTED'\
+        \ and value.get('fullHostQualification') is False and value.get('stagePackage')=='NOT_TESTED' and\n    \
+        \        value.get('nativeAuthentication')=='NOT_TESTED' and value.get('native') is None and\n         \
+        \   all(value.get(key) is False for key in ('productQualification','freshObjdir','sameJob','retry')) and\n\
+        \            integer(value.get('newArtifacts'),0) and\n            mozilla.get('status')=='passed' and mozilla.get('contract')=='current-source-mozilla-xpcshell-smoke-v1'\
+        \ and\n            mozilla.get('monitorFailure') is None and mozilla.get('productQualification') is False\
+        \ and\n            mozilla.get('nativeAuthentication')=='NOT_TESTED' and\n            all(mozilla.get(key)\
+        \ is True for key in ('actualCompiledDebug','actualCurrentSourceUpstreamTest',\n                'intentionalFailureDetected','allCasesExactReaped','allCasesGroupsGone','defaultUpstreamHeadLoaded',\n\
+        \                'verbose','sequential')) and mozilla.get('automaticRetry') is False and integer(mozilla.get('threads'),1)\
+        \ and\n            inputs.get('sourceCommit')=='7dd619742b25567e479eeda97ae071d10542ad0b' and\n        \
+        \    integer(inputs.get('sourceFilesVerified'),18) and integer(inputs.get('fixtureFilesVerified'),4) and\n\
+        \            type(cases) is list and len(cases)==3 and\n            all(case_ok(case,*spec) for case,spec\
+        \ in zip(cases,expected)))\n\nSOURCE_FAILURE_CODES=frozenset()\nTARGET_STAGES=('mozilla-shell-build','mozilla-http3-build','mozilla-browser-build','mozilla-updater-build','mozilla-channel-build','mozilla-dmg-build','mozilla-resources-build')\n\
+        KNOWN_STAGES=TARGET_STAGES+('checkpoint-restore','effective-config','sdk-materialize','tools-materialize','harness-startup-check','harness-startup-apply','harness-recording-check','harness-recording-apply','baseline-provenance','first-cause-patch','apply-first-cause','monitor-preflight','checkpoint-tests','failure-recording-tests','census-abi','census-abi-compile','mozilla-target-build','mozilla-target-assets','mozilla-harness','mozilla-target-final-evidence','final-proof')\n\
+        CASE_SPECS=(('compiled-debug','positive',0,'passed'),('failure-control','negative-control',1,'failed'),('upstream-version-comparator','positive',0,'passed'))\n\
+        def boolean(value):return value if type(value) is bool else None\ndef safe_stage(value):return value if\
+        \ type(value) is str and value in KNOWN_STAGES else 'other'\ndef failure_safe(value):\n    result=runner_failure(value)\n\
+        \    if result is not None:\n        result['stage']=safe_stage(value.get('stage'))\n        if type(value.get('code'))\
+        \ is str and value['code'] in SOURCE_FAILURE_CODES:result['code']=value['code']\n    return result\ndef\
+        \ monitor_safe(value):\n    result=monitor_projection(value)\n    if result is not None:result['stage']=safe_stage(value.get('stage'))\n\
+        \    return result\ndef stage_safe(row,api):\n    if type(row) is not dict:return {'stage':'other','complete':None}\n\
+        \    result=stage_projection(row);result['stage']=safe_stage(row.get('stage'))\n    result['complete']=api.stage_complete(row)\
+        \ if api is not None else None\n    result['reasonAvailable']='reason' in row\n    result['reason']=None\
+        \ if 'reason' in row and row['reason'] is None else choice(row.get('reason'),FAILURE_CODES,'unconfirmed')\n\
+        \    result['failurePhaseAvailable']='failurePhase' in row\n    result['failurePhase']=None if 'failurePhase'\
+        \ in row and row['failurePhase'] is None else choice(row.get('failurePhase'),('spawn','wait','monitor','drain','cleanup','start'),'unconfirmed')\n\
+        \    return result\ndef log_safe(value):\n    if type(value) is not dict:return None\n    kinds=('termination','driver-error','source-error','linker-error','resource-error','rust-source-error','checkpoint-failure','unclassified-error-marker')\n\
+        \    result={'complete':boolean(value.get('complete')),'rawContentPublished':False,'freeTextPublished':False,\n\
+        \        'bytes':number(value.get('bytes'),integer=True),'lines':number(value.get('lines'),integer=True),\n\
+        \        'sha256':value.get('sha256') if type(value.get('sha256')) is str and re.fullmatch('[0-9a-f]{64}',value['sha256'])\
+        \ else None,\n        'matchingRecords':number(value.get('matchingRecords'),integer=True),'recordsTruncated':boolean(value.get('recordsTruncated'))}\n\
+        \    counts=mapping(value.get('diagnosticCounts'))\n    result['diagnosticCounts']={key:number(counts[key],integer=True)\
+        \ for key in kinds if key in counts}\n    records=value.get('records');result['records']=[]\n    for row\
+        \ in records[:16] if type(records) is list else []:\n        if type(row) is not dict:continue\n       \
+        \ item={'line':number(row.get('line'),integer=True),'kind':choice(row.get('kind'),kinds,'other')}\n    \
+        \    if row.get('messageClass') in LOG_CLASSES:item['messageClass']=row['messageClass']\n        if type(row.get('diagnosticCode'))\
+        \ is str and re.fullmatch('E[0-9]{4}',row['diagnosticCode']):item['diagnosticCode']=row['diagnosticCode']\n\
+        \        if row.get('failureCode') in CHECKPOINT_CODES:\n            item.update(failureCode=row['failureCode'],phase=choice(row.get('phase'),('replay-validation','transfer-validation','restore-validation','reference-validation','payload-validation','manifest-validation','resource-bound','build-boundary','checkpoint-validation'),'unconfirmed'))\n\
+        \        result['records'].append(item)\n    if 'errorType' in value:result['errorType']=choice(value['errorType'],ERROR_TYPES+('UnicodeDecodeError','FileNotFoundError'),'unavailable')\n\
+        \    return result\ndef case_safe(value,spec):\n    label,mode,code,status=spec\n    if type(value) is not\
+        \ dict:return {'case':label,'available':False,'verified':False}\n    harness=mapping(value.get('harness'));counts=mapping(harness.get('counts'));process=mapping(value.get('process'))\n\
+        \    result={'case':label,'available':True,'verified':case_ok(value,*spec),'mode':choice(value.get('mode'),('positive','negative-control'),'unconfirmed'),\n\
+        \        'expectedExitCode':number(value.get('expectedExitCode'),integer=True),'expectationSatisfied':boolean(value.get('expectationSatisfied')),\n\
+        \        'harnessStatus':choice(harness.get('status'),('passed','failed','unavailable'),'unconfirmed'),\n\
+        \        'completeLog':boolean(harness.get('completeLog')),'runnerFailure':failure_safe(value.get('runnerFailure')),\n\
+        \        'monitorFailure':monitor_safe(value.get('monitorFailure'))}\n    result['counts']={key:number(counts.get(key),integer=True)\
+        \ for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds','skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits','unexpectedSubtests','unexpectedTestEnds','unexpectedFailSubtests','unexpectedFailTestEnds')}\n\
+        \    result['testEndStatuses']={key:number(mapping(counts.get('testEndStatuses')).get(key),integer=True)\
+        \ for key in ('PASS','FAIL')}\n    result['markers']={key:boolean(mapping(harness.get('markers')).get(key))\
+        \ for key in ('debug','failure')}\n    result['process']={key:boolean(process.get(key)) for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')}\n\
+        \    result['process']['exitCode']=number(process.get('exitCode'),integer=True,signed=True)\n    result['monitorDiagnostics']=[monitor_safe(row)\
+        \ for row in value.get('monitorDiagnostics',[])[-16:]] if type(value.get('monitorDiagnostics')) is list\
+        \ else []\n    return result\ndef target_ok(value,api):\n    rows=value.get('stages') if type(value) is\
+        \ dict else None\n    return (api is not None and type(rows) is list and 0<len(rows)<=128 and all(type(row)\
+        \ is dict for row in rows) and\n        tuple(api.STAGES)==TARGET_STAGES and api.proof_complete(mapping(value.get('mozillaTargets')),mapping(value.get('mozilla')),rows)\
+        \ and\n        all(api.stage_complete(row) for row in rows) and not any(row.get('stage') in ('full-build','stage-package','native-suite','adhoc-copy','verify-copy','verify-copy-after')\
+        \ for row in rows))\ndef load_source_proof(helper):\n    global SOURCE_FAILURE_CODES\n    sources={}\n \
+        \   for name,key in (('mozilla_target_build.py','TARGET_HELPER_SHA256'),('pipeline.py','PIPELINE_SHA256')):\n\
+        \        expected=os.environ.get(key)\n        need(type(expected) is str and re.fullmatch('[0-9a-f]{64}',expected)\
+        \ is not None,'source-pin')\n        raw=read_fixed(helper/name,1024**2)\n        need(hashlib.sha256(raw).hexdigest()==expected,'source-pin');sources[name]=raw\n\
+        \    codes=set()\n    for raw in sources.values():\n        for node in ast.walk(ast.parse(raw)):\n    \
+        \        if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id=='require' and\
+        \ len(node.args)>=2 and isinstance(node.args[1],ast.Constant) and type(node.args[1].value) is str and re.fullmatch('[a-z][a-z0-9-]{0,95}',node.args[1].value):codes.add(node.args[1].value)\n\
+        \    need(len(codes)<=512,'source-pin');SOURCE_FAILURE_CODES=frozenset(codes)\n    module=types.ModuleType('qa_target_proof')\n\
+        \    module.__file__=str(helper/'mozilla_target_build.py')\n    exec(compile(sources['mozilla_target_build.py'],'mozilla_target_build.py','exec'),module.__dict__)\n\
+        \    return module\ndef persisted_failure(task):\n    try:\n        parent=task.stat()\n        need(task.is_absolute()\
+        \ and task.resolve()==task and stat.S_ISDIR(parent.st_mode) and parent.st_uid==os.geteuid(),'binding')\n\
+        \        try:\n            row=decode(read_fixed(task/'first-failure.json',65536))\n        except FileNotFoundError:\n\
+        \            need(identity(parent)==identity(task.stat()),'binding')\n            try:(task/'first-failure.json').lstat()\n\
+        \            except FileNotFoundError:\n                need(identity(parent)==identity(task.stat()),'binding')\n\
+        \                return 'absent',None\n            return 'unconfirmed',None\n        need(type(row) is\
+        \ dict and type(row.get('stage')) is str and type(row.get('code')) is str and number(row.get('elapsedSeconds'))\
+        \ is not None,'receipt')\n        return 'observed',failure_safe(row)\n    except BaseException:return 'unconfirmed',None\n\
+        \n\ndef clock_proof(task,before=None):\n    path=task/'started-monotonic'\n    bound=identity(path.lstat());raw=read_fixed(path,4096)\n\
+        \    need(bound==identity(path.lstat()),'clock')\n    origin=float(raw);now=time.monotonic()\n    need(math.isfinite(origin)\
+        \ and origin<=now<origin+345*60,'clock')\n    current=(raw,bound)\n    need(before is None or current==before,'clock')\n\
+        \    return current\n\npublic={'role':'consumer','status':'failed','qualification':None,'targeted':None,'originRun':39197008470,\n\
+        \    'existingArtifact':12164479528,'newArtifactUploads':0,'fullHostXUL':'NOT_TESTED','fullHostQualification':False,\n\
+        \    'stagePackage':'NOT_TESTED','nativeAuthentication':'NOT_TESTED','productQualification':False,\n   \
+        \ 'rawSummaryPublished':False,'rawLogContentPublished':False,'firstFailure':None,'firstFailureAvailable':False,\n\
+        \    'monitorFailure':None,'monitorFailureAvailable':False,'persistedFirstFailure':None,'persistedFirstFailureStatus':'unconfirmed',\n\
+        \    'sourcePinsVerified':False,'targetProofVerified':None,'mozillaCases':[],'targetStages':[],'targetStageLogs':{}}\n\
+        passed=False\nclock_before=None\ntry:\n    task=Path(os.environ['TASK_ROOT']).resolve();helper=(Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()\n\
+        \    sys.path.insert(0,str(helper))\n    from helper_import_preflight import runner_failure,monitor_projection,stage_projection,number,choice,FAILURE_CODES,ERROR_TYPES\n\
+        \    from failure_excerpt import PATTERNS,_checkpoint_codes\n    LOG_CLASSES=tuple(row[1] for row in PATTERNS);CHECKPOINT_CODES=_checkpoint_codes()\n\
+        \    persisted_status,persisted=persisted_failure(task)\n    public.update(persistedFirstFailure=persisted,persistedFirstFailureStatus=persisted_status,\n\
+        \        firstFailure=persisted,firstFailureAvailable=persisted_status=='observed',\n        firstFailureSource='persisted'\
+        \ if persisted_status=='observed' else 'unconfirmed')\n    try:preflight=decode(read_fixed(task/'monitor-preflight.json',2*1024**2))\n\
+        \    except BaseException:preflight={}\n    public.update(preflightFirstFailure=failure_safe(mapping(preflight).get('firstFailure')),\n\
+        \        preflightMonitorFailure=monitor_safe(mapping(preflight).get('monitorFailure')))\n    public['preflightMonitorDiagnostics']=[monitor_safe(row)\
+        \ for row in mapping(preflight).get('monitorDiagnostics',[])[-16:]] if type(mapping(preflight).get('monitorDiagnostics'))\
+        \ is list else []\n    api=load_source_proof(helper);public['sourcePinsVerified']=True\n    clock_before=clock_proof(task);public['clockBeforeProjectionVerified']=True\n\
+        \    value=decode(read_fixed(task/'summary.json',16*1024**2));need(type(value) is dict,'summary')\n    public.update(summaryFirstFailureAvailable='firstFailure'\
+        \ in value,\n        monitorFailureAvailable='monitorFailure' in value,monitorFailure=monitor_safe(value.get('monitorFailure')),\n\
+        \        targeted=boolean(value.get('mozillaTargeted')))\n    if 'firstFailure' in value:\n        public['summaryFirstFailure']=failure_safe(value['firstFailure'])\n\
+        \        if persisted_status!='observed':\n            public.update(firstFailure=public['summaryFirstFailure'],firstFailureAvailable=True,firstFailureSource='summary')\n\
+        \    public['monitorDiagnostics']=[monitor_safe(row) for row in value.get('monitorDiagnostics',[])[-16:]]\
+        \ if type(value.get('monitorDiagnostics')) is list else []\n    public['targetProofVerified']=target_ok(value,api)\n\
+        \    sdk_verified=sdk_ok(value);time_verified=time_budget_ok(value);qa_verified=preflight_ok(value)\n  \
+        \  outcome=os.environ.get('PIPELINE_OUTCOME')=='success'\n    passed=(persisted_status=='absent' and outcome\
+        \ and final_ok(value) and public['targetProofVerified'] is True)\n    mozilla=mapping(value.get('mozilla'));cases=mozilla.get('cases');cases=cases\
+        \ if type(cases) is list else []\n    public['mozillaCases']=[case_safe(cases[i] if i<len(cases) else None,spec)\
+        \ for i,spec in enumerate(CASE_SPECS)]\n    rows=value.get('stages');rows=rows if type(rows) is list else\
+        \ []\n    public['targetStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage')\
+        \ in TARGET_STAGES]\n    public['allStageCount']=len(rows);public['allStagesComplete']=all(api.stage_complete(row)\
+        \ for row in rows) if rows and all(type(row) is dict for row in rows) else None\n    logs=mapping(value.get('checkpointStageLogs'))\n\
+        \    public['targetStageLogs']={name:log_safe(logs.get(name)) for name in TARGET_STAGES}\n    public['checkpointRestoreLog']=log_safe(logs.get('checkpoint-restore'))\n\
+        \    public.update(status='passed' if passed else 'failed',qualification='verified-origin-root-target-mozilla-smoke-v1'\
+        \ if passed else None,\n        pipelineStepSucceeded=outcome,preflightVerified=qa_verified,sdkSourceVerified=sdk_verified,\n\
+        \        executionTimeBudgetVerified=time_verified,executionTimeProfile='consumer-shared-final-deadline-v1'\
+        \ if time_verified else None,\n        sharedWorkDeadlineMinutes=345 if time_verified else None,nominalCleanupReserveMinutes=15\
+        \ if time_verified else None,\n        sdkArtifact=12182302735 if sdk_verified else None,sdkSourceRun=39244172146\
+        \ if sdk_verified else None,\n        sdkProducerJob=118032017226 if sdk_verified else None,sdkSourceSHA256='ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688'\
+        \ if sdk_verified else None)\nexcept BaseException as error:\n    passed=False;public.update(status='failed',qualification=None,targetProofVerified=False)\n\
+        \    public['evidenceFailureCode']=str(error) if isinstance(error,Unconfirmed) and str(error) in ('binding','receipt','source-pin','summary','clock')\
+        \ else 'evidence-unavailable'\nfinally:\n    if clock_before is not None:\n        try:\n            clock_proof(task,clock_before);public['clockAfterProjectionVerified']=True\n\
+        \        except BaseException:\n            passed=False;public.update(status='failed',qualification=None,targetProofVerified=False,clockAfterProjectionVerified=False,evidenceFailureCode='clock')\n\
+        \    print(json.dumps(public,allow_nan=False),flush=True)\nraise SystemExit(0 if passed else 1)\n\nPYCODE\n"
