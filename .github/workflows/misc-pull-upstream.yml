@@ -122,6 +122,13 @@ jobs:
             --upstream ../upstream_release \
             --base-manifest "$RUNNER_TEMP/upstream-sync-base.json"
 
+      - name: Integrate recorded upstream while preserving Floorp source
+        if: steps.sync_guard.outputs.action == 'integrate'
+        run: |
+          python3 "$RUNNER_TEMP/upstream_sync.py" integrate \
+            --upstream ../upstream_release \
+            --base-manifest "$RUNNER_TEMP/upstream-sync-base.json"
+
       - name: Sync upstream files
         if: steps.sync_guard.outputs.action == 'sync'
         run: |
@@ -135,7 +142,7 @@ jobs:
             ../upstream_release/ ./
 
       - name: Normalize patch files
-        if: steps.sync_guard.outputs.action == 'sync'
+        if: steps.sync_guard.outputs.action != 'skip'
         run: |
           echo "Normalizing patch files..."
           find .github/patches/upstream -name "*.patch" \
@@ -148,14 +155,14 @@ jobs:
           done
 
       - name: Check patches compatibility
-        if: steps.sync_guard.outputs.action == 'sync'
+        if: steps.sync_guard.outputs.action != 'skip'
         id: patch_check
         run: |
           python3 "$RUNNER_TEMP/upstream_sync.py" check-patches
           echo "patch_failed=false" >> $GITHUB_OUTPUT
 
       - name: Check if there are any changes
-        if: steps.sync_guard.outputs.action == 'sync'
+        if: steps.sync_guard.outputs.action != 'skip'
         id: check_changes
         run: |
           if git diff --quiet --exit-code; then
@@ -167,7 +174,7 @@ jobs:
           fi
 
       - name: Commit to existing PR branch
-        if: steps.sync_guard.outputs.action == 'sync' && steps.check_changes.outputs.has_changes == 'true' && steps.check_pr.outputs.exists == 'true'
+        if: steps.sync_guard.outputs.action != 'skip' && steps.check_changes.outputs.has_changes == 'true' && steps.check_pr.outputs.exists == 'true'
         run: |
           CHANGE_TYPE="${{ steps.version_diff.outputs.change_type }}"
           VERSION="${{ steps.new_version.outputs.version }}"
@@ -186,7 +193,7 @@ jobs:
           echo "UPDATE_EXISTING=true" >> $GITHUB_ENV
 
       - name: Create new PR branch
-        if: steps.sync_guard.outputs.action == 'sync' && steps.check_changes.outputs.has_changes == 'true' && steps.check_pr.outputs.exists == 'false'
+        if: steps.sync_guard.outputs.action != 'skip' && steps.check_changes.outputs.has_changes == 'true' && steps.check_pr.outputs.exists == 'false'
         run: |
           if git diff --quiet --exit-code; then
             echo "No changes from upstream. Exiting."
@@ -221,7 +228,7 @@ jobs:
           echo "UPDATE_EXISTING=false" >> $GITHUB_ENV
 
       - name: Update existing PR
-        if: steps.sync_guard.outputs.action == 'sync' && steps.version_diff.outputs.change_type != 'none' && env.UPDATE_EXISTING == 'true'
+        if: steps.sync_guard.outputs.action != 'skip' && steps.version_diff.outputs.change_type != 'none' && env.UPDATE_EXISTING == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -275,7 +282,7 @@ jobs:
             });
 
       - name: Create new Pull Request
-        if: steps.sync_guard.outputs.action == 'sync' && steps.check_changes.outputs.has_changes == 'true' && steps.check_pr.outputs.exists == 'false'
+        if: steps.sync_guard.outputs.action != 'skip' && steps.check_changes.outputs.has_changes == 'true' && steps.check_pr.outputs.exists == 'false'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
