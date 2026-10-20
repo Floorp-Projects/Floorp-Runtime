@@ -1,0 +1,776 @@
+name: Mac fresh Firefox45 QA recovery64
+'on':
+  push:
+    branches:
+    - codex/mac-native-firefox45-fresh-recovery64-20261020
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: isolated-intel-fresh-firefox45-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  FLOORP_FIXTURE_SHA: a2b5e187678926624531edabab9ba9d65cc1c0a9
+  HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
+  RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
+  SDK_SOURCE_SHA256: 0832587ebb7089731cf2f7bb7e8715756256a4b1e70520daced0516c13aacf54
+  TARGET_HELPER_SHA256: c989a44b20f48f73784330d70be80d2d12b028b2af1cab510f4e2439d01ac8cf
+  PIPELINE_SHA256: 3fa620202b7e8db0854e4f227c53a0733fe8ced01c74cbcc9c253434b13972d5
+  UPSTREAM_HELPER_SHA256: 62b4c6c05fb57f9577bd47841166b56f2dba48ec67a4d3c58e5134a8f5922739
+  UPSTREAM_PLAN_SHA256: 514b9ef7af24c9a5eea9fac21260fb5e918759cf15b71f99b9c715bf1269e05f
+  ORIGIN_HELPER_SHA256: 78f836992cd701fb33b0752559e1b39cb5ecf043e5630199cf0ade91e8e297b0
+  FRESH_HELPER_SHA256: 86037199bf80cf0d540ca0f033bbfaf92d102170d3d4bd78e67fff7c25ff96c4
+  QA_SOURCE_PINS: '{"anchor_inventory.py":"4c535e9358b33cf6d55ca0e707e6c22a598c0b9088d619c1a2b19fa59249c96e","consumer_time.py":"629c5c92e80cf049b3f60e342f7d3ca13919ccaf0528e44f1cda96ecc39f7e65","darwin_activity.py":"fbdefbf8a0a1b4112ca7ed97ee723b763dfee765b5ecf17e471404d0d97a37fb","darwin_inventory.py":"aac48b4168114a31b141cd81c75eef1a6043a9d8c145cb54a25634b4ad899f8a","fetch_sdk.py":"da153cb885fc56e5bd66f362fe2b3d8c2ea262e179c4818f9f6da899654aa30c","fresh45.py":"86037199bf80cf0d540ca0f033bbfaf92d102170d3d4bd78e67fff7c25ff96c4","fresh_job_origin.py":"78f836992cd701fb33b0752559e1b39cb5ecf043e5630199cf0ade91e8e297b0","helper_import_preflight.py":"4ed23cb1220d040f831018f2ce77a8e1a5444e1e047e6a41c0a73932c2a882fc","mozilla-upstream.json":"514b9ef7af24c9a5eea9fac21260fb5e918759cf15b71f99b9c715bf1269e05f","mozilla_harness_receipt.py":"80fe26e0476de8cff4c2130aa1c17afb3a532a114b62ccb3694a882abcaf26d6","mozilla_harness_smoke.py":"2562fd36c1e7dfb630abbf29fb567eec0dcdecf946174044718d81f6990bcabe","mozilla_target_build.py":"c989a44b20f48f73784330d70be80d2d12b028b2af1cab510f4e2439d01ac8cf","mozilla_upstream.py":"62b4c6c05fb57f9577bd47841166b56f2dba48ec67a4d3c58e5134a8f5922739","pipeline.py":"3fa620202b7e8db0854e4f227c53a0733fe8ced01c74cbcc9c253434b13972d5","plan.json":"33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460","primary_anchor.py":"0d25f3e5508514fa8dd75bc615fcba98cf2c2f3e06994a926c4227c7981dcb81","process_census.py":"43d434019393662aa1cfc4e80aa50df08d5829a98a5e25115f6e1f3477198fed","qa_core.py":"13441551e1bfc96aed10fba97f16844b5a8cddbbf5685c72f4c07a7fc578e49a","sdk_content_qualification.py":"4c1afaba22ad682acc4526dac48cb9de5666182955cc8b0b49b126b851937fc8","sdk_source.json":"0832587ebb7089731cf2f7bb7e8715756256a4b1e70520daced0516c13aacf54","sdk_source.py":"1d3987a1a3d45539e2b6925e048d07f18ce2422018140e2ca9ac9c7d049982be","support.py":"6909ccfa9cb25cc48554405dde0185f396b12a94493f9073f32a847a0d9c3631","test_fresh45.py":"3f67e94cad3a6cee79635451eb9432f2ed6b7b22c291b13c036c51d42c060466","test_fresh_job_origin.py":"beb73b832f2cd34d2c3ac7fb7db79794e9eee80fd1f532d18613d4fa4e30d542","test_sdk_content_qualification.py":"330c53d495247c17fbce640645377f72741b9bd28a0664c53be7ec41a528b0d0"}'
+  LOCAL_CANDIDATE_QUALIFICATION: NOT_ADMITTED_SOURCE_SDK_FIXTURE_REVIEW_PENDING
+jobs:
+  fresh-firefox45:
+    name: fresh-firefox45
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    steps:
+    - name: Bound the initial authorized execution
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
+        [[ "$SDK_SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+        test "$GITHUB_REF" = refs/heads/codex/mac-native-firefox45-fresh-recovery64-20261020
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test '${{ github.event.created }}' = true
+        test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+        TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+        test -x "$TASK_PYTHON"
+        echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+        echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-checkpoint" >> "$GITHUB_ENV"
+        [[ "$TARGET_HELPER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+        [[ "$PIPELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+
+        "$TASK_PYTHON" - <<'PINS'
+        import json,os,re
+        pins=json.loads(os.environ['QA_SOURCE_PINS'])
+        if not pins or any(type(value) is not str or re.fullmatch('[0-9a-f]{64}',value) is None for value in pins.values()):
+            raise SystemExit('source-pins-must-be-frozen')
+        PINS
+    - name: Checkout immutable reviewed fixture
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: Floorp-Projects/Floorp
+        ref: ${{ env.FLOORP_FIXTURE_SHA }}
+        path: fixture
+        persist-credentials: false
+        fetch-depth: 1
+    - name: Establish this job's fresh clock and task root
+      timeout-minutes: 3
+      env:
+        JOB_READ_TOKEN: ${{ github.token }}
+        FRESH_PUSH_CREATED: ${{ github.event.created }}
+        FRESH_PUSH_BEFORE: ${{ github.event.before }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fresh_job_origin.py --task "$TASK_ROOT"
+    - name: Verify actual native process monitor before acquisition
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - > "$TASK_ROOT/monitor-preflight-driver.private.log" 2>&1 <<'PYCODE'
+        import json,os,pathlib,re,sys
+        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+        sys.path.insert(0,str(helper))
+        from support import Runner,clean_environment,require,write_json
+        from darwin_activity import probe
+        from unittest_receipt import receipt as unittest_receipt
+        from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
+        task=pathlib.Path(os.environ['TASK_ROOT'])
+        plan=json.loads((helper/'plan.json').read_text())
+        runner=Runner(task,float((task/'started').read_text()),plan['limits'])
+        env=clean_environment(task)
+        temporary=task/'monitor-tmp'
+        temporary.mkdir(mode=0o700)
+        env['TMPDIR']=str(temporary)
+        env['PYTHONDONTWRITEBYTECODE']='1'
+        env['PYTHONWARNINGS']='error::ResourceWarning'
+        env['PATH']+=':/usr/local/bin'
+        result={'status':'failed'}
+        primary_error=None
+        phase='self-probe'
+        try:
+            own=probe().read(os.getpid(),os.getpgrp())
+            require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
+            result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
+            phase='abi'
+            abi=prepare_abi(task,runner,env)
+            os.environ['FLOORP_CENSUS_ABI']=str(abi)
+            env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
+            env['FLOORP_CENSUS_ABI']=str(abi)
+            phase='identity-snapshot'
+            result['census']=snapshot(load_abi(abi))['measurement']
+            with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
+                output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
+            if True:
+                suites=[('checkpoint-tests',[sys.executable,'-m','unittest','-v',
+                    'test_checkpoint','test_process_census','test_guards','test_shim_failure_patch',
+                    'test_completion_preflight','test_unittest_receipt','test_qa_core',
+                    'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',
+                    'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
+                    'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
+                    'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
+                    'test_sdk_source','test_sdk_source_integration','test_consumer_time',
+                    'test_build_completion','test_build_completion_contract','test_mozilla_target_build','test_mozilla_upstream','test_fresh_job_origin','test_fresh45','test_sdk_content_qualification'],680,False),
+                    ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
+                    '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
+                for test_stage,command,expected,recording in suites:
+                    phase=test_stage
+                    try:
+                        runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)
+                    finally:
+                        result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)
+                    tests=result[test_stage]
+                    require(tests['complete'] and tests['status']=='passed' and
+                            tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')
+            phase='owned-monitor-control'
+            script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
+            runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
+            require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
+                        (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for row in runner.records),
+                    'monitor-preflight-no-complete-sample')
+            result['status']='passed'
+        except BaseException as error:
+            primary_error=error
+            result.update(status='failed',failurePhase=phase)
+            runner.fail('monitor-preflight','checkpoint-preflight-failure')
+            raise
+        finally:
+            result.update(stages=runner.records,monitorFailure=runner.monitor_failure,
+                          monitorDiagnostics=runner.monitor_diagnostics,firstFailure=runner.failure)
+            evidence_error=False
+            try:
+                write_json(task/'monitor-preflight.json',result)
+            except OSError:
+                evidence_error=True
+                runner.fail('preflight-evidence','checkpoint-preflight-evidence-write')
+                result.update(status='failed',evidenceWriteFailure=True,firstFailure=runner.failure)
+            print(json.dumps({'monitorPreflight':result}),flush=True)
+            if evidence_error and primary_error is None:
+                require(False,'checkpoint-preflight-evidence-write')
+        PYCODE
+    - name: Acquire the official unexpired renewed content-matched SDK
+      timeout-minutes: 12
+      env:
+        SDK_READ_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - <<'PYCODE'
+        import hashlib,os,pathlib
+        path=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo/sdk_source.json'
+        raw=path.read_bytes()
+        if len(raw)>65536 or hashlib.sha256(raw).hexdigest()!=os.environ['SDK_SOURCE_SHA256']:
+            raise SystemExit('sdk-source-pin-mismatch')
+        PYCODE
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json --output "$TASK_ROOT/sdk-download"
+    - name: Checkout immutable Runtime source
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ env.RUNTIME_SHA }}
+        path: source
+        persist-credentials: false
+        fetch-depth: 1
+        submodules: false
+    - name: Checkout immutable native harness
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: Floorp-Projects/Floorp
+        ref: ${{ env.HARNESS_SHA }}
+        path: harness
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: tools/app-shim
+    - name: Build fresh Firefox targets and stock child libs, then execute three smoke controls and unchanged XPCOM45
+      id: pipeline
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --fresh-firefox45 --sdk-source fixture/tools/qa/native-nonpgo/sdk_source.json > "$TASK_ROOT/pipeline.private.log"
+    - name: Verify fresh origin, scope45 expectations, fixed asset guards, source pins and owned cleanup
+      if: always()
+      env:
+        PIPELINE_OUTCOME: ${{ steps.pipeline.outcome }}
+      shell: bash
+      run: |
+        if [[ ! -x "${TASK_PYTHON:-}" || -z "${TASK_ROOT:-}" ]]; then
+          echo '{"status":"failed","code":"initial-setup-incomplete","rawSummaryPublished":false}'
+          exit 1
+        fi
+        "$TASK_PYTHON" - <<'PYCODE'
+        import ast,datetime,hashlib,json,math,os,re,stat,sys,time,types
+        from pathlib import Path
+        sys.dont_write_bytecode=True
+        class Unconfirmed(Exception):pass
+        def need(value,code):
+            if not value:raise Unconfirmed(code)
+
+        def identity(value):
+         return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
+
+        def read_fixed(path,cap):
+         path=Path(path)
+         need(path.is_absolute() and path.resolve()==path,'binding')
+         directory=path.parent.stat();before=path.lstat()
+         need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid() and
+          stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')
+         fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))
+         try:
+          need(identity(before)==identity(os.fstat(fd)),'binding')
+          blocks=[];count=0
+          while True:
+           data=os.read(fd,min(131072,cap-count+1))
+           if not data:break
+           blocks.append(data);count+=len(data);need(count<=cap,'binding')
+          need(count==before.st_size and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and
+           identity(directory)==identity(path.parent.stat()),'binding')
+          return b''.join(blocks)
+         finally:os.close(fd)
+
+        def decode(raw):
+         def pairs(items):
+          out={}
+          for key,value in items:
+           need(key not in out,'receipt');out[key]=value
+          return out
+         return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:need(False,'receipt'))
+        def mapping(value):
+            return value if type(value) is dict else {}
+
+        def integer(value, expected):
+            return type(value) is int and value == expected
+
+        def case_ok(value, label, mode, code, status):
+            if type(value) is not dict:
+                return False
+            process=mapping(value.get('process'))
+            harness=mapping(value.get('harness'))
+            counts=mapping(harness.get('counts'))
+            end_statuses=mapping(counts.get('testEndStatuses'))
+            common=(value.get('case')==label and value.get('mode')==mode and
+                    integer(value.get('expectedExitCode'),code) and value.get('expectationSatisfied') is True and
+                    value.get('monitorFailure') is None and value.get('monitorFailureObserved') is False and
+                    all(value.get(key) is None for key in ('caseError','evidenceWriteFailure','evidenceCollectionFailure')) and
+                    harness.get('status')==status and harness.get('expectationSatisfied') is True and
+                    harness.get('completeLog') is True and harness.get('nativeQualification') is False and
+                    harness.get('buildQualification') is False and
+                    all(process.get(key) is True for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')) and
+                    integer(process.get('exitCode'),code) and
+                    all(integer(counts.get(key),1) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds')) and
+                    all(integer(counts.get(key),0) for key in ('skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits')))
+            if not common:
+                return False
+            if code==0:
+                natural=(value.get('runnerFailure') is None and value.get('caughtCode') is None and
+                         process.get('reason') is None and process.get('failurePhase') is None and
+                         integer(end_statuses.get('PASS'),1) and integer(end_statuses.get('FAIL'),0))
+                if label=='compiled-debug':
+                    subtests=mapping(counts.get('subtestStatuses')).get('PASS')
+                    natural=(natural and mapping(harness.get('markers')).get('debug') is True and
+                             type(subtests) is int and subtests>=3)
+                return natural
+            failure=mapping(value.get('runnerFailure'))
+            return (failure.get('stage')=='mozilla-xpcshell' and failure.get('code')=='nonzero-exit' and
+                    value.get('caughtCode')=='nonzero-exit' and process.get('reason')=='nonzero-exit' and
+                    process.get('failurePhase')=='wait' and integer(end_statuses.get('FAIL'),1) and
+                    integer(end_statuses.get('PASS'),0) and
+                    all(integer(counts.get(key),1) for key in ('unexpectedSubtests','unexpectedTestEnds',
+                                                              'unexpectedFailSubtests','unexpectedFailTestEnds')) and
+                    mapping(harness.get('markers')).get('failure') is True)
+
+        def sdk_ok(value):
+            if type(value) is not dict:return False
+            sdk=mapping(value.get('sdk'));acquired=mapping(sdk.get('acquisitionSource'));anchor=mapping(acquired.get('uncompressedTar'))
+            return (value.get('planSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460' and
+                'sdkEvidenceError' not in value and integer(sdk.get('artifact'),SDK_PIN['artifact']) and
+                integer(sdk.get('sourceRun'),SDK_PIN['run']) and integer(sdk.get('attempt'),1) and
+                sdk.get('zipSHA256')==SDK_PIN['zipSHA256'] and sdk.get('tarSHA256')==SDK_PIN['tarSHA256'] and
+                sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
+                sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
+                set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob'} and
+                acquired.get('qualification')=='official-artifact-identical-uncompressed-tar-v1' and
+                acquired.get('sourceSHA256')==os.environ.get('SDK_SOURCE_SHA256') and
+                acquired.get('baselinePlanSHA256')==value.get('planSHA256') and
+                integer(acquired.get('producerJob'),SDK_PIN['producerJob']) and set(anchor)=={'bytes','sha256'} and
+                integer(anchor.get('bytes'),760518144) and
+                anchor.get('sha256')=='57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3')
+
+        def preflight_ok(value):
+            if type(value) is not dict:
+                return False
+            preflight=mapping(value.get('monitorPreflight'))
+            if not (preflight.get('status')=='passed' and 'firstFailure' in preflight and
+                    preflight['firstFailure'] is None and 'monitorFailure' in preflight and
+                    preflight['monitorFailure'] is None):
+                return False
+            for name,total in (('checkpoint-tests',680),('failure-recording-tests',14)):
+                tests=mapping(preflight.get(name))
+                if not (tests.get('complete') is True and tests.get('status')=='passed' and
+                        integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
+                            ('failures','errors','skipped'))):
+                    return False
+            return True
+
+        def same_value(left,right):
+            if type(left) is not type(right):return False
+            if type(left) is dict:return left.keys()==right.keys() and all(same_value(left[key],right[key]) for key in left)
+            if type(left) is list:return len(left)==len(right) and all(same_value(a,b) for a,b in zip(left,right))
+            return left==right
+
+        def time_budget_ok(value):
+            return (type(value) is dict and type(EXPECTED_BUDGET) is dict and
+                EXPECTED_BUDGET.get('profile')=='fresh-firefox45-shared-job-deadline-v1' and
+                integer(EXPECTED_BUDGET.get('platformMinutes'),360) and
+                integer(EXPECTED_BUDGET.get('sharedWorkDeadlineMinutes'),345) and
+                integer(EXPECTED_BUDGET.get('cleanupReserveMinutes'),15) and
+                same_value(value.get('executionTimeBudget'),EXPECTED_BUDGET))
+
+        def final_ok(value):
+            if type(value) is not dict:
+                return False
+            mozilla=mapping(value.get('mozilla'))
+            inputs=mapping(mozilla.get('inputs'))
+            cases=mozilla.get('cases')
+            expected=[('compiled-debug','positive',0,'passed'),
+                      ('failure-control','negative-control',1,'failed'),
+                      ('upstream-version-comparator','positive',0,'passed')]
+            return (time_budget_ok(value) and sdk_ok(value) and preflight_ok(value) and
+                    value.get('status')=='mozilla-fresh45-ready' and value.get('freshFirefox45') is True and
+                    'firstFailure' in value and value['firstFailure'] is None and
+                    'monitorFailure' in value and value['monitorFailure'] is None and
+                    value.get('qualification')=='fresh-job-current-source-upstream-xpcom-v1' and
+                    mapping(value.get('run'))=={key:os.environ.get(name) for key,name in
+                        (('repository','GITHUB_REPOSITORY'),('id','GITHUB_RUN_ID'),('attempt','GITHUB_RUN_ATTEMPT'),
+                         ('executionHead','GITHUB_SHA'),('fixture','FLOORP_FIXTURE_SHA'))} and
+                    all(value.get(key) is True for key in ('freshObjdir','sameJob')) and value.get('checkpointUsed') is False and
+                    not any(key in value for key in ('checkpointRole','checkpointRestore','checkpointReplay',
+                        'checkpointReplayContext','resumedEffectiveConfigVerified')) and
+                    value.get('fullHostXUL')=='NOT_TESTED' and value.get('fullHostQualification') is False and value.get('stagePackage')=='NOT_TESTED' and
+                    value.get('nativeAuthentication')=='NOT_TESTED' and value.get('native') is None and
+                    all(value.get(key) is False for key in ('productQualification','retry')) and
+                    integer(value.get('newArtifacts'),0) and
+                    mozilla.get('status')=='passed' and mozilla.get('contract')=='current-source-mozilla-xpcshell-smoke-v1' and
+                    mozilla.get('monitorFailure') is None and mozilla.get('productQualification') is False and
+                    mozilla.get('nativeAuthentication')=='NOT_TESTED' and
+                    all(mozilla.get(key) is True for key in ('actualCompiledDebug','actualCurrentSourceUpstreamTest',
+                        'intentionalFailureDetected','allCasesExactReaped','allCasesGroupsGone','defaultUpstreamHeadLoaded',
+                        'verbose','sequential')) and mozilla.get('automaticRetry') is False and integer(mozilla.get('threads'),1) and
+                    inputs.get('sourceCommit')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                    integer(inputs.get('sourceFilesVerified'),18) and integer(inputs.get('fixtureFilesVerified'),4) and
+                    type(cases) is list and len(cases)==3 and
+                    all(case_ok(case,*spec) for case,spec in zip(cases,expected)))
+
+        SOURCE_NAMES=('plan.json', 'pipeline.py', 'mozilla_target_build.py', 'mozilla_upstream.py', 'mozilla-upstream.json', 'consumer_time.py', 'fresh45.py', 'fresh_job_origin.py', 'test_fresh45.py', 'test_fresh_job_origin.py', 'support.py', 'qa_core.py', 'primary_anchor.py', 'anchor_inventory.py', 'process_census.py', 'darwin_activity.py', 'darwin_inventory.py', 'helper_import_preflight.py', 'mozilla_harness_smoke.py', 'mozilla_harness_receipt.py', 'sdk_source.py', 'sdk_source.json', 'fetch_sdk.py', 'sdk_content_qualification.py', 'test_sdk_content_qualification.py')
+        EXPECTED_BUDGET=None
+        SDK_PIN={}
+        SOURCE_FAILURE_CODES=frozenset()
+        TARGET_STAGES=('mozilla-shell-build','mozilla-http3-build','mozilla-browser-build','mozilla-updater-build','mozilla-channel-build','mozilla-dmg-build','mozilla-resources-build')
+        UPSTREAM_STAGES=('mozilla-upstream-helpers-build','mozilla-upstream-inventory','mozilla-upstream-child-build','mozilla-upstream-child-libs','mozilla-upstream-resources-build')
+        KNOWN_STAGES=('configure','fresh45-exports',)+TARGET_STAGES+UPSTREAM_STAGES+('mozilla-upstream-xpcom','mozilla-xpcshell',)+('checkpoint-restore','effective-config','sdk-materialize','tools-materialize','harness-startup-check','harness-startup-apply','harness-recording-check','harness-recording-apply','baseline-provenance','first-cause-patch','apply-first-cause','monitor-preflight','checkpoint-tests','failure-recording-tests','census-abi','census-abi-compile','mozilla-target-build','mozilla-target-assets','mozilla-harness','mozilla-target-final-evidence','final-proof')
+        CASE_SPECS=(('compiled-debug','positive',0,'passed'),('failure-control','negative-control',1,'failed'),('upstream-version-comparator','positive',0,'passed'))
+        def boolean(value):return value if type(value) is bool else None
+        def safe_stage(value):return value if type(value) is str and value in KNOWN_STAGES else 'other'
+        def failure_safe(value):
+            result=runner_failure(value)
+            if result is not None:
+                result['stage']=safe_stage(value.get('stage'))
+                if type(value.get('code')) is str and value['code'] in SOURCE_FAILURE_CODES:result['code']=value['code']
+            return result
+        def monitor_safe(value):
+            result=monitor_projection(value)
+            if result is not None:result['stage']=safe_stage(value.get('stage'))
+            return result
+        def stage_safe(row,api):
+            if type(row) is not dict:return {'stage':'other','complete':None}
+            result=stage_projection(row);result['stage']=safe_stage(row.get('stage'))
+            result['complete']=api.stage_complete(row) if api is not None else None
+            result['reasonAvailable']='reason' in row
+            result['reason']=None if 'reason' in row and row['reason'] is None else choice(row.get('reason'),FAILURE_CODES,'unconfirmed')
+            result['failurePhaseAvailable']='failurePhase' in row
+            result['failurePhase']=None if 'failurePhase' in row and row['failurePhase'] is None else choice(row.get('failurePhase'),('spawn','wait','monitor','drain','cleanup','start'),'unconfirmed')
+            return result
+        def log_safe(value):
+            if type(value) is not dict:return None
+            kinds=('termination','driver-error','source-error','linker-error','resource-error','rust-source-error','checkpoint-failure','unclassified-error-marker')
+            result={'complete':boolean(value.get('complete')),'rawContentPublished':False,'freeTextPublished':False,
+                'bytes':number(value.get('bytes'),integer=True),'lines':number(value.get('lines'),integer=True),
+                'sha256':value.get('sha256') if type(value.get('sha256')) is str and re.fullmatch('[0-9a-f]{64}',value['sha256']) else None,
+                'matchingRecords':number(value.get('matchingRecords'),integer=True),'recordsTruncated':boolean(value.get('recordsTruncated'))}
+            counts=mapping(value.get('diagnosticCounts'))
+            result['diagnosticCounts']={key:number(counts[key],integer=True) for key in kinds if key in counts}
+            records=value.get('records');result['records']=[]
+            for row in records[:16] if type(records) is list else []:
+                if type(row) is not dict:continue
+                item={'line':number(row.get('line'),integer=True),'kind':choice(row.get('kind'),kinds,'other')}
+                if row.get('messageClass') in LOG_CLASSES:item['messageClass']=row['messageClass']
+                if type(row.get('diagnosticCode')) is str and re.fullmatch('E[0-9]{4}',row['diagnosticCode']):item['diagnosticCode']=row['diagnosticCode']
+                if row.get('failureCode') in CHECKPOINT_CODES:
+                    item.update(failureCode=row['failureCode'],phase=choice(row.get('phase'),('replay-validation','transfer-validation','restore-validation','reference-validation','payload-validation','manifest-validation','resource-bound','build-boundary','checkpoint-validation'),'unconfirmed'))
+                result['records'].append(item)
+            if 'errorType' in value:result['errorType']=choice(value['errorType'],ERROR_TYPES+('UnicodeDecodeError','FileNotFoundError'),'unavailable')
+            return result
+        def case_safe(value,spec):
+            label,mode,code,status=spec
+            if type(value) is not dict:return {'case':label,'available':False,'verified':False}
+            harness=mapping(value.get('harness'));counts=mapping(harness.get('counts'));process=mapping(value.get('process'))
+            result={'case':label,'available':True,'verified':case_ok(value,*spec),'mode':choice(value.get('mode'),('positive','negative-control'),'unconfirmed'),
+                'expectedExitCode':number(value.get('expectedExitCode'),integer=True),'expectationSatisfied':boolean(value.get('expectationSatisfied')),
+                'harnessStatus':choice(harness.get('status'),('passed','failed','unavailable'),'unconfirmed'),
+                'completeLog':boolean(harness.get('completeLog')),'runnerFailure':failure_safe(value.get('runnerFailure')),
+                'monitorFailure':monitor_safe(value.get('monitorFailure'))}
+            result['counts']={key:number(counts.get(key),integer=True) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds','skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits','unexpectedSubtests','unexpectedTestEnds','unexpectedFailSubtests','unexpectedFailTestEnds')}
+            result['testEndStatuses']={key:number(mapping(counts.get('testEndStatuses')).get(key),integer=True) for key in ('PASS','FAIL')}
+            result['markers']={key:boolean(mapping(harness.get('markers')).get(key)) for key in ('debug','failure')}
+            result['process']={key:boolean(process.get(key)) for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')}
+            result['process']['exitCode']=number(process.get('exitCode'),integer=True,signed=True)
+            result['monitorDiagnostics']=[monitor_safe(row) for row in value.get('monitorDiagnostics',[])[-16:]] if type(value.get('monitorDiagnostics')) is list else []
+            return result
+        def target_ok(value,api):
+            rows=value.get('stages') if type(value) is dict else None
+            required=('configure','effective-config','fresh45-exports',*UPSTREAM_STAGES[:2],*TARGET_STAGES,*UPSTREAM_STAGES[2:])
+            return (api is not None and type(rows) is list and 0<len(rows)<=128 and all(type(row) is dict for row in rows) and
+                tuple(api.STAGES)==TARGET_STAGES and upstream_ok(value,api.upstream_api) and
+                api.proof_complete(mapping(value.get('mozillaTargets')),mapping(value.get('mozilla')),rows) and
+                all(api.stage_complete(row) for row in rows) and
+                all(sum(row.get('stage')==name for row in rows)==1 for name in required) and
+                tuple(row.get('stage') for row in rows if row.get('stage') in required)==required and
+                not any(row.get('stage') in ('full-build','stage-package','native-suite','adhoc-copy','verify-copy','verify-copy-after') or
+                    type(row.get('stage')) is not str or row['stage'].startswith('checkpoint-') for row in rows))
+        def upstream_ok(value,api):
+            rows=value.get('stages') if type(value) is dict else None
+            result=mapping(value.get('mozillaUpstream'))
+            return (api is not None and type(rows) is list and tuple(api.EXTRA_STAGES)==UPSTREAM_STAGES and
+                    value.get('upstreamQualification')=='current-source-upstream-xpcom-manifest-v1' and
+                    result.get('planSHA256')==os.environ.get('UPSTREAM_PLAN_SHA256') and
+                                        api.proof_complete(result,rows) and
+                            all(same_value(api.asset_precondition_evidence(result.get(key)),
+                                {'schema':1,'status':'passed','checkedAssets':6,'failure':None,'inspection':None})
+                                and same_value(result.get(key),api.asset_precondition_evidence(result.get(key)))
+                                for key in ('nativeAssetPrecondition','postNativeAssetPrecondition')))
+        def digest_safe(value):
+            return value if type(value) is str and re.fullmatch('[0-9a-f]{64}',value) else None
+        def file_safe(value):
+            value=mapping(value)
+            return {'bytes':number(value.get('bytes'),integer=True),'sha256':digest_safe(value.get('sha256'))}
+        def projected_stage_safe(row):
+            if type(row) is not dict:return {'stage':'other','complete':None}
+            output=stage_projection(row);output['stage']=safe_stage(row.get('stage'));output['complete']=None
+            output['cleanupFailurePresent']=boolean(row.get('cleanupFailurePresent'))
+            output['cleanupFailureCode']=None if row.get('cleanupFailureCode') is None else choice(row.get('cleanupFailureCode'),tuple(FAILURE_CODES)+('owned-process-cleanup-timeout','cleanup-failure'),'unavailable')
+            return output
+        def case_error_safe(value):
+            return None if value is None else choice(value,tuple(SOURCE_FAILURE_CODES)+tuple(FAILURE_CODES)+tuple(ERROR_TYPES)+('nonzero-exit','runner-failure','exception'),'unavailable')
+        def inventory_diagnostic_safe(result,api):
+            value=mapping(result.get('inventoryDiagnostic'))
+            output={'status':'unavailable','journal':None,'receipt':file_safe(None),'collectionError':None}
+            output['collectionError']=choice(value.get('collectionError'),tuple(ERROR_TYPES)+('Unknown','MachError','ModuleNotFoundError','ImportError','JSONDecodeError'),'unavailable') if value.get('collectionError') is not None else None
+            if api is None or value.get('status')!='observed':return output
+            try:
+                journal=api.inventory_diagnostic(value.get('journal'))
+                raw=(json.dumps(journal,sort_keys=True,indent=2)+'\n').encode()
+                receipt=mapping(value.get('receipt'))
+                if type(receipt.get('bytes')) is not int or receipt['bytes']!=len(raw) or receipt.get('sha256')!=hashlib.sha256(raw).hexdigest():return output
+                output.update(status='observed',journal=journal,receipt=file_safe(receipt))
+            except Exception:
+                output['collectionError']='unavailable'
+            return output
+        def upstream_safe(value,api):
+            result=mapping(value.get('mozillaUpstream'));inventory=mapping(result.get('inventory'))
+            case=mapping(result.get('case'));harness=mapping(case.get('harness'));counts=mapping(harness.get('counts'))
+            whole=mapping(inventory.get('global'));scope=mapping(inventory.get('scope'))
+            keys=('registeredRecords','activeRecords','manifestEnabledRecords','manifestDisabledRecords',
+                  'excludedByDefaultFilters','uniqueIds','uniqueEnabledIds','uniqueFiles','expectedFailureRecords')
+            project=lambda obj:{key:number(obj.get(key),integer=True) for key in keys}
+            output={'scope':'xpcom/tests/unit','contract':'current-source-upstream-xpcom-manifest-v1',
+                'verified':upstream_ok(value,api),'status':choice(result.get('status'),('passed','failed'),'unavailable'),
+                'fullUpstreamSuiteExecuted':False,'fullHostQualification':False,'nativeAuthentication':'NOT_TESTED',
+                'globalCoveragePercent':None,'globalInventory':project(whole),'scopeInventory':project(scope),
+                'inventoryStatus':choice(inventory.get('status'),('observed','failed'),'unavailable'),
+                'inventoryDiagnostic':inventory_diagnostic_safe(result,api),
+                'assetPreconditions':{'before':api.asset_precondition_evidence(result.get('nativeAssetPrecondition')) if api is not None else None,
+                    'after':api.asset_precondition_evidence(result.get('postNativeAssetPrecondition')) if api is not None else None},
+                'inventoryPlanSHA256':digest_safe(inventory.get('planSHA256')),
+                'inventoryReceipt':file_safe(result.get('inventoryReceipt')),
+                'globalDump':file_safe(whole.get('dump')),'scopeDump':file_safe(scope.get('dump')),
+                'inventoryTestsExecuted':number(inventory.get('testsExecuted'),integer=True),
+                'inventoryServerProcessesStarted':number(inventory.get('serverProcessesStarted'),integer=True),
+                'harnessStatus':choice(harness.get('status'),('passed','failed','unavailable'),'unavailable'),
+                'completeLog':boolean(harness.get('completeLog')),'harnessReceipt':file_safe(harness),
+                'counts':{key:number(counts.get(key),integer=True) for key in ('selected','executed','passed',
+                    'expectedFailures','unexpectedResults','skipped','crashes','timeouts','errorLogs','unsupported','unattempted')},
+                'process':{key:boolean(mapping(case.get('process')).get(key)) for key in
+                    ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')},
+                'runnerFailure':failure_safe(case.get('runnerFailure')),'monitorFailure':monitor_safe(case.get('monitorFailure')),
+                'monitorFailureObserved':boolean(case.get('monitorFailureObserved')),
+                'inputBindingStable':boolean(case.get('inputBindingStable')),
+                'caseError':case_error_safe(case.get('caseError')),'caughtCode':case_error_safe(case.get('caughtCode')),
+                'caseFailurePhase':choice(case.get('caseFailurePhase'),('setup','source-binding','environment','launch','harness-receipt','post-source-binding'),'unavailable') if case.get('caseFailurePhase') is not None else None,
+                'stages':[projected_stage_safe(row) for row in case.get('stages',[])[:4]] if type(case.get('stages')) is list else [],
+                'subtestStatuses':{key:number(mapping(mapping(counts.get('rawLifecycle')).get('subtestStatuses')).get(key),integer=True) for key in ('PASS','FAIL','SKIP','ERROR','TIMEOUT','ASSERT','PRECONDITION_FAILED','NOTRUN')},
+                'evidenceCollectionFailure':choice(case.get('evidenceCollectionFailure'),ERROR_TYPES,'unavailable') if case.get('evidenceCollectionFailure') is not None else None,
+                'evidenceWriteFailure':choice(case.get('evidenceWriteFailure'),ERROR_TYPES,'unavailable') if case.get('evidenceWriteFailure') is not None else None,
+                'monitorDiagnostics':[monitor_safe(row) for row in case.get('monitorDiagnostics',[])[-16:]] if type(case.get('monitorDiagnostics')) is list else [],
+                'tests':[],'assets':{'binaries':{},'xpcomTypelibGeneratorInput':{**file_safe(mapping(result.get('assets')).get('xpcomTypelib')),'interfacesVerified':boolean(mapping(mapping(result.get('assets')).get('xpcomTypelib')).get('interfacesVerified'))}}}
+            output['process']['exitCode']=number(mapping(case.get('process')).get('exitCode'),integer=True,signed=True)
+            allowed={api.SCOPE+'/'+name for name in api.plan_definition()[0]['tests']} if api is not None else set()
+            tests=harness.get('tests')
+            for row in tests[:45] if type(tests) is list else []:
+                if type(row) is dict and row.get('id') in allowed:
+                    output['tests'].append({'id':row['id'],'expected':choice(row.get('expected'),('PASS','FAIL','SKIP'),'unavailable'),
+                        'actual':choice(row.get('actual'),('PASS','FAIL','SKIP','CRASH','TIMEOUT','ERROR','ASSERT','PRECONDITION_FAILED','OK'),'unavailable'),
+                        'satisfied':boolean(row.get('satisfied'))})
+            binaries=mapping(mapping(result.get('assets')).get('binaries'))
+            for label in ('TestArguments','TestBlockingProcess','TestPRIntN','TestQuickReturn','TestUnicodeArguments','plugin-container'):
+                item=mapping(binaries.get(label));output['assets']['binaries'][label]={**file_safe(item),
+                    'filetype':number(item.get('filetype'),integer=True),'uuid':item.get('uuid') if type(item.get('uuid')) is str and re.fullmatch('[0-9a-f]{32}',item['uuid']) else None,
+                    'sections':number(item.get('sections'),integer=True),'sectionsSHA256':digest_safe(item.get('sectionsSHA256'))}
+            total=number(whole.get('manifestEnabledRecords'),integer=True);executed=number(counts.get('executed'),integer=True)
+            output['unattemptedGlobalManifestEnabledRecords']=(total-executed if inventory.get('status')=='observed' and
+                harness.get('completeLog') is True and total is not None and executed is not None and total>=executed else None)
+            return output
+
+        def load_source_proof(helper):
+            global SOURCE_FAILURE_CODES,EXPECTED_BUDGET,SDK_PIN
+            pins=decode(os.environ['QA_SOURCE_PINS']);need(type(pins) is dict and set(pins)==set(SOURCE_NAMES),'source-pin')
+            sources={}
+            for name in SOURCE_NAMES:
+                expected=pins[name];need(type(expected) is str and re.fullmatch('[0-9a-f]{64}',expected) is not None,'source-pin')
+                raw=read_fixed(helper/name,1024**2)
+                need(hashlib.sha256(raw).hexdigest()==expected,'source-pin');sources[name]=raw
+            for name,key in (('mozilla_target_build.py','TARGET_HELPER_SHA256'),('pipeline.py','PIPELINE_SHA256'),
+                             ('mozilla_upstream.py','UPSTREAM_HELPER_SHA256'),('mozilla-upstream.json','UPSTREAM_PLAN_SHA256'),
+                             ('sdk_source.json','SDK_SOURCE_SHA256'),('fresh_job_origin.py','ORIGIN_HELPER_SHA256'),
+                             ('fresh45.py','FRESH_HELPER_SHA256')):
+                need(pins[name]==os.environ.get(key),'source-pin')
+            codes=set()
+            for name,raw in sources.items():
+                if not name.endswith('.py'):continue
+                for node in ast.walk(ast.parse(raw)):
+                    if isinstance(node,ast.Constant) and type(node.value) is str and re.fullmatch('(fresh|mozilla|owned)-[a-z0-9-]{1,90}',node.value):codes.add(node.value)
+            need(len(codes)<=2048,'source-pin');SOURCE_FAILURE_CODES=frozenset(codes)
+            def module(name,file):
+                result=types.ModuleType(name);result.__file__=str(helper/file)
+                exec(compile(sources[file],file,'exec'),result.__dict__);return result
+            target=module('qa_target_proof','mozilla_target_build.py')
+            upstream=module('qa_upstream_proof','mozilla_upstream.py')
+            timing=module('qa_fresh_time','consumer_time.py')
+            need(upstream.plan_definition()[1]==os.environ['UPSTREAM_PLAN_SHA256'],'source-pin')
+            plan=decode(sources['plan.json']);checksum=hashlib.sha256(sources['plan.json']).hexdigest()
+            EXPECTED_BUDGET=timing.select_fresh45_time(plan,checksum,enabled=True)['evidence']
+            specification=decode(sources['sdk_source.json']);pin=mapping(specification.get('pin'))
+            SDK_PIN={key:pin.get(key) for key in ('artifact','run','zipSHA256','tarSHA256')}
+            SDK_PIN['producerJob']=specification.get('producerJob')
+            need(all(type(SDK_PIN.get(key)) is int and SDK_PIN[key]>0 for key in ('artifact','run','producerJob')) and
+                all(type(SDK_PIN.get(key)) is str and re.fullmatch('[0-9a-f]{64}',SDK_PIN[key]) for key in ('zipSHA256','tarSHA256')),'source-pin')
+            target.upstream_api=upstream
+            return target
+        def persisted_failure(task):
+            try:
+                parent=task.stat()
+                need(task.is_absolute() and task.resolve()==task and stat.S_ISDIR(parent.st_mode) and parent.st_uid==os.geteuid(),'binding')
+                try:
+                    row=decode(read_fixed(task/'first-failure.json',65536))
+                except FileNotFoundError:
+                    need(identity(parent)==identity(task.stat()),'binding')
+                    try:(task/'first-failure.json').lstat()
+                    except FileNotFoundError:
+                        need(identity(parent)==identity(task.stat()),'binding')
+                        return 'absent',None
+                    return 'unconfirmed',None
+                need(type(row) is dict and type(row.get('stage')) is str and type(row.get('code')) is str and number(row.get('elapsedSeconds')) is not None,'receipt')
+                return 'observed',failure_safe(row)
+            except BaseException:return 'unconfirmed',None
+
+
+        def clock_proof(task,before=None):
+            fields=[];raws={}
+            for name in ('started-monotonic','started','job-origin.json'):
+                path=task/name;bound=identity(path.lstat());raw=read_fixed(path,4096)
+                need(bound==identity(path.lstat()),'clock');fields.append((raw,bound));raws[name]=raw
+            origin=float(raws['started-monotonic']);started=float(raws['started']);now=time.monotonic()
+            need(math.isfinite(origin) and origin>0 and origin<=now<origin+345*60 and math.isfinite(started) and started>0,'clock')
+            receipt=decode(raws['job-origin.json'])
+            keys={'schema','profile','repository','run','attempt','head','ref','event','job','jobName','startedAt',
+                  'platformMinutes','workDeadlineMinutes','clockResetAllowed'}
+            need(type(receipt) is dict and set(receipt)==keys and integer(receipt.get('schema'),1) and
+                receipt.get('profile')=='fresh-firefox45-job-origin-v1' and
+                receipt.get('repository')==os.environ.get('GITHUB_REPOSITORY')=='Floorp-Projects/Floorp-Runtime' and
+                type(receipt.get('run')) is int and str(receipt['run'])==os.environ.get('GITHUB_RUN_ID') and
+                integer(receipt.get('attempt'),1) and receipt.get('head')==os.environ.get('GITHUB_SHA') and
+                receipt.get('ref')==os.environ.get('GITHUB_REF')=='refs/heads/codex/mac-native-firefox45-fresh-recovery64-20261020' and
+                receipt.get('event')=='push' and type(receipt.get('job')) is int and receipt['job']>0 and
+                receipt.get('jobName')=='fresh-firefox45' and integer(receipt.get('platformMinutes'),360) and
+                integer(receipt.get('workDeadlineMinutes'),345) and receipt.get('clockResetAllowed') is False and
+                type(receipt.get('startedAt')) is str and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z',receipt['startedAt']) is not None,'clock')
+            timestamp=datetime.datetime.fromisoformat(receipt['startedAt'].replace('Z','+00:00')).timestamp()
+            need(started==timestamp,'clock')
+            current=tuple(fields);need(before is None or current==before,'clock')
+            return current
+
+
+        def emit_final(public, qualified, task, before, value, api):
+            """Output is a candidate receipt: only this verifier's natural zero can qualify it."""
+            evidence=decode(json.dumps(public,allow_nan=False).encode())
+            qualified=qualified is True
+            evidence.update(terminalVerifierExitZeroRequired=True,stdoutAloneQualifies=False,
+                            postEmitStateVerified=None,postEmitClockVerified=None)
+            primary=evidence.get('firstFailure');monitor=evidence.get('monitorFailure')
+
+            def reject(code):
+                nonlocal qualified
+                qualified=False
+                evidence.update(status='failed',qualification=None,upstreamQualification=None,
+                    upstreamProofVerified=False,targetProofVerified=False,postEmitStateVerified=False)
+                if evidence.get('finalizationFailureCode') is None:evidence['finalizationFailureCode']=code
+
+            def remember(view):
+                nonlocal primary,monitor
+                if type(view) is not dict:return
+                if view.get('firstFailure') is not None:
+                    if primary is None:
+                        primary=failure_safe(view['firstFailure'])
+                        evidence.update(firstFailure=primary,firstFailureAvailable=True,firstFailureSource='post-emit-summary')
+                    reject('summary-first-failure')
+                if view.get('monitorFailure') is not None:
+                    if monitor is None:monitor=monitor_safe(view['monitorFailure'])
+                    evidence.update(monitorFailure=monitor,monitorFailureAvailable=True,postEmitMonitorFailureObserved=True)
+                    reject('monitor-failure')
+
+            def postcheck():
+                nonlocal primary
+                # Preserve the first already observed cause even if a callback clears a file or mapping.
+                remember(value)
+                if task is None or before is None:
+                    reject('final-state-unconfirmed');return
+                try:
+                    clock_proof(task,before);evidence['postEmitClockVerified']=True
+                except BaseException:
+                    evidence['postEmitClockVerified']=False
+                    evidence['clockAfterProjectionVerified']=False
+                    reject('clock')
+                try:
+                    status,persisted=persisted_failure(task)
+                    evidence['postEmitPersistedFirstFailureStatus']=status
+                    if status!='absent':
+                        if evidence.get('persistedFirstFailureStatus')!='observed':
+                            evidence.update(persistedFirstFailureStatus=status,persistedFirstFailure=persisted)
+                        if primary is None and persisted is not None:
+                            primary=persisted
+                            evidence.update(firstFailure=primary,firstFailureAvailable=True,firstFailureSource='post-emit-persisted')
+                        reject('persisted-first-failure')
+                    saved=decode(read_fixed(task/'summary.json',16*1024**2))
+                    remember(saved)
+                    if not same_value(saved,value):reject('summary-changed')
+                    if qualified and not (os.environ.get('PIPELINE_OUTCOME')=='success' and final_ok(saved) and target_ok(saved,api)):
+                        reject('proof')
+                    # The proof/readback itself is still work under the original clock.
+                    clock_proof(task,before)
+                except BaseException as error:
+                    if isinstance(error,Unconfirmed) and str(error)=='clock':
+                        evidence['postEmitClockVerified']=False;evidence['clockAfterProjectionVerified']=False
+                        reject('clock')
+                    else:reject('final-state-unconfirmed')
+                evidence['firstFailure'],evidence['monitorFailure']=primary,monitor
+
+            try:
+                text=json.dumps(evidence,allow_nan=False)
+                need(len(text.encode())<=1024**2,'receipt')
+                print(text,flush=True)
+            except BaseException:reject('emit')
+            finally:
+                try:postcheck()
+                except BaseException:reject('final-state-unconfirmed')
+            if not qualified:
+                # One bounded repair record; never retry toward success or overwrite the primary.
+                evidence.update(status='failed',qualification=None,upstreamQualification=None,
+                    upstreamProofVerified=False,targetProofVerified=False,postEmitStateVerified=False,
+                    firstFailure=primary,monitorFailure=monitor)
+                try:
+                    text=json.dumps(evidence,allow_nan=False)
+                    if len(text.encode())>1024**2:
+                        text=json.dumps({'role':'fresh-firefox45','status':'failed','qualification':None,
+                            'finalizationFailureCode':'evidence-size','terminalVerifierExitZeroRequired':True,
+                            'stdoutAloneQualifies':False,'firstFailure':primary,'monitorFailure':monitor},allow_nan=False)
+                    print(text,flush=True)
+                except BaseException:pass
+            # No further I/O or independent clock sample on the success path.
+            return qualified
+
+
+        public={'role':'fresh-firefox45','status':'failed','qualification':None,'freshFirefox45':None,'checkpointUsed':False,
+            'existingArtifact':None,'newArtifactUploads':0,'fullHostXUL':'NOT_TESTED','fullHostQualification':False,
+            'stagePackage':'NOT_TESTED','nativeAuthentication':'NOT_TESTED','productQualification':False,
+            'rawSummaryPublished':False,'rawLogContentPublished':False,'firstFailure':None,'firstFailureAvailable':False,
+            'monitorFailure':None,'monitorFailureAvailable':False,'persistedFirstFailure':None,'persistedFirstFailureStatus':'unconfirmed',
+            'sourcePinsVerified':False,'targetProofVerified':None,'upstreamProofVerified':None,'upstreamQualification':None,'upstream':None,'upstreamStages':[],'upstreamStageLogs':{},'freshStages':[],'freshStageLogs':{},'mozillaCases':[],'targetStages':[],'targetStageLogs':{}}
+        passed=False
+        clock_before=None
+        try:
+            task=Path(os.environ['TASK_ROOT']).resolve();helper=(Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()
+            sys.path.insert(0,str(helper))
+            from helper_import_preflight import runner_failure,monitor_projection,stage_projection,number,choice,FAILURE_CODES,ERROR_TYPES
+            from failure_excerpt import PATTERNS,_checkpoint_codes
+            LOG_CLASSES=tuple(row[1] for row in PATTERNS);CHECKPOINT_CODES=_checkpoint_codes()
+            persisted_status,persisted=persisted_failure(task)
+            public.update(persistedFirstFailure=persisted,persistedFirstFailureStatus=persisted_status,
+                firstFailure=persisted,firstFailureAvailable=persisted_status=='observed',
+                firstFailureSource='persisted' if persisted_status=='observed' else 'unconfirmed')
+            try:preflight=decode(read_fixed(task/'monitor-preflight.json',2*1024**2))
+            except BaseException:preflight={}
+            public.update(preflightFirstFailure=failure_safe(mapping(preflight).get('firstFailure')),
+                preflightMonitorFailure=monitor_safe(mapping(preflight).get('monitorFailure')))
+            public['preflightMonitorDiagnostics']=[monitor_safe(row) for row in mapping(preflight).get('monitorDiagnostics',[])[-16:]] if type(mapping(preflight).get('monitorDiagnostics')) is list else []
+            api=load_source_proof(helper);public['sourcePinsVerified']=True
+            clock_before=clock_proof(task);public['clockBeforeProjectionVerified']=True
+            value=decode(read_fixed(task/'summary.json',16*1024**2));need(type(value) is dict,'summary')
+            public.update(summaryFirstFailureAvailable='firstFailure' in value,
+                monitorFailureAvailable='monitorFailure' in value,monitorFailure=monitor_safe(value.get('monitorFailure')),
+                freshFirefox45=boolean(value.get('freshFirefox45')))
+            if 'firstFailure' in value:
+                public['summaryFirstFailure']=failure_safe(value['firstFailure'])
+                if persisted_status!='observed':
+                    public.update(firstFailure=public['summaryFirstFailure'],firstFailureAvailable=True,firstFailureSource='summary')
+            public['monitorDiagnostics']=[monitor_safe(row) for row in value.get('monitorDiagnostics',[])[-16:]] if type(value.get('monitorDiagnostics')) is list else []
+            public['upstreamProofVerified']=upstream_ok(value,api.upstream_api)
+            public['targetProofVerified']=target_ok(value,api)
+            sdk_verified=sdk_ok(value);time_verified=time_budget_ok(value);qa_verified=preflight_ok(value)
+            outcome=os.environ.get('PIPELINE_OUTCOME')=='success'
+            passed=(persisted_status=='absent' and outcome and final_ok(value) and public['targetProofVerified'] is True)
+            public['upstream']=upstream_safe(value,api.upstream_api)
+            public['upstreamQualification']='current-source-upstream-xpcom-manifest-v1' if passed else None
+            mozilla=mapping(value.get('mozilla'));cases=mozilla.get('cases');cases=cases if type(cases) is list else []
+            public['mozillaCases']=[case_safe(cases[i] if i<len(cases) else None,spec) for i,spec in enumerate(CASE_SPECS)]
+            rows=value.get('stages');rows=rows if type(rows) is list else []
+            public['targetStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage') in TARGET_STAGES]
+            public['upstreamStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage') in UPSTREAM_STAGES]
+            public['freshStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage') in ('configure','effective-config','fresh45-exports')]
+            public['allStageCount']=len(rows);public['allStagesComplete']=all(api.stage_complete(row) for row in rows) if rows and all(type(row) is dict for row in rows) else None
+            logs=mapping(value.get('targetStageLogs'))
+            public['targetStageLogs']={name:log_safe(logs.get(name)) for name in TARGET_STAGES}
+            public['upstreamStageLogs']={name:log_safe(logs.get(name)) for name in UPSTREAM_STAGES}
+            public['freshStageLogs']={name:log_safe(logs.get(name)) for name in ('configure','effective-config','fresh45-exports')}
+            public.update(status='passed' if passed else 'failed',qualification='fresh-job-current-source-upstream-xpcom-v1' if passed else None,
+                pipelineStepSucceeded=outcome,preflightVerified=qa_verified,sdkSourceVerified=sdk_verified,
+                executionTimeBudgetVerified=time_verified,executionTimeProfile='fresh-firefox45-shared-job-deadline-v1' if time_verified else None,
+                sharedWorkDeadlineMinutes=345 if time_verified else None,nominalCleanupReserveMinutes=15 if time_verified else None,
+                sdkArtifact=SDK_PIN['artifact'] if sdk_verified else None,sdkSourceRun=SDK_PIN['run'] if sdk_verified else None,
+                sdkProducerJob=SDK_PIN['producerJob'] if sdk_verified else None,sdkSourceSHA256=os.environ['SDK_SOURCE_SHA256'] if sdk_verified else None)
+
+        except BaseException as error:
+            passed=False;public.update(status='failed',qualification=None,upstreamQualification=None,upstreamProofVerified=False,targetProofVerified=False)
+            public['evidenceFailureCode']=str(error) if isinstance(error,Unconfirmed) and str(error) in ('binding','receipt','source-pin','summary','clock') else 'evidence-unavailable'
+        finally:
+            if clock_before is not None:
+                try:
+                    clock_proof(task,clock_before);public['clockAfterProjectionVerified']=True
+                except BaseException:
+                    passed=False;public.update(status='failed',qualification=None,upstreamQualification=None,upstreamProofVerified=False,targetProofVerified=False,clockAfterProjectionVerified=False,evidenceFailureCode='clock')
+            passed=emit_final(public,passed,globals().get('task'),clock_before,globals().get('value'),globals().get('api'))
+        raise SystemExit(0 if passed else 1)
+
+        PYCODE
