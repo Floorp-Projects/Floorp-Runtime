@@ -1,8 +1,8 @@
-name: Mac upstream XPCOM QA recovery58
+name: Mac upstream XPCOM QA recovery59
 'on':
   push:
     branches:
-    - codex/mac-native-mozilla-upstream-recovery58-20261020
+    - codex/mac-native-mozilla-upstream-recovery59-20261020
 permissions:
   contents: read
   actions: read
@@ -10,13 +10,13 @@ concurrency:
   group: isolated-intel-checkpoint-${{ github.ref }}
   cancel-in-progress: false
 env:
-  FLOORP_FIXTURE_SHA: 3c2999d115f13226da83c8285818725c6cb0ab36
+  FLOORP_FIXTURE_SHA: 1e6b113a7363a8ba9bb31a0addeb82b2f03a48fe
   HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
   RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
   SDK_SOURCE_SHA256: ef5d0ed40f4f27b919df7a46323c63b7790ba325ce288a873b207858614bd688
   TARGET_HELPER_SHA256: b9a5debecd559aed8550e3a5e5a102fdbb3646cb57e5cef94f2bf8e2e0658eb3
   PIPELINE_SHA256: dec14bcff2ddcfd6fd05190224d0e659d7384d597a953101887cfd1071da908b
-  UPSTREAM_HELPER_SHA256: af0128f482aa550a0e159c181807f05810c69929696b0950fa385cf2060bff70
+  UPSTREAM_HELPER_SHA256: e002606d3c232b802db648e9a99aa03df61985f4f2da5f2e869a13aca9efa392
   UPSTREAM_PLAN_SHA256: 514b9ef7af24c9a5eea9fac21260fb5e918759cf15b71f99b9c715bf1269e05f
 jobs:
   consumer:
@@ -32,7 +32,7 @@ jobs:
         test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
         [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
         [[ "$SDK_SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
-        test "$GITHUB_REF" = refs/heads/codex/mac-native-mozilla-upstream-recovery58-20261020
+        test "$GITHUB_REF" = refs/heads/codex/mac-native-mozilla-upstream-recovery59-20261020
         test "$GITHUB_EVENT_NAME" = push
         test "$GITHUB_RUN_ATTEMPT" = 1
         test '${{ github.event.created }}' = true
@@ -108,7 +108,7 @@ jobs:
                     'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
                     'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
                     'test_sdk_source','test_sdk_source_integration','test_consumer_time',
-                    'test_build_completion','test_build_completion_contract','test_mozilla_target_build','test_mozilla_upstream'],565,False),
+                    'test_build_completion','test_build_completion_contract','test_mozilla_target_build','test_mozilla_upstream'],577,False),
                     ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
                     '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
                 for test_stage,command,expected,recording in suites:
@@ -312,7 +312,7 @@ jobs:
                     preflight['firstFailure'] is None and 'monitorFailure' in preflight and
                     preflight['monitorFailure'] is None):
                 return False
-            for name,total in (('checkpoint-tests',565),('failure-recording-tests',14)):
+            for name,total in (('checkpoint-tests',577),('failure-recording-tests',14)):
                 tests=mapping(preflight.get(name))
                 if not (tests.get('complete') is True and tests.get('status')=='passed' and
                         integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
@@ -476,6 +476,20 @@ jobs:
             return output
         def case_error_safe(value):
             return None if value is None else choice(value,tuple(SOURCE_FAILURE_CODES)+tuple(FAILURE_CODES)+tuple(ERROR_TYPES)+('nonzero-exit','runner-failure','exception'),'unavailable')
+        def inventory_diagnostic_safe(result,api):
+            value=mapping(result.get('inventoryDiagnostic'))
+            output={'status':'unavailable','journal':None,'receipt':file_safe(None),'collectionError':None}
+            output['collectionError']=choice(value.get('collectionError'),tuple(ERROR_TYPES)+('Unknown','MachError','ModuleNotFoundError','ImportError','JSONDecodeError'),'unavailable') if value.get('collectionError') is not None else None
+            if api is None or value.get('status')!='observed':return output
+            try:
+                journal=api.inventory_diagnostic(value.get('journal'))
+                raw=(json.dumps(journal,sort_keys=True,indent=2)+'\n').encode()
+                receipt=mapping(value.get('receipt'))
+                if type(receipt.get('bytes')) is not int or receipt['bytes']!=len(raw) or receipt.get('sha256')!=hashlib.sha256(raw).hexdigest():return output
+                output.update(status='observed',journal=journal,receipt=file_safe(receipt))
+            except Exception:
+                output['collectionError']='unavailable'
+            return output
         def upstream_safe(value,api):
             result=mapping(value.get('mozillaUpstream'));inventory=mapping(result.get('inventory'))
             case=mapping(result.get('case'));harness=mapping(case.get('harness'));counts=mapping(harness.get('counts'))
@@ -488,6 +502,7 @@ jobs:
                 'fullUpstreamSuiteExecuted':False,'fullHostQualification':False,'nativeAuthentication':'NOT_TESTED',
                 'globalCoveragePercent':None,'globalInventory':project(whole),'scopeInventory':project(scope),
                 'inventoryStatus':choice(inventory.get('status'),('observed','failed'),'unavailable'),
+                'inventoryDiagnostic':inventory_diagnostic_safe(result,api),
                 'inventoryPlanSHA256':digest_safe(inventory.get('planSHA256')),
                 'inventoryReceipt':file_safe(result.get('inventoryReceipt')),
                 'globalDump':file_safe(whole.get('dump')),'scopeDump':file_safe(scope.get('dump')),
