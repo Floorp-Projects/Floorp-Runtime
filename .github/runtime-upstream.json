@@ -2,13 +2,13 @@
   "schema_version": 1,
   "upstream": {
     "repository": "mozilla-firefox/firefox",
-    "version": "158.0.1",
+    "version": "158.0.2",
     "tag": null,
     "tracking_ref": "refs/heads/release",
-    "commit": "1a0cfe22a2d8ba77e77cc8f43eaa480e34eca181",
-    "tree": "04e6d359951669601fc15746904f31bd906f87f4",
-    "previous_tag": "FIREFOX_157_0_1_RELEASE",
-    "previous_commit": "0c469c2352451630bc69fc328c9f0c589c6c534d"
+    "commit": "6858d1b26212b38d8652c8e855fead6e12f4f36d",
+    "tree": "38ff1cdee5ccee982f2cc023b8f86fb31c01580e",
+    "previous_tag": null,
+    "previous_commit": "1a0cfe22a2d8ba77e77cc8f43eaa480e34eca181"
   },
   "floorp_patch": {
     "repository": "Floorp-Projects/Floorp",
