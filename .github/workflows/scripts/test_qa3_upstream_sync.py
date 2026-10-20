@@ -9,13 +9,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from upstream_sync import check_patches, git, sync_action
+from upstream_sync import check_patches, git, integrate_upstream, sync_action
 
 
 def save(root, name, content):
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8", newline="\n")
     return path
 
 
@@ -47,6 +47,7 @@ class UpstreamSyncTests(unittest.TestCase):
         self.upstream = self.root / "upstream"
         for repo in (self.runtime, self.upstream):
             git(self.root, "init", "-q", str(repo))
+            git(repo, "config", "core.autocrlf", "false")
             save(repo, "source.txt", "old\n")
             commit(repo)
 
@@ -114,7 +115,7 @@ class UpstreamSyncTests(unittest.TestCase):
         self.assertEqual(output.read_text(), "action=skip\n")
         self.assertEqual(self.snapshot(), before)
 
-    def test_recorded_cohort_rejects_true_upstream_advancement(self):
+    def test_recorded_cohort_routes_advancement_to_checked_integration(self):
         self.pin(git(self.upstream, "rev-parse", "HEAD"))
         save(self.upstream, "source.txt", "advanced\n")
         commit(self.upstream)
@@ -123,9 +124,8 @@ class UpstreamSyncTests(unittest.TestCase):
         result = self.cli(
             "guard", "--upstream", str(self.upstream), "--output", str(output)
         )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("deliberate reintegration", result.stderr)
-        self.assertFalse(output.exists())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), "action=integrate\n")
         self.assertEqual(self.snapshot(), before)
 
     def switch_to_unrecorded_pr(self):
@@ -157,7 +157,7 @@ class UpstreamSyncTests(unittest.TestCase):
         self.assertEqual(output.read_text(), "action=skip\n")
         self.assertEqual(self.snapshot(), before)
 
-    def test_recorded_base_rejects_advancement_after_branch_switch(self):
+    def test_recorded_base_routes_advancement_without_allowing_file_replacement(self):
         saved = self.switch_to_unrecorded_pr()
         save(self.upstream, "source.txt", "advanced\n")
         commit(self.upstream)
@@ -172,9 +172,80 @@ class UpstreamSyncTests(unittest.TestCase):
             "--output",
             str(output),
         )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("deliberate reintegration", result.stderr)
-        self.assertFalse(output.exists())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), "action=integrate\n")
+        self.assertEqual(self.snapshot(), before)
+        with self.assertRaisesRegex(ValueError, "selected branch manifest"):
+            integrate_upstream(self.runtime, self.upstream, saved)
+
+    def integration_fixture(self):
+        save(self.upstream, "browser/config/version.txt", "158.0.1\n")
+        save(self.upstream, "shared.txt", "upstream old\n")
+        recorded = commit(self.upstream)
+        git(self.upstream, "remote", "add", "origin", str(self.upstream))
+        save(self.runtime, "shared.txt", "upstream old\n")
+        save(self.runtime, "browser/config/version.txt", "158.0.1\n")
+        save(self.runtime, "widget/cocoa/appshim/backend.mm", "pointer event\n")
+        patch = self.patch("native", "old", "patched")
+        self.policy([patch])
+        pin = {
+            "schema_version": 1,
+            "upstream": {
+                "repository": "mozilla-firefox/firefox",
+                "commit": recorded,
+                "version": "158.0.1",
+                "tag": None,
+            },
+            "floorp_patch": {
+                "runtime_path": patch.relative_to(self.runtime).as_posix(),
+                "sha256": hashlib.sha256(patch.read_bytes()).hexdigest(),
+                "patched_files": {
+                    "source.txt": hashlib.sha256(b"patched\n").hexdigest(),
+                },
+            },
+        }
+        save(self.runtime, ".github/runtime-upstream.json", json.dumps(pin))
+        commit(self.runtime)
+        save(self.upstream, "shared.txt", "upstream security fix\n")
+        save(self.upstream, "browser/config/version.txt", "158.0.2\n")
+        current = commit(self.upstream)
+        return recorded, current
+
+    def test_integration_preserves_native_source_and_records_checked_new_pin(self):
+        recorded, current = self.integration_fixture()
+        integrate_upstream(self.runtime, self.upstream)
+        self.assertEqual((self.runtime / "shared.txt").read_text(), "upstream security fix\n")
+        self.assertEqual(
+            (self.runtime / "widget/cocoa/appshim/backend.mm").read_text(),
+            "pointer event\n",
+        )
+        self.assertEqual((self.runtime / "source.txt").read_text(), "old\n")
+        pin = json.loads((self.runtime / ".github/runtime-upstream.json").read_text())
+        self.assertEqual(pin["upstream"]["commit"], current)
+        self.assertEqual(pin["upstream"]["previous_commit"], recorded)
+        self.assertEqual(pin["upstream"]["version"], "158.0.2")
+        self.assertEqual(
+            pin["floorp_patch"]["patched_files"]["source.txt"],
+            hashlib.sha256(b"patched\n").hexdigest(),
+        )
+        self.assertEqual(check_patches(self.runtime), 1)
+
+    def test_integration_conflict_leaves_source_index_and_pin_unchanged(self):
+        self.integration_fixture()
+        save(self.runtime, "shared.txt", "Floorp behavior\n")
+        commit(self.runtime)
+        before = self.snapshot()
+        with self.assertRaises(ValueError):
+            integrate_upstream(self.runtime, self.upstream)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_integration_incompatible_patch_leaves_checkout_unchanged(self):
+        self.integration_fixture()
+        save(self.upstream, "source.txt", "new incompatible implementation\n")
+        commit(self.upstream)
+        before = self.snapshot()
+        with self.assertRaises(ValueError):
+            integrate_upstream(self.runtime, self.upstream)
         self.assertEqual(self.snapshot(), before)
 
     def test_selected_recorded_pr_takes_precedence_over_base(self):

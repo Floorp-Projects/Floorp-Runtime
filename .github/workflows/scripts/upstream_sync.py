@@ -40,10 +40,66 @@ def sync_action(root, upstream, base_manifest=None):
         raise ValueError("Invalid recorded immutable upstream commit")
     if recorded == current:
         return "skip"
-    raise ValueError(
-        "Recorded source cohort requires deliberate reintegration for upstream "
-        + current
-    )
+    return "integrate"
+
+
+def integrate_upstream(root, upstream, base_manifest=None):
+    manifest = root / ".github/runtime-upstream.json"
+    if not manifest.exists():
+        raise ValueError("Recorded integration requires the selected branch manifest")
+    pin = json.loads(manifest.read_text())
+    recorded = pin["upstream"]["commit"]
+    current = git(upstream, "rev-parse", "HEAD")
+    if sync_action(root, upstream, base_manifest) != "integrate":
+        raise ValueError("Recorded integration requires an upstream advancement")
+    if pin["upstream"]["repository"] != "mozilla-firefox/firefox":
+        raise ValueError("Unexpected upstream repository")
+    if git(root, "status", "--porcelain"):
+        raise ValueError("Recorded integration requires a clean checkout")
+    patches = required_patches(root)
+    native = pin["floorp_patch"]
+    if hashlib.sha256((root / native["runtime_path"]).read_bytes()).hexdigest() != native["sha256"]:
+        raise ValueError("Pinned native patch changed")
+    git(upstream, "fetch", "--depth=1", "origin", recorded)
+    git(root, "fetch", "--no-tags", str(upstream), recorded, current)
+    with tempfile.TemporaryDirectory(prefix="upstream-integration-") as temporary:
+        index = Path(temporary) / "index"
+        env = {**os.environ, "GIT_INDEX_FILE": str(index.resolve())}
+        git(root, "read-tree", "HEAD", env=env)
+        delta = Path(temporary) / "upstream.patch"
+        with delta.open("wb") as stream:
+            subprocess.run(
+                ["git", "-C", str(root), "diff", "--binary", "--full-index",
+                 recorded, current, "--", ".", ":(exclude).github",
+                 ":(exclude)floorp", ":(exclude).gitmodules", ":(exclude)README.md"],
+                stdout=stream, check=True,
+            )
+        if delta.stat().st_size:
+            git(root, "apply", "--cached", "--3way", str(delta), env=env)
+        integrated_tree = git(root, "write-tree", env=env)
+        for patch in patches:
+            git(root, "apply", "--cached", "--whitespace=error-all", str(patch), env=env)
+        for path in native["patched_files"]:
+            content = subprocess.check_output(
+                ["git", "-C", str(root), "show", ":" + path], env=env,
+            )
+            native["patched_files"][path] = hashlib.sha256(content).hexdigest()
+        version = git(upstream, "show", "HEAD:browser/config/version.txt").strip()
+        if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", version):
+            raise ValueError("Invalid upstream version")
+        pin["upstream"].update({
+            "version": version, "tag": None, "tracking_ref": "refs/heads/release",
+            "commit": current, "tree": git(upstream, "rev-parse", "HEAD^{tree}"),
+            "previous_commit": recorded, "previous_tag": pin["upstream"].get("tag"),
+        })
+        with delta.open("wb") as stream:
+            subprocess.run(
+                ["git", "-C", str(root), "diff", "--binary", "--full-index",
+                 "HEAD", integrated_tree], stdout=stream, check=True,
+            )
+        if delta.stat().st_size:
+            git(root, "apply", "--index", str(delta))
+        manifest.write_text(json.dumps(pin, indent=2) + "\n", encoding="utf-8")
 
 
 def required_patches(root):
@@ -102,6 +158,9 @@ def main():
     guard.add_argument("--upstream", required=True, type=Path)
     guard.add_argument("--base-manifest", type=Path)
     guard.add_argument("--output", type=Path, default=os.environ.get("GITHUB_OUTPUT"))
+    integrate = commands.add_parser("integrate")
+    integrate.add_argument("--upstream", required=True, type=Path)
+    integrate.add_argument("--base-manifest", type=Path)
     commands.add_parser("check-patches")
     args = parser.parse_args()
     root = Path.cwd()
@@ -112,6 +171,9 @@ def main():
                 with args.output.open("a") as stream:
                     stream.write("action=" + action + "\n")
             print("Upstream sync action: " + action)
+        elif args.command == "integrate":
+            integrate_upstream(root, args.upstream, args.base_manifest)
+            print("Integrated upstream and verified required patches")
         else:
             print(f"All {check_patches(root)} required upstream patches apply cleanly")
     except (KeyError, TypeError, OSError, ValueError) as error:
