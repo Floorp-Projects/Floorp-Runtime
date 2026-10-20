@@ -1,0 +1,337 @@
+# SDK/build/artifact-free retained-primary Mac preflight; source pins await final freeze.
+name: Retained primary lifecycle preflight on Intel Mac
+'on':
+  push:
+    branches: [codex/mac-native-anchor-preflight-recovery60-20261020]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: isolated-intel-anchor-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  FLOORP_FIXTURE_SHA: 12a369248b838a6779f87dabf2c8dee652fe78a0
+  FLOORP_SOURCE_PINS_JSON: '{"anchor_inventory.py":"4c535e9358b33cf6d55ca0e707e6c22a598c0b9088d619c1a2b19fa59249c96e","census_abi.c":"d62de0173995f0e963a42bdbdee80b0892558424f3439e4f723abe872f8f6912","checkpoint_transfer.py":"4c3ecb1d85912b9dead5b25b49c4eb38c9a481e2f73f9619eff7352c59cea4aa","darwin_activity.py":"fbdefbf8a0a1b4112ca7ed97ee723b763dfee765b5ecf17e471404d0d97a37fb","darwin_inventory.py":"aac48b4168114a31b141cd81c75eef1a6043a9d8c145cb54a25634b4ad899f8a","helper_import_preflight.py":"4ed23cb1220d040f831018f2ce77a8e1a5444e1e047e6a41c0a73932c2a882fc","mozilla_harness_smoke.py":"2562fd36c1e7dfb630abbf29fb567eec0dcdecf946174044718d81f6990bcabe","plan.json":"33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460","primary_anchor.py":"6155e6b86a6125adca2914b467e2da20302a00bf0333ea22af40e61c52f1148b","process_census.py":"43d434019393662aa1cfc4e80aa50df08d5829a98a5e25115f6e1f3477198fed","qa_core.py":"13441551e1bfc96aed10fba97f16844b5a8cddbbf5685c72f4c07a7fc578e49a","support.py":"6909ccfa9cb25cc48554405dde0185f396b12a94493f9073f32a847a0d9c3631","test_anchor_inventory.py":"5cf39799069b5f2c7f7c8d7ab348f549ab095edb7801ba5f08e6e982edb08130","test_anchor_mac_groups.py":"2a7b34d3d206ce09a412c5e1b40427aacc41d607520c0aa32de0fad9557ec060","test_anchor_wait_models.py":"1c5f9b3257dc3ecb128d976dfd9d458b8cb88fb8cd4912cd456bfd52493c2353","test_darwin_inventory.py":"07f418702eb1191303fb5495233d85befae5bc244563eb088378d6c380765011","test_failure_recovery.py":"24530c3b0b5bc0869a5e7ccae018fd5b0a0765f65a4b666b579ef0b3ccd8b854","test_guards.py":"ea3a6c3be96588ff57d267677625c664ecd451bcdea2330e245cd902211c4cfe","test_helper_import_preflight.py":"35be5f2f8afc267f330c9fa72b1fdd2116fbf5ecb1313b7ecfe693c2ed10f206","test_mozilla_harness_smoke.py":"6ae41fb5378d03f3674330e6e3518803d76ec987f077df24a1b8855311173d59","test_owned_cleanup.py":"5d422f8ae06df0b5221d7f8d093746460b77c9e2d62f1c87d49e186dca810371","test_primary_anchor.py":"9b9ed529145832b2bdb5f9e4f8210ac62bbef969bed685c50466fcf7b27437dc","test_process_census.py":"b785634ae2ef674bef0af993ba43472a90c818f0018eb21f38c83c133106278b"}'
+jobs:
+  consumer:
+    name: checkpoint-consumer
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    steps:
+      - name: Bound the initial reviewed execution
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+          [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/codex/mac-native-anchor-preflight-recovery60-20261020
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test '${{ github.event.created }}' = true
+          test '${{ github.event.deleted }}' = false
+          test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+          TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+          test -x "$TASK_PYTHON"
+          echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+          echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-anchor" >> "$GITHUB_ENV"
+      - name: Checkout immutable reviewed fixture
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Floorp-Projects/Floorp
+          ref: ${{ env.FLOORP_FIXTURE_SHA }}
+          path: fixture
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Establish the original job clock from normal run metadata
+        timeout-minutes: 3
+        env:
+          CHECKPOINT_READ_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if ! "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/checkpoint_transfer.py init --role consumer --task "$TASK_ROOT" > "$RUNNER_TEMP/anchor-clock.private.log" 2>&1; then
+            echo '{"anchorPreflightAdmission":{"status":"failed","code":"job-clock-init-failed"}}'
+            exit 1
+          fi
+      - name: Verify native ABI and the exact retained-primary Mac matrix
+        timeout-minutes: 360
+        shell: bash
+        run: |
+          umask 077
+          "$TASK_PYTHON" - <<'PYCODE'
+          
+          import hashlib,json,math,os,pathlib,re,stat,sys,time
+          EXPECTED=['test_primary_anchor.ModelTests.test_actual_query_adapter_keeps_bsd_arg1', 'test_primary_anchor.ModelTests.test_darwin_full_bsd_low16_and_no_resource_zero', 'test_primary_anchor.ModelTests.test_darwin_identity_fields_and_states', 'test_primary_anchor.ModelTests.test_darwin_live_never_decodes_stale_xstatus', 'test_primary_anchor.ModelTests.test_darwin_short_errno_and_bad_generation', 'test_primary_anchor.ModelTests.test_darwin_undefined_signal_rejected', 'test_primary_anchor.ModelTests.test_raw_roster_strict_types_unknown_not_empty', 'test_primary_anchor.ModelTests.test_rlock_alone_model_allows_stale_signal_after_reentrant_reap', 'test_primary_anchor.ModelTests.test_unknown_post_reap_read_only', 'test_primary_anchor.ModelTests.test_wait_status_models', 'test_primary_anchor.ProductionModelTests.test_bool_errno_is_not_an_integer_measurement', 'test_primary_anchor.ProductionModelTests.test_callback_deadline_exact_and_no_typeerror_fallback', 'test_primary_anchor.ProductionModelTests.test_constructor_explicit_failed_exec_known_returncode_separate', 'test_primary_anchor.ProductionModelTests.test_constructor_inner_failure_without_pid_is_opaque_unknown', 'test_primary_anchor.ProductionModelTests.test_constructor_interruption_retains_actual_instance_unknown', 'test_primary_anchor.ProductionModelTests.test_darwin_bootstrap_source_only_two_named_stages', 'test_primary_anchor.ProductionModelTests.test_failed_final_wait_can_recover_only_still_bound_exact_child', 'test_primary_anchor.ProductionModelTests.test_known_preconstructor_validation_failure_allocates_nothing', 'test_primary_anchor.ProductionModelTests.test_known_registry_registration_interruption_keeps_pending_owner', 'test_primary_anchor.ProductionModelTests.test_linux_test_census_cannot_qualify_darwin', 'test_primary_anchor.ProductionModelTests.test_no_production_session_override_or_stop', 'test_primary_anchor.ProductionModelTests.test_opaque_quarantine_capacity_is_bounded_before_spawn', 'test_primary_anchor.ProductionModelTests.test_positive_exact_reap_fact_prevents_second_recovery_wait', 'test_primary_anchor.ProductionModelTests.test_positive_pid_with_false_child_flag_is_retained', 'test_primary_anchor.ProductionModelTests.test_postreap_deadline_exact_and_absence_typed', 'test_primary_anchor.ProductionModelTests.test_recovery_after_echild_never_waits_cached_pid', 'test_primary_anchor.ProductionModelTests.test_recovery_callback_reentry_no_extra_os_operation', 'test_primary_anchor.ProductionModelTests.test_recovery_generation_mismatch_never_waits', 'test_primary_anchor.ProductionModelTests.test_recovery_wait_nonblocking_without_signals_or_cleanup_qualification', 'test_primary_anchor.ProductionModelTests.test_recovery_zero_never_sets_returncode', 'test_primary_anchor.ProductionModelTests.test_safe_errno_and_stale_positive_exit_clear_on_unavailable', 'test_primary_anchor.ProductionModelTests.test_sigchld_handler_change_revokes_authority', 'test_primary_anchor.ProductionModelTests.test_sigchld_ignore_refuses_before_spawn', 'test_primary_anchor.ProductionModelTests.test_signal_errno_safe_and_success_clears_it', 'test_primary_anchor.ProductionModelTests.test_spawn_forwards_stdio_env_and_fixes_new_session', 'test_primary_anchor.ProductionModelTests.test_started_unknown_object_finalizer_warns_without_base_poll', 'test_primary_anchor.ProductionModelTests.test_success_then_arm_interruption_retains_pending_owner', 'test_primary_anchor.ProductionModelTests.test_unknown_pid_blocks_all_wait_signal_and_absence_queries', 'test_primary_anchor.ProductionModelTests.test_unmeasured_terminal_resource_stays_none', 'test_anchor_inventory.AnchorInventoryTests.test_decoding_at_or_after_absolute_deadline_is_not_a_valid_snapshot', 'test_anchor_inventory.AnchorInventoryTests.test_every_required_binding_missing_blocks_native_launch', 'test_anchor_inventory.AnchorInventoryTests.test_exception_errno_and_returncode_are_strict_ints_not_booleans', 'test_anchor_inventory.AnchorInventoryTests.test_group_is_a_strict_positive_bounded_integer_before_any_producer', 'test_anchor_inventory.AnchorInventoryTests.test_helper_timeout_cap_and_absolute_remaining_budget_after_setup', 'test_anchor_inventory.AnchorInventoryTests.test_import_preparation_crossing_absolute_deadline_prevents_native_launch', 'test_anchor_inventory.AnchorInventoryTests.test_injected_sleep_producer_timeout_reaps_only_its_exact_direct_child', 'test_anchor_inventory.AnchorInventoryTests.test_invalid_and_entrance_expired_deadlines_do_not_launch', 'test_anchor_inventory.AnchorInventoryTests.test_malformed_native_protocol_and_bool_errno_are_fixed_private_failures', 'test_anchor_inventory.AnchorInventoryTests.test_native_environment_preserves_bindings_but_excludes_tokens_and_import_overrides', 'test_anchor_inventory.AnchorInventoryTests.test_native_invalid_pid_roster_never_becomes_complete_or_ps_fallback', 'test_anchor_inventory.AnchorInventoryTests.test_native_positive_empty_snapshot_is_distinct_from_unavailable', 'test_anchor_inventory.AnchorInventoryTests.test_only_fixed_validation_failure_codes_are_preserved', 'test_anchor_inventory.AnchorInventoryTests.test_only_two_exact_bootstrap_stages_select_ps', 'test_anchor_inventory.AnchorInventoryTests.test_producer_failures_keep_only_fixed_code_details_without_native_fallback', 'test_anchor_inventory.AnchorInventoryTests.test_ps_byte_cap_is_on_encoded_input_and_never_returns_a_partial_roster', 'test_anchor_inventory.AnchorInventoryTests.test_ps_positive_global_snapshot_without_matching_group_can_be_empty', 'test_anchor_inventory.AnchorInventoryTests.test_ps_rejects_empty_malformed_duplicate_or_invalid_global_rows', 'test_anchor_inventory.AnchorInventoryTests.test_ps_setup_deadline_expiry_prevents_launch', 'test_anchor_inventory.AnchorInventoryTests.test_raw_zombie_members_survive_decoder_and_native_adapter_without_live_filter', 'test_anchor_inventory.AnchorInventoryTests.test_timeout_keeps_bounded_progress_without_raw_output', 'test_anchor_inventory.AnchorInventoryTests.test_unsupported_platform_does_not_launch', 'test_guards.DarwinCounterGuards.test_short_bsd_info_is_not_disappearance_without_independent_proof', 'test_guards.DarwinCounterGuards.test_confirmed_zombie_or_replaced_generation_is_distinct_from_unknown', 'test_guards.DarwinCounterGuards.test_only_bsd_query_enables_zombie_search_and_resets_errno', 'test_guards.DarwinCounterGuards.test_full_task_zombie_with_exit_pgid_is_gone_after_generation_check', 'test_guards.DarwinCounterGuards.test_full_bsd_response_requires_valid_identity_birth_and_state', 'test_guards.DarwinCounterGuards.test_short_or_oversized_zombie_response_cannot_prove_gone', 'test_guards.DarwinCounterGuards.test_real_mac_unreaped_child_is_gone_while_signal_zero_succeeds', 'test_guards.Guards.test_unavailable_monitor_preserves_failure_and_reclaims_owned_group', 'test_guards.Guards.test_sampler_exception_records_stage_and_reaps_owned_process', 'test_guards.Guards.test_cleanup_failure_keeps_initial_failure_and_final_stage_record', 'test_failure_recovery.FailureExcerptTests.test_real_monitor_stop_preserves_before_and_after_cleanup', 'test_failure_recovery.FailureExcerptTests.test_unreadable_diagnostics_do_not_change_primary_failure', 'test_failure_recovery.FailureExcerptTests.test_cleanup_only_failure_does_not_mislabel_a_postcleanup_excerpt', 'test_failure_recovery.FailureExcerptTests.test_throwing_collector_cannot_replace_failure_or_stage_record', 'test_process_census.CensusGuards.test_abi_rejects_out_of_bounds_overlapping_wrong_width_or_signedness', 'test_process_census.CensusGuards.test_abi_receipt_is_bound_to_source_binary_job_and_fixture', 'test_darwin_inventory.DarwinInventoryGuards.test_actual_query_timeout_reaps_exact_helper_before_retry', 'test_darwin_inventory.DarwinInventoryGuards.test_bootstrap_flag_cannot_launch_an_unrelated_stage', 'test_primary_anchor.DarwinActualTests.test_01_exit_zero', 'test_primary_anchor.DarwinActualTests.test_02_exit_seven', 'test_primary_anchor.DarwinActualTests.test_03_exit_255', 'test_primary_anchor.DarwinActualTests.test_04_signal_term', 'test_primary_anchor.DarwinActualTests.test_05_signal_int', 'test_primary_anchor.DarwinActualTests.test_06_signal_kill', 'test_primary_anchor.DarwinActualTests.test_07_zombie_observation_never_reaps', 'test_primary_anchor.DarwinActualTests.test_08_default_stdin_is_none', 'test_primary_anchor.DarwinActualTests.test_09_cwd_env_output_forwarding', 'test_primary_anchor.DarwinActualTests.test_10_native_census_preserves_zombie', 'test_primary_anchor.DarwinActualTests.test_11_duplicate_finalization_does_not_wait_or_signal', 'test_primary_anchor.DarwinActualTests.test_12_post_reap_empty_is_read_only', 'test_primary_anchor.DarwinActualTests.test_13_unknown_census_is_not_empty', 'test_primary_anchor.DarwinActualTests.test_14_unavailable_bsd_never_uses_cached_authority', 'test_primary_anchor.DarwinActualTests.test_15_fast_live_to_terminal_remains_same_birth', 'test_primary_anchor.DarwinActualTests.test_16_failed_exec_standard_constructor_reap', 'test_primary_anchor.DarwinActualTests.test_17_external_reap_stays_unknown', 'test_primary_anchor.DarwinActualTests.test_18_bsd_low16_equals_actual_exact_wait_status', 'test_primary_anchor.DarwinActualTests.test_19_actual_pid_assignment_before_child_flag_interrupt', 'test_primary_anchor.DarwinActualTests.test_20_actual_fork_return_before_pid_assignment_interrupt', 'test_anchor_mac_groups.DarwinGroupTests.test_actual_final_wait_echild_never_becomes_zero_or_authority', 'test_anchor_mac_groups.DarwinGroupTests.test_canonical_os_exit_arguments_match_actual_wait', 'test_anchor_mac_groups.DarwinGroupTests.test_first_positive_binding_can_already_be_zombie', 'test_anchor_mac_groups.DarwinGroupTests.test_live_nonleader_blocks_reap_after_primary_exit', 'test_anchor_mac_groups.DarwinGroupTests.test_live_resource_sample_does_not_turn_terminal_resources_into_zero', 'test_anchor_mac_groups.DarwinGroupTests.test_query_timeout_reaps_its_child_while_real_primary_remains_held', 'test_anchor_mac_groups.DarwinGroupTests.test_raw_nonleader_zombie_requires_delegated_parent_wait', 'test_anchor_mac_groups.DarwinGroupTests.test_same_session_leave_does_not_establish_descendant_closure', 'test_anchor_mac_groups.DarwinGroupTests.test_same_session_rejoin_between_snapshot_and_wait_stays_read_only', 'test_anchor_mac_groups.DarwinGroupTests.test_term_and_kill_bsd_status_match_actual_primary_wait', 'test_anchor_wait_models.AnchorWaitModels.test_actual_guarded_popen_surfaces_refuse_without_child_creation', 'test_anchor_wait_models.AnchorWaitModels.test_bool_raw_status_is_unknown_after_irreversible_exact_wait', 'test_anchor_wait_models.AnchorWaitModels.test_bool_wait_pid_is_not_zero_or_positive_pid', 'test_anchor_wait_models.AnchorWaitModels.test_competing_final_waits_have_one_exact_wait_and_no_hidden_popen_calls', 'test_anchor_wait_models.AnchorWaitModels.test_echild_revokes_and_never_waits_or_signals_again', 'test_anchor_wait_models.AnchorWaitModels.test_eio_final_wait_remains_unknown_and_revoked', 'test_anchor_wait_models.AnchorWaitModels.test_expiration_before_second_wait_prevents_a_new_grace', 'test_anchor_wait_models.AnchorWaitModels.test_mismatch_retains_real_code_and_irreversible_reap_fact', 'test_anchor_wait_models.AnchorWaitModels.test_noncanonical_raw_status_cannot_become_real_returncode', 'test_anchor_wait_models.AnchorWaitModels.test_reentrant_final_observation_has_no_nested_signal_or_wait', 'test_anchor_wait_models.AnchorWaitModels.test_single_eintr_retries_same_expected_pid_and_original_deadline', 'test_anchor_wait_models.AnchorWaitModels.test_two_eintr_are_bounded_and_never_synthesize_a_status', 'test_anchor_wait_models.AnchorWaitModels.test_wait_zero_means_unconfirmed_not_exit_zero', 'test_anchor_wait_models.AnchorWaitModels.test_wrong_wait_pid_does_not_prove_an_exact_reap', 'test_owned_cleanup.OwnedCleanupGuards.test_cleanup_denial_preserves_existing_primary_failure', 'test_owned_cleanup.OwnedCleanupGuards.test_denied_observation_stays_unknown_without_numeric_probe', 'test_owned_cleanup.OwnedCleanupGuards.test_denied_postreap_read_does_not_restore_signal_authority', 'test_owned_cleanup.OwnedCleanupGuards.test_echild_does_not_synthesize_zero_or_permit_signal', 'test_owned_cleanup.OwnedCleanupGuards.test_entry_lost_stop_records_refusal_without_fresh_query_or_os_operation', 'test_owned_cleanup.OwnedCleanupGuards.test_exact_wait_mismatch_fails_closed_without_rewait', 'test_owned_cleanup.OwnedCleanupGuards.test_expired_original_deadline_permits_no_cleanup_operation', 'test_owned_cleanup.OwnedCleanupGuards.test_first_retirement_loss_keeps_stopping_reason_and_errno', 'test_owned_cleanup.OwnedCleanupGuards.test_live_held_signal_then_exact_reap_preserves_exit', 'test_owned_cleanup.OwnedCleanupGuards.test_monitor_inconclusive_does_not_establish_native_product_failure', 'test_owned_cleanup.OwnedCleanupGuards.test_nonleader_raw_roster_blocks_exact_primary_reap', 'test_owned_cleanup.OwnedCleanupGuards.test_raw_popen_cannot_authorize_cleanup', 'test_owned_cleanup.OwnedCleanupGuards.test_real_mac_controlled_denial_keeps_unreaped_child_and_no_signal', 'test_owned_cleanup.OwnedCleanupGuards.test_real_mac_twenty_rapid_monitor_stops_reclaim_owned_groups', 'test_owned_cleanup.OwnedCleanupGuards.test_real_mac_zombie_resource_gone_is_not_raw_group_absence', 'test_owned_cleanup.OwnedCleanupGuards.test_retirement_blocks_signals_even_if_numeric_group_reappears', 'test_owned_cleanup.OwnedCleanupGuards.test_unknown_observation_does_not_synthesize_exit_zero', 'test_owned_cleanup.OwnedCleanupGuards.test_unknown_raw_census_is_not_empty_and_cannot_reap', 'test_owned_cleanup.OwnedCleanupGuards.test_zombie_observation_keeps_direct_child_unreaped', 'test_owned_cleanup.OwnedCleanupGuards.test_zombie_retirement_uses_exact_wait_without_numeric_probe_or_signal', 'test_helper_import_preflight.DriverTests.test_anchor_cleanup_history_and_separate_stopping_detail_share_safe_projection', 'test_helper_import_preflight.DriverTests.test_anchor_diagnostics_reject_unknown_types_and_never_supply_primary_proof', 'test_helper_import_preflight.DriverTests.test_fixed_primary_failure_codes_and_phase_survive_without_arbitrary_text', 'test_helper_import_preflight.DriverTests.test_inventory_failure_slot_is_independent_of_stop_and_unknown_is_not_zero', 'test_helper_import_preflight.DriverTests.test_inventory_timeout_cause_and_progress_survive_later_anchor_cleanup_without_private_fields', 'test_helper_import_preflight.DriverTests.test_native_producer_failure_stays_separate_from_adapter_and_unknown_text', 'test_mozilla_harness_smoke.MozillaHarnessSmokeTests.test_finally_keeps_primary_anchor_stop_apart_from_later_cleanup_and_write_failure', 'test_mozilla_harness_smoke.MozillaHarnessSmokeTests.test_primary_observation_and_fixed_cleanup_causes_survive_process_and_stage_projection', 'test_mozilla_harness_smoke.MozillaHarnessSmokeTests.test_real_runner_inventory_cause_survives_cleanup_tail_in_all_public_projections', 'test_guards.Guards.test_primary_observation_failure_keeps_unknown_exit_and_lifecycle_phase', 'test_guards.Guards.test_failed_cleanup_does_not_restart_signal_graces_in_finally', 'test_guards.Guards.test_anchor_inventory_retains_adapter_and_native_producer_failure_codes', 'test_guards.Guards.test_cleanup_inventory_cause_survives_retirement_and_recovery_tail_overflow', 'test_guards.Guards.test_first_failure_survives_evidence_storage_error']
+          SELECTION_SHA='9b22db6f71d76c20530012eb396b8e61ea0bd6b2ef42ec56a7cf5dcbda4db6ee'
+          CHILD='\nimport gc,json,os,pathlib,sys,unittest\n_unraisable=[0];_marker_errors=[0];_original_hook=sys.unraisablehook;_hook_busy=[False]\n_hard_exit=os._exit;_sealed=[False]\n_live_value=None\n_receipt_path=pathlib.Path(os.environ[\'TASK_ROOT\'])/\'anchor-selected-tests.json\'\ndef _unraisable_hook(event,_exit=_hard_exit,_seal=_sealed):\n    try:\n        _unraisable[0]+=1\n        try:\n            marker=b\'{"anchorChildUnraisable":{"event":"unexpected-unraisable"}}\\n\'\n            if os.write(2,marker)!=len(marker):raise OSError()\n        except BaseException:_marker_errors[0]+=1\n        if _live_value is not None and not _hook_busy[0]:\n            _hook_busy[0]=True\n            try:\n                _live_value[\'childLifecycle\']=lifecycle(_live_value[\'childLifecycle\'][\'postSuiteGC\'])\n                _live_value[\'status\']=\'failed\'\n                try:write_json(_receipt_path,_live_value)\n                except BaseException:\n                    try:_receipt_path.unlink(missing_ok=True)\n                    except BaseException:pass\n            finally:_hook_busy[0]=False\n        _original_hook(event)\n    finally:\n        if _seal[0]:_exit(1)\nsys.unraisablehook=_unraisable_hook\nfrom support import write_json\nimport primary_anchor as primary\ndef lifecycle(collected):\n    value={\'status\':\'unavailable\',\'unexpectedUnraisableCount\':_unraisable[0],\n           \'markerWriteFailures\':_marker_errors[0],\'knownRetained\':None,\'opaqueRetained\':None,\n           \'uniqueRetained\':None,\'registryStatus\':\'unavailable\',\n           \'hookActive\':sys.unraisablehook is _unraisable_hook,\'hardExitIntact\':os._exit is _hard_exit,\n           \'postSuiteGC\':collected}\n    try:\n        with primary._registry_lock:\n            known=len(primary._registry);opaque=len(primary._opaque_registry)\n            retained=primary.retained_anchors();summary=primary.quarantine_receipt()\n            if not (type(retained) is tuple and type(summary) is dict and\n                    set(summary)=={\'capacity\',\'retained\',\'opaque\',\'lost\',\'status\'} and\n                    all(type(summary[key]) is int and 0<=summary[key]<=8\n                        for key in (\'capacity\',\'retained\',\'opaque\',\'lost\')) and summary[\'capacity\']==8 and\n                    0<=known<=8 and 0<=opaque<=8 and max(known,opaque)<=len(retained)<=known+opaque and\n                    len(retained)==summary[\'retained\'] and\n                    summary[\'opaque\']==opaque and summary[\'lost\']<=len(retained) and\n                    summary[\'status\']==(\'empty\' if known==opaque==0 else \'unconfirmed\')):raise ValueError()\n        value.update(status=\'observed\',knownRetained=known,opaqueRetained=opaque,\n                     uniqueRetained=len(retained),registryStatus=summary[\'status\'])\n    except BaseException:pass\n    return value\ndef lifecycle_pass(child):\n    return (child[\'status\']==\'observed\' and child[\'hookActive\'] is True and child[\'hardExitIntact\'] is True and\n        child[\'postSuiteGC\'] is True and all(child[key]==0 for key in (\'unexpectedUnraisableCount\',\n        \'markerWriteFailures\',\'knownRetained\',\'opaqueRetained\',\'uniqueRetained\')) and child[\'registryStatus\']==\'empty\')\ndef flatten(suite):\n    for item in suite:\n        if isinstance(item,unittest.TestSuite): yield from flatten(item)\n        else: yield item\nclass Result(unittest.TextTestResult):\n    def __init__(self,*args,**kwargs):\n        super().__init__(*args,**kwargs);self.started=[];self.successful=[]\n    def startTest(self,test):\n        self.started.append(test.id());super().startTest(test)\n    def addSuccess(self,test):\n        self.successful.append(test.id());super().addSuccess(test)\nsuite=unittest.defaultTestLoader.loadTestsFromNames(EXPECTED)\nloaded=[test.id() for test in flatten(suite)]\nif loaded!=EXPECTED or unittest.defaultTestLoader.errors:\n    raise SystemExit(2)\nresult=unittest.TextTestRunner(verbosity=2,resultclass=Result).run(suite)\ncollected=False\ntry:gc.collect();collected=True\nexcept BaseException:pass\nchild=lifecycle(collected)\ncomplete=(loaded==result.started==EXPECTED and result.testsRun==157)\npassed=(complete and result.wasSuccessful() and not result.skipped and\n        not result.expectedFailures and not result.unexpectedSuccesses and result.successful==EXPECTED and\n        lifecycle_pass(child))\nvalue={\'schema\':1,\'selectionSHA256\':SELECTION_SHA,\'loadedIDs\':loaded,\'startedIDs\':result.started,\n       \'successfulIDs\':result.successful,\'total\':result.testsRun,\'passed\':len(result.successful),\n       \'failures\':len(result.failures),\'errors\':len(result.errors),\'skipped\':len(result.skipped),\n       \'expectedFailures\':len(result.expectedFailures),\'unexpectedSuccesses\':len(result.unexpectedSuccesses),\n       \'complete\':complete,\'status\':\'passed\' if passed else \'failed\',\'childLifecycle\':child}\n_live_value=value\n_sealed[0]=True\nvalue[\'childLifecycle\']=lifecycle(collected)\nif not lifecycle_pass(value[\'childLifecycle\']):value[\'status\']=\'failed\'\nwrite_json(_receipt_path,value)\nraise SystemExit(0 if value[\'status\']==\'passed\' else 1)\n'
+          GROUP_CASES={'canonical-os-exit-arguments': {'fixedArguments': [0, 7, 255, 256, 65535, -1, 2147483647, -2147483648], 'matchedWaits': 8}, 'leader-zombie-nonleader-live': {'earlyReapBlocked': True, 'groupSignalWhilePrimaryUnreaped': True, 'grandchildDisposition': 'raw-absence', 'directMatchedWait': True}, 'initially-fast-exited': {'firstPositiveState': 'zombie', 'actualReturncode': 7, 'unmeasuredResourceValues': None}, 'nonleader-zombie-is-member': {'rawZombieSeen': True, 'resourceExcludedZombie': True, 'delegatedMatchedWait': True, 'directMatchedWait': True}, 'same-session-leave': {'groupAbsentWhileEscapedMemberLive': True, 'descendantClosure': 'unconfirmed', 'grandchildDisposition': 'private-EOF-then-raw-absence'}, 'same-session-rejoin-before-wait': {'snapshotThenRejoin': True, 'postReapGroupEmpty': False, 'postReapSignalCalls': 0, 'grandchildDisposition': 'private-EOF-then-raw-absence'}, 'actual-final-wait-echild': {'actualKernelECHILD': True, 'externalMatchedWait': True, 'anchorActualReturncode': None, 'retirementVerified': False, 'postECHILDWaitCalls': 0, 'postECHILDSignalCalls': 0}, 'live-resources-then-terminal': {'liveResourcesMeasured': True, 'liveResourceSamples': 2, 'liveLowStatusZeroObserved': True, 'liveLowStatusZeroTreatedAsExit': False, 'terminalResourceValues': None, 'terminalZeroResourcesFabricated': False}, 'signal-status': {'requestedSignals': [15, 9], 'canonicalRawStatusMatched': True, 'directMatchedWaits': 2, 'postReapSignalCalls': 0}, 'bounded-owned-query-timeout': {'queryFailureInjected': True, 'actualNativeKernelQuery': False, 'exactQueryChildReaped': True, 'heldPrimaryStayedLive': True, 'authorityFromTimeout': False}}
+          PLAN_SHA='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460'
+          STAGES=('census-abi-compile','census-abi','anchor-selected-tests')
+          PHASES=('source-binding','original-clock','self-probe','abi','selected-tests','test-evidence','final-proof','public-evidence')
+          SOURCE_NAMES=['anchor_inventory.py', 'census_abi.c', 'checkpoint_transfer.py', 'darwin_activity.py', 'darwin_inventory.py', 'helper_import_preflight.py', 'mozilla_harness_smoke.py', 'plan.json', 'primary_anchor.py', 'process_census.py', 'qa_core.py', 'support.py', 'test_anchor_inventory.py', 'test_anchor_mac_groups.py', 'test_anchor_wait_models.py', 'test_darwin_inventory.py', 'test_failure_recovery.py', 'test_guards.py', 'test_helper_import_preflight.py', 'test_mozilla_harness_smoke.py', 'test_owned_cleanup.py', 'test_primary_anchor.py', 'test_process_census.py']
+          def number(value):
+              return type(value) in (int,float) and math.isfinite(value) and value>=0
+          def fixed_error(error,phase,code):
+              return {'phase':phase if phase in PHASES else 'public-evidence','code':code,
+                      'errorType':('os-error' if isinstance(error,OSError) else
+                                   'interrupted' if isinstance(error,KeyboardInterrupt) else 'operation-error'),
+                      'errno':error.errno if isinstance(error,OSError) and type(error.errno) is int and 0<=error.errno<65536 else None}
+          def read_json(path,cap=1024**2):
+              def unique(pairs):
+                  value=dict(pairs)
+                  if len(value)!=len(pairs):raise ValueError()
+                  return value
+              fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+              try:
+                  before=os.fstat(fd)
+                  if not (stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and
+                          before.st_nlink==1 and 0<before.st_size<=cap):raise ValueError()
+                  with os.fdopen(fd,'rb',closefd=False) as stream:raw=stream.read(cap+1)
+                  after=os.fstat(fd)
+                  identity=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+                  if identity(before)!=identity(after) or len(raw)!=before.st_size:raise ValueError()
+                  value=json.loads(raw.decode('utf-8'),object_pairs_hook=unique,
+                                   parse_constant=lambda value:(_ for _ in ()).throw(ValueError()))
+                  return value,hashlib.sha256(raw).hexdigest()
+              finally:os.close(fd)
+          def test_receipt(value):
+              keys={'schema','selectionSHA256','loadedIDs','startedIDs','successfulIDs','total','passed',
+                    'failures','errors','skipped','expectedFailures','unexpectedSuccesses','complete','status','childLifecycle'}
+              if type(value) is not dict or set(value)!=keys:raise ValueError()
+              if not (type(value['schema']) is int and value['schema']==1 and
+                      type(value['selectionSHA256']) is str and value['selectionSHA256']==SELECTION_SHA):raise ValueError()
+              for key in ('loadedIDs','startedIDs','successfulIDs'):
+                  items=value[key]
+                  if not (type(items) is list and len(items)<=157 and all(type(item) is str and item in EXPECTED for item in items)
+                          and len(items)==len(set(items))):raise ValueError()
+              if value['loadedIDs']!=EXPECTED:raise ValueError()
+              if not (value['startedIDs']==EXPECTED[:len(value['startedIDs'])] and
+                      all(item in value['startedIDs'] for item in value['successfulIDs'])):raise ValueError()
+              for key in ('total','passed','failures','errors','skipped','expectedFailures','unexpectedSuccesses'):
+                  if not (type(value[key]) is int and 0<=value[key]<=100000):raise ValueError()
+              if not (value['total']==len(value['startedIDs']) and value['passed']==len(value['successfulIDs']) and
+                      type(value['complete']) is bool and type(value['status']) is str and value['status'] in ('passed','failed')):raise ValueError()
+              child=value['childLifecycle']
+              if not (type(child) is dict and set(child)=={'status','unexpectedUnraisableCount','markerWriteFailures',
+                      'knownRetained','opaqueRetained','uniqueRetained','registryStatus','hookActive','hardExitIntact','postSuiteGC'} and
+                      type(child['status']) is str and child['status'] in ('observed','unavailable') and
+                      type(child['registryStatus']) is str and child['registryStatus'] in ('empty','unconfirmed','unavailable') and
+                      all(type(child[key]) is bool for key in ('hookActive','hardExitIntact','postSuiteGC')) and
+                      all(type(child[key]) is int and 0<=child[key]<=100000 for key in ('unexpectedUnraisableCount','markerWriteFailures'))):raise ValueError()
+              for key in ('knownRetained','opaqueRetained','uniqueRetained'):
+                  if not (child[key] is None or type(child[key]) is int and 0<=child[key]<=8):raise ValueError()
+              if child['status']=='observed':
+                  if not (all(type(child[key]) is int for key in ('knownRetained','opaqueRetained','uniqueRetained')) and
+                          max(child['knownRetained'],child['opaqueRetained'])<=child['uniqueRetained']<=child['knownRetained']+child['opaqueRetained'] and
+                          child['registryStatus']==('empty' if child['knownRetained']==child['opaqueRetained']==0 else 'unconfirmed')):raise ValueError()
+              elif not (all(child[key] is None for key in ('knownRetained','opaqueRetained','uniqueRetained')) and child['registryStatus']=='unavailable'):raise ValueError()
+              lifecycle_pass=(child['status']=='observed' and child['hookActive'] is True and child['hardExitIntact'] is True and child['postSuiteGC'] is True and
+                  all(child[key]==0 for key in ('unexpectedUnraisableCount','markerWriteFailures','knownRetained','opaqueRetained','uniqueRetained')) and child['registryStatus']=='empty')
+              complete=value['startedIDs']==EXPECTED and value['total']==157
+              passed=(complete and value['successfulIDs']==EXPECTED and value['passed']==157 and
+                      all(value[key]==0 for key in ('failures','errors','skipped','expectedFailures','unexpectedSuccesses')) and lifecycle_pass)
+              if value['complete'] is not complete or (value['status']=='passed') is not passed:raise ValueError()
+              return {'status':value['status'],'complete':complete,'selectionSHA256':SELECTION_SHA,'childLifecycle':dict(child),
+                      **{key:value[key] for key in ('total','passed','failures','errors','skipped','expectedFailures','unexpectedSuccesses')}}
+          def group_markers(path):
+              def same(actual,expected):
+                  if type(actual) is not type(expected):return False
+                  if type(expected) is dict:
+                      return set(actual)==set(expected) and all(same(actual[key],expected[key]) for key in expected)
+                  if type(expected) is list:
+                      return len(actual)==len(expected) and all(same(a,b) for a,b in zip(actual,expected))
+                  return actual==expected
+              def unique(pairs):
+                  value=dict(pairs)
+                  if len(value)!=len(pairs):raise ValueError()
+                  return value
+              fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW);found={};unraisable_markers=0;budget=time.monotonic()+30
+              try:
+                  before=os.fstat(fd)
+                  if not (stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and
+                          before.st_nlink==1 and 0<before.st_size<=256*1024**2):raise ValueError()
+                  with os.fdopen(fd,'rb',closefd=False) as stream:
+                      while True:
+                          if time.monotonic()>=budget:raise ValueError()
+                          row=stream.readline(1024**2+1)
+                          if not row:break
+                          if len(row)>1024**2 or not row.endswith(b'\n'):raise ValueError()
+                          hook_position=row.find(b'{"anchorChildUnraisable":')
+                          if hook_position>=0:
+                              hook=json.loads(row[hook_position:].decode('utf-8'),object_pairs_hook=unique)
+                              if hook!={'anchorChildUnraisable':{'event':'unexpected-unraisable'}}:raise ValueError()
+                              unraisable_markers+=1
+                              if unraisable_markers>100000:raise ValueError()
+                              continue
+                          position=row.find(b'{"anchorMacGroups":')
+                          if position<0:continue
+                          value=json.loads(row[position:].decode('utf-8'),object_pairs_hook=unique,
+                              parse_constant=lambda value:(_ for _ in ()).throw(ValueError()))
+                          if type(value) is not dict or set(value)!={'anchorMacGroups'}:raise ValueError()
+                          marker=value['anchorMacGroups'];case=marker.get('case') if type(marker) is dict else None
+                          if type(case) is not str or case not in GROUP_CASES or case in found:raise ValueError()
+                          expected={'case':case,**GROUP_CASES[case],'controllerWaitScope':'direct-primary-only',
+                              'scope':'active-process-group-epoch','sessionOrDescendantClosure':'unconfirmed',
+                              'rawProcessMetadataPublished':False}
+                          if not same(marker,expected):raise ValueError()
+                          found[case]=marker
+                  after=os.fstat(fd)
+                  identity=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+                  if identity(before)!=identity(after):raise ValueError()
+                  complete=set(found)==set(GROUP_CASES)
+                  return {'status':'observed' if complete else 'partial' if found else 'unavailable','complete':complete,
+                          'unexpectedUnraisableMarkers':unraisable_markers,
+                          'interpretation':'per-case-observations-not-universal-cleanup-qualification',
+                          'cases':[found[case] for case in GROUP_CASES if case in found]}
+              finally:os.close(fd)
+          def main():
+              task=pathlib.Path(os.environ['TASK_ROOT'])
+              helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+              runner=None;phase='source-binding';primary=None;evidence_failure=None
+              result={'schema':1,'scope':'sdk-build-artifact-free-retained-primary-mac-preflight',
+                      'status':'failed','fixture':os.environ['FLOORP_FIXTURE_SHA'],
+                      'selectionSHA256':SELECTION_SHA,'expectedTests':157,'tests':None,'testReceiptSHA256':None,
+                      'self':None,'stages':[],'runnerFirstFailure':None,'callerFailure':None,
+                      'groupFixtureObservations':None,'groupFixtureEvidenceFailure':None,
+                      'monitorFailure':None,'monitorDiagnostics':[],'ownedGroupsEmpty':None,'unresolvedAnchors':None,
+                      'allStagesComplete':False,'sourcePinsSHA256':None,'evidenceWriteFailure':None,
+                      'projectionFailure':None,'clock':{'scope':'original-job-monotonic-origin','workMinutes':345,
+                      'platformMinutes':360,'cleanupReserveMinutes':15,'elapsedSeconds':None,'withinWorkBudget':None},
+                      'qualification':{'actualMacPreflight':'unconfirmed','sessionOrDescendantClosure':'unconfirmed',
+                      'runtimeBuildPerformed':False,'sdkAcquired':False,'checkpointAcquired':False,'artifactUploads':0,
+                      'fullHostQualification':False,'nativeShimAuthentication':'NOT_TESTED','publicationAuthorized':False}}
+              try:
+                  pins=json.loads(os.environ['FLOORP_SOURCE_PINS_JSON'])
+                  if not (type(pins) is dict and set(pins)==set(SOURCE_NAMES) and
+                          all(type(value) is str and re.fullmatch('[0-9a-f]{64}',value) for value in pins.values())):raise ValueError()
+                  if pins['plan.json']!=PLAN_SHA:raise ValueError()
+                  for name in SOURCE_NAMES:
+                      path=helper/name
+                      if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest()!=pins[name]:raise ValueError()
+                  result['sourcePinsSHA256']=hashlib.sha256(json.dumps(pins,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+                  sys.path.insert(0,str(helper))
+                  from support import Runner,Failure,clean_environment,require,write_json
+                  from helper_import_preflight import stage_complete,stage_projection,runner_failure,monitor_projection
+                  from process_census import BINDING_KEYS,prepare_abi,load_abi
+                  from primary_anchor import retained_anchors
+                  phase='original-clock'
+                  plan=json.loads((helper/'plan.json').read_text())
+                  require(type(plan['limits']['jobMinutes']) is int and plan['limits']['jobMinutes']==360,'anchor-preflight-platform')
+                  runner=Runner(task,float((task/'started').read_text()),plan['limits'])
+                  original=runner.monotonic_started
+                  def work_bound():
+                      require(runner.monotonic_started==original and 0<=time.monotonic()-original<345*60,
+                              'anchor-preflight-work-deadline')
+                  work_bound()
+                  require(sys.platform=='darwin' and list(sys.version_info[:3])==[3,12,10],'anchor-preflight-interpreter')
+                  env=clean_environment(task)
+                  tmp=task/'tmp';tmp.mkdir(mode=0o700,exist_ok=False)
+                  env.update({'TMPDIR':str(tmp),'PYTHONDONTWRITEBYTECODE':'1','PYTHONWARNINGS':'error::ResourceWarning'})
+                  env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
+                  phase='self-probe'
+                  from darwin_activity import probe
+                  own=probe().read(os.getpid(),os.getpgrp())
+                  require(own.get('status')=='measured' and number(own.get('rssMiB')) and own['rssMiB']>0 and
+                          number(own.get('cpuSeconds')) and own.get('state') in ('R','S','T'),'anchor-preflight-self')
+                  result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
+                  phase='abi';work_bound()
+                  abi=prepare_abi(task,runner,env)
+                  os.environ['FLOORP_CENSUS_ABI']=str(abi);env['FLOORP_CENSUS_ABI']=str(abi)
+                  load_abi(abi);work_bound()
+                  require(len(runner.records)==2 and [row['stage'] for row in runner.records]==list(STAGES[:2]) and
+                          all(stage_complete(row) for row in runner.records),'anchor-preflight-abi-completion')
+                  phase='selected-tests';stage_error=None
+                  try:
+                      code='EXPECTED='+repr(EXPECTED)+'\nSELECTION_SHA='+repr(SELECTION_SHA)+'\n'+CHILD
+                      runner.run(STAGES[2],[sys.executable,'-c',code],helper,env,360,phase_deadline_minutes=345)
+                  except BaseException as error:stage_error=error
+                  phase='test-evidence'
+                  try:
+                      value,checksum=read_json(task/'anchor-selected-tests.json')
+                      result['tests']=test_receipt(value);result['testReceiptSHA256']=checksum
+                  except BaseException:
+                      if stage_error is None:raise
+                  try:
+                      work_bound()
+                      result['groupFixtureObservations']=group_markers(task/'anchor-selected-tests.private.log')
+                  except BaseException as error:
+                      result['groupFixtureEvidenceFailure']=fixed_error(error,'test-evidence','anchor-preflight-group-evidence-unavailable')
+                      if stage_error is None:raise
+                  if stage_error is not None:
+                      phase='selected-tests';raise stage_error
+                  require(result['tests'] is not None and result['tests']['status']=='passed','anchor-preflight-tests')
+                  require(result['groupFixtureObservations']['complete'] is True,'anchor-preflight-group-evidence-incomplete')
+                  require(result['groupFixtureObservations']['unexpectedUnraisableMarkers']==0,'anchor-preflight-child-unraisable')
+                  phase='final-proof';work_bound()
+                  require(len(runner.records)==3 and [row['stage'] for row in runner.records]==list(STAGES) and
+                          all(stage_complete(row) for row in runner.records) and runner.failure is None and
+                          runner.monitor_failure is None and not runner.groups and not retained_anchors(),
+                          'anchor-preflight-final-proof')
+                  result['status']='passed';result['qualification']['actualMacPreflight']='passed'
+              except BaseException as error:
+                  primary=error;result['callerFailure']=fixed_error(error,phase,'anchor-preflight-operation-failed')
+              finally:
+                  def project_runner():
+                      try:
+                          def known_stage(value,raw):
+                              if type(raw) is dict and raw.get('stage') in STAGES:value['stage']=raw['stage']
+                              return value
+                          result['stages']=[known_stage(stage_projection(row),row) for row in runner.records]
+                          for value,row in zip(result['stages'],runner.records):
+                              value['completionVerified']=stage_complete(row)
+                              if 'cleanupFailure' not in row:value['cleanupFailurePresent']=None
+                          result['allStagesComplete']=(len(runner.records)==3 and
+                              [row['stage'] for row in runner.records]==list(STAGES) and all(stage_complete(row) for row in runner.records))
+                          first=runner_failure(runner.failure)
+                          result['runnerFirstFailure']=known_stage(first,runner.failure) if first is not None else None
+                          result['monitorFailure']=monitor_projection(runner.monitor_failure) if runner.monitor_failure is not None else None
+                          result['monitorDiagnostics']=[known_stage(monitor_projection(row),row) for row in runner.monitor_diagnostics[-16:]]
+                          result['ownedGroupsEmpty']=not runner.groups if type(runner.groups) is set else None
+                          result['unresolvedAnchors']=len(retained_anchors())
+                          elapsed=time.monotonic()-original
+                          if not number(elapsed):raise ValueError()
+                          result['clock'].update(elapsedSeconds=elapsed,withinWorkBudget=elapsed<345*60)
+                          if not (result['allStagesComplete'] and result['runnerFirstFailure'] is None and
+                                  result['monitorFailure'] is None and result['ownedGroupsEmpty'] is True and
+                                  result['unresolvedAnchors']==0 and result['clock']['withinWorkBudget'] is True):
+                              result['status']='failed';result['qualification']['actualMacPreflight']='unconfirmed'
+                      except BaseException as error:
+                          result['status']='failed';result['qualification']['actualMacPreflight']='unconfirmed'
+                          result['projectionFailure']=fixed_error(error,'public-evidence','anchor-preflight-projection-unavailable')
+                  if runner is not None:project_runner()
+                  if primary is not None:
+                      result['status']='failed';result['qualification']['actualMacPreflight']='unconfirmed'
+                  phase='public-evidence'
+                  try:
+                      if runner is None:raise ValueError()
+                      write_json(task/'anchor-preflight.public.json',result)
+                      persisted,_checksum=read_json(task/'anchor-preflight.public.json')
+                      canonical=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'))
+                      if canonical(persisted)!=canonical(result):raise ValueError()
+                      final_elapsed=time.monotonic()-original
+                      terminal=(len(runner.records)==3 and [row['stage'] for row in runner.records]==list(STAGES) and
+                          all(stage_complete(row) for row in runner.records) and runner.failure is None and
+                          runner.monitor_failure is None and not runner.groups and not retained_anchors())
+                      if not (terminal and runner.monotonic_started==original and number(final_elapsed) and final_elapsed<345*60):
+                          result['status']='failed';result['qualification']['actualMacPreflight']='unconfirmed'
+                          project_runner()
+                          result['clock'].update(elapsedSeconds=final_elapsed if number(final_elapsed) else None,
+                              withinWorkBudget=(final_elapsed<345*60 if number(final_elapsed) and runner.monotonic_started==original else None))
+                          if result['callerFailure'] is None:
+                              result['callerFailure']={'phase':'public-evidence','code':'anchor-preflight-final-state-changed',
+                                                      'errorType':'operation-error','errno':None}
+                          write_json(task/'anchor-preflight.public.json',result)
+                  except BaseException as error:
+                      result['status']='failed';result['qualification']['actualMacPreflight']='unconfirmed'
+                      result['evidenceWriteFailure']=fixed_error(error,phase,'anchor-preflight-evidence-write-failed')
+                  print(json.dumps({'anchorPreflight':result},sort_keys=True,separators=(',',':')),flush=True)
+              return 0 if result['status']=='passed' else 1
+          try:raise SystemExit(main())
+          except SystemExit:raise
+          except BaseException:
+              print(json.dumps({'anchorPreflightUnavailable':{'status':'failed','code':'anchor-preflight-driver-unavailable'}}),flush=True)
+              raise SystemExit(1)
+          PYCODE
