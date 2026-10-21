@@ -423,7 +423,8 @@ jobs:
       - verify-mac-x86_64
       - verify-mac-aarch64
     if: >-
-      ${{ (github.event.schedule == '0 18 * * *' ||
+      ${{ vars.RUNTIME_FTP_DELIVERY_ENABLED == 'true' &&
+          (github.event.schedule == '0 18 * * *' ||
            github.event.inputs.debug == 'true') &&
           inputs.validation_only != true }}
     runs-on: ubuntu-latest

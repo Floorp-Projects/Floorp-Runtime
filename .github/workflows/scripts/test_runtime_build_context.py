@@ -267,6 +267,7 @@ class ResolutionTests(unittest.TestCase):
         self.assertIn("github.event.inputs.debug != 'true'", aggregate)
         self.assertNotIn("aggregate-runtime-manifest-v2", debug_publish)
         self.assertIn("inputs.validation_only != true", debug_publish)
+        self.assertIn("vars.RUNTIME_FTP_DELIVERY_ENABLED == 'true' &&", debug_publish)
         self.assertIn("needs:\n      - aggregate-runtime-manifest-v2", release_publish)
         self.assertIn("# - android", release_publish)
         self.assertIn("# artifacts/android/floorp-android-all-artifacts.zip", release_publish)
