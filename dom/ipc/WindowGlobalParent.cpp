@@ -144,6 +144,17 @@ WindowGlobalParent::WindowGlobalParent(
   MOZ_DIAGNOSTIC_ASSERT(XRE_IsParentProcess(), "Parent process only");
 }
 
+// An error page's own load has no session history load, so it is attributed to
+// the load which failed, if that got far enough to have a handle.
+static uint64_t HistoryLoadIdFromHandles(
+    ParentProcessChannelHandle* aDocumentHandle,
+    ParentProcessChannelHandle* aFailedHandle) {
+  if (uint64_t id = aDocumentHandle ? aDocumentHandle->HistoryLoadId() : 0) {
+    return id;
+  }
+  return aFailedHandle ? aFailedHandle->HistoryLoadId() : 0;
+}
+
 already_AddRefed<WindowGlobalParent> WindowGlobalParent::CreateDisconnected(
     const WindowGlobalInit& aInit, ContentParent* aForProcess) {
   RefPtr<CanonicalBrowsingContext> browsingContext =
@@ -209,7 +220,23 @@ already_AddRefed<WindowGlobalParent> WindowGlobalParent::CreateDisconnected(
     }
   }
 
+  wgp->mDocumentHistoryLoadId = HistoryLoadIdFromHandles(
+      aInit.documentChannelHandle(), aInit.failedChannelHandle());
+
   return wgp.forget();
+}
+
+void WindowGlobalParent::InitFromContentProcess(const FieldValues& aRequested,
+                                                ContentParent* aSource) {
+  MOZ_ASSERT(GetContentParent() == aSource);
+  MOZ_DIAGNOSTIC_ASSERT(!BrowsingContext()->GetWindowContexts().Contains(this),
+                        "must reconcile before Init registers this context");
+
+  Transaction correction;
+  Transaction::ReconcileInitialFields(this, FieldValues(aRequested), aSource,
+                                      correction);
+  Init();
+  correction.SendCorrection(this, aSource);
 }
 
 void WindowGlobalParent::Init() {
@@ -874,6 +901,8 @@ mozilla::ipc::IPCResult WindowGlobalParent::RecvUpdateChannels(
 
   mDocumentChannel = documentChannel;
   mFailedChannel = failedChannel;
+  mDocumentHistoryLoadId =
+      HistoryLoadIdFromHandles(aDocumentHandle, aFailedHandle);
 
   return IPC_OK();
 }

@@ -314,7 +314,7 @@ SettingGroupManager.registerGroups({
     ],
   },
   browserIconBonus: {
-    l10nId: "appearance-browser-icon-bonus-group",
+    l10nId: "appearance-browser-icon-bonus-group2",
     headingLevel: 2,
     items: [
       {

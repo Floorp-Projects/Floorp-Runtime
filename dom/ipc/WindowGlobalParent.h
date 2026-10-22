@@ -216,6 +216,14 @@ class WindowGlobalParent final : public WindowContext,
   // be called after setting the Manager actor.
   void Init() final;
 
+  // `Init` for a WindowGlobalParent whose initializer `aSource` authored. The
+  // object must have been constructed with the fields this process derived
+  // (see `ComputeInitialFields`); `aRequested` are the fields `aSource` sent.
+  // Reconciles the two and corrects `aSource` where its values were refused.
+  // Must be called after binding to `aSource`.
+  void InitFromContentProcess(const FieldValues& aRequested,
+                              ContentParent* aSource);
+
   nsIGlobalObject* GetParentObject();
   JSObject* WrapObject(JSContext* aCx,
                        JS::Handle<JSObject*> aGivenProto) override;
@@ -296,6 +304,10 @@ class WindowGlobalParent final : public WindowContext,
   // Get the nsIChannel which failed, leading to this error document being
   // loaded, if known.
   already_AddRefed<nsIChannel> GetFailedChannel();
+
+  // The LoadingSessionHistoryInfo::mLoadId of the parent process load which
+  // produced this document, or 0 if there was none.
+  uint64_t DocumentHistoryLoadId() const { return mDocumentHistoryLoadId; }
 
   dom::NoCorsMediaRequestState NoCorsMediaRequestState(nsIURI* aURI);
 
@@ -548,6 +560,8 @@ class WindowGlobalParent final : public WindowContext,
   // The failed parent process channel which led to an error page load.
   // May not match the channel in the content process in some cases.
   nsCOMPtr<nsIChannel> mFailedChannel;
+
+  uint64_t mDocumentHistoryLoadId = 0;
 
   uint32_t mSandboxFlags;
 
