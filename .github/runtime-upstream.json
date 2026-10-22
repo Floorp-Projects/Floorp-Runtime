@@ -5,10 +5,10 @@
     "version": "159.0",
     "tag": null,
     "tracking_ref": "refs/heads/release",
-    "commit": "6a356de77ef018decf901d848f7f95312d242869",
-    "tree": "9bee4c430c3c560e6e0a1cf9a847a64284659b8b",
+    "commit": "9a2dc53c369c7ae5172018b35988e1d2ffeff402",
+    "tree": "7a8dd864f3e99cc350dbb47dcaf123fe60218c51",
     "previous_tag": null,
-    "previous_commit": "6858d1b26212b38d8652c8e855fead6e12f4f36d"
+    "previous_commit": "6a356de77ef018decf901d848f7f95312d242869"
   },
   "floorp_patch": {
     "repository": "Floorp-Projects/Floorp",
