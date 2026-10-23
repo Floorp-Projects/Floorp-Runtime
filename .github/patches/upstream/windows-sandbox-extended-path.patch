@@ -1,0 +1,15 @@
+--- a/security/sandbox/win/src/sandboxbroker/sandboxBroker.cpp
++++ b/security/sandbox/win/src/sandboxbroker/sandboxBroker.cpp
+@@ -124,8 +124,10 @@
+   MOZ_ASSERT(!aCacheVar);
+   aCacheVar = new nsString(aDir);
+ 
+-  // Convert network share path to format for sandbox policy.
+-  if (Substring(*aCacheVar, 0, 2).Equals(u"\\\\"_ns)) {
++  // Convert extended-length and network paths to native sandbox policy paths.
++  if (Substring(*aCacheVar, 0, 4).Equals(u"\\\\?\\"_ns)) {
++    aCacheVar->SetCharAt(u'?', 1);
++  } else if (Substring(*aCacheVar, 0, 2).Equals(u"\\\\"_ns)) {
+     aCacheVar->InsertLiteral(u"??\\UNC", 1);
+   }
+ }

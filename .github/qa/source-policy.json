@@ -109,6 +109,10 @@
     {
       "path": ".github/patches/upstream/tools-signing-macos-mach_commands.py.patch",
       "sha256": "0710aa23682cf1cfb4f555527eef31ae759c9d82ff315003330d020747991a92"
+    },
+    {
+      "path": ".github/patches/upstream/windows-sandbox-extended-path.patch",
+      "sha256": "6702dd4b97e6d200118431cf02f9f5476fe5775f2e8d5fb0a9a5e27072fc4849"
     }
   ],
   "debugPatches": [

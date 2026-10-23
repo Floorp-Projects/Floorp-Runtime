@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "scope": "windows-graphics-native-rebuild-diagnostic",
+  "base_runtime_commit": "ed90421b65b231df84dbaaa9bacb8788bfce5dd3",
+  "patches": [
+    {
+      "runtime_path": ".github/patches/upstream/windows-sandbox-extended-path.patch",
+      "sha256": "6702dd4b97e6d200118431cf02f9f5476fe5775f2e8d5fb0a9a5e27072fc4849",
+      "origin": {
+        "repository": "Floorp-Projects/Floorp",
+        "commit": "7f43d28f385255bb74cd262f72e34cc190e2087f",
+        "path": ".github/patches/floorp-runtime/native-rebuild/windows-sandbox-extended-path.patch"
+      },
+      "source_files": {
+        "security/sandbox/win/src/sandboxbroker/sandboxBroker.cpp": {
+          "base_sha256": "57090b6b0383a90dda2c97226327279deba5560a61f6c611383da97a6d81460e",
+          "patched_sha256": "49a125b75be17ac3882edb3b8fcdabf0d44ed4d6714711ab2d1c9febbcf84acd"
+        }
+      }
+    }
+  ]
+}
