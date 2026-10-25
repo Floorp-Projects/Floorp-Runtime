@@ -631,13 +631,13 @@ export class nsContextMenu {
 
     initBackForwardMenuItemTooltip(
       "context-back",
-      "main-context-menu-back-2",
+      "main-context-menu-back-3",
       "goBackKb"
     );
 
     initBackForwardMenuItemTooltip(
       "context-forward",
-      "main-context-menu-forward-2",
+      "main-context-menu-forward-3",
       "goForwardKb"
     );
   }
@@ -868,7 +868,12 @@ export class nsContextMenu {
       this.inTabBrowser &&
       !this.inAboutDevtoolsToolbox &&
       Services.prefs.getBoolPref("devtools.inspector.enabled", true) &&
-      !Services.prefs.getBoolPref("devtools.policy.disabled", false);
+      !Services.prefs.getBoolPref("devtools.policy.disabled", false) &&
+      !(
+        this.browser.contentPrincipal?.isSystemPrincipal &&
+        Services.prefs.prefIsLocked("devtools.chrome.enabled") &&
+        !Services.prefs.getBoolPref("devtools.chrome.enabled", false)
+      );
 
     var showInspectA11Y =
       showInspect &&
@@ -1442,7 +1447,8 @@ export class nsContextMenu {
   }
 
   initPasswordControlItems() {
-    let shouldShow = this.onPassword;
+    let shouldShow =
+      this.onPassword && Services.policies.isAllowed("passwordReveal");
     if (shouldShow) {
       let revealPassword = this.document.getElementById(
         "context-reveal-password"
