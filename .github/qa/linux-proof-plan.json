@@ -10,11 +10,11 @@
     },
     {
       "path": "browser/base/content/test/browser-performance/browser.toml",
-      "sha256": "5d912d9a5f1e6c5df1831429cefeca513d2ad86de1180f9c4da1c0d292bc6530"
+      "sha256": "c91d29c49b5774728a3dfc6e7a95db6083d64582b7ea0aab5c5bda85c04a0015"
     },
     {
       "path": "browser/base/content/test/browser-performance/head.js",
-      "sha256": "1c5ca21a4b9ba8920fd7bbe5aa3454006fab3094ae48eead294c64e4d1693963"
+      "sha256": "83692c6ab4cb6dede35eb9497924d6d387cb38d083c6457145cca283fed0af81"
     },
     {
       "path": "xpcom/tests/unit/test_nsIMutableArray.js",
@@ -22,7 +22,7 @@
     },
     {
       "path": "xpcom/tests/unit/xpcshell.toml",
-      "sha256": "5d7bb1d6235fa018913145227dd79e19aa828f11e26d70c804483f609ed2e00f"
+      "sha256": "5ee6ac119e03c94e3679cb094f06e6ccf6268897fc5e60c15023b59c836855b7"
     },
     {
       "path": "xpcom/tests/unit/head_xpcom.js",
@@ -30,7 +30,7 @@
     },
     {
       "path": "testing/testsuite-targets.mk",
-      "sha256": "f54c1cdc661fabc5231e04f0c0fc8b3224ac015fcff4e15b5a45e1d4563b609d"
+      "sha256": "df75c79517255dccbc48b2239837944fa47e663f01989ea32b8dbe5be24632ae"
     },
     {
       "path": "python/mozbuild/mozbuild/action/test_archive.py",
@@ -38,19 +38,19 @@
     },
     {
       "path": "testing/mochitest/runtests.py",
-      "sha256": "e7bb50d0393e3834f6ef98b11f67f832f7215c658d82dfc72ce3c1720de04c49"
+      "sha256": "b6b59c52861a6565f78d5f2a73ed41dd878d4f908c05a85c1679bd8658860516"
     },
     {
       "path": "testing/mochitest/mochitest_options.py",
-      "sha256": "93bb03110d83d94dde44fa4e8e2428941205c5298c4a040c07c795423bde0558"
+      "sha256": "d7999e4ca59555273a8a26dc5638272d540daacf66b3a012ff528415ca5c2616"
     },
     {
       "path": "testing/xpcshell/runxpcshelltests.py",
-      "sha256": "6d62bb5191fb1662c45bb3a544c84fbf3c89889dd60b0586a4993b39d50c26ad"
+      "sha256": "245ea053ae87adc0f8799137bbf7845a84b08a6107e1f9ad0b0d4267ac516441"
     },
     {
       "path": "testing/xpcshell/xpcshellcommandline.py",
-      "sha256": "434bdc75e9abbd442b4efa99756a3e26c4abeadcf862639bf4f578b945130853"
+      "sha256": "15239718d174ebb789662bcb854e3a9f6cd2c85113a089975540defd58a1d1ce"
     },
     {
       "path": "build/buildconfig.py",

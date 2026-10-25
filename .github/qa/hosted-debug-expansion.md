@@ -37,6 +37,21 @@ an original failure. These source contracts do not execute native tests.
 The Firefox 157 campaign above remains bound to its frozen revision; it is not
 native evidence for the Firefox 158 source or subsequent integration commits.
 
+## Firefox 159 source compatibility
+
+Both proof plans now pin the Firefox 159 harness and selected manifest bytes.
+The selected test bodies, manifest entries and defaults, assertion floors,
+no-skip requirements and canaries are unchanged. Browser path normalization,
+GMP staging, retry control, xpcshell assertion emission, selector identity and
+owned temporary-directory cleanup retain their tested AST behavior.
+
+The updated harnesses add assertion/UBSan parsing from same-build packaged
+moztest, Android isolated-process options, and profiling and platform fixes.
+Legacy reftest make targets were removed; test-package/archive handling remains.
+These source-contract updates do not qualify a new native campaign: all native
+readiness flags remain unverified, and prior campaign evidence retains its
+original revision.
+
 ## Original campaign resource limits
 
 The producer remains on a public standard GitHub-hosted Ubuntu runner, whose
