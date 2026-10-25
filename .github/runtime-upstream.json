@@ -12,7 +12,7 @@
   },
   "floorp_patch": {
     "repository": "Floorp-Projects/Floorp",
-    "commit": "18abb0b570bda854f3cf00d05920ed0d3ba79ab3",
+    "commit": "75da09c4ae7df864aee9a55fe84aec87358292bf",
     "path": ".github/patches/floorp-runtime/common/macos-app-shim-pwa-input-and-compositor.patch",
     "runtime_path": ".github/patches/upstream/macos-app-shim-pwa-input-and-compositor.patch",
     "sha256": "33052be46512bee29d6bb1cc683b54dfd78ad25746ec86dcdf88d567f7c0ed98",
