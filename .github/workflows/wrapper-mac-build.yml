@@ -145,6 +145,10 @@ jobs:
     uses: ./.github/workflows/mac_pgo.yml
     with:
       MOZ_BUILD_DATE: ${{ needs.resolve-build-context.outputs.expected-build-id }}
+      x86_64_artifact_id: ${{ needs.part1-x86_64.outputs.artifact-id }}
+      x86_64_artifact_digest: ${{ needs.part1-x86_64.outputs.artifact-digest }}
+      aarch64_artifact_id: ${{ needs.part1-aarch64.outputs.artifact-id }}
+      aarch64_artifact_digest: ${{ needs.part1-aarch64.outputs.artifact-digest }}
 
   part3-x86_64:
     needs: [resolve-build-context, part2]
