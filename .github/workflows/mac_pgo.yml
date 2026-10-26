@@ -9,6 +9,18 @@ on:
         description: "Resolved 14-digit build ID"
         type: string
         required: true
+      x86_64_artifact_id:
+        type: string
+        required: true
+      x86_64_artifact_digest:
+        type: string
+        required: true
+      aarch64_artifact_id:
+        type: string
+        required: true
+      aarch64_artifact_digest:
+        type: string
+        required: true
 
 permissions:
   actions: read
@@ -20,6 +32,7 @@ jobs:
     env:
       ARCH_TYPE: ${{ matrix.arch }}
       MOZ_BUILD_DATE: ${{ inputs.MOZ_BUILD_DATE }}
+      STAGE1_ARTIFACT_DIR: ${{ runner.temp }}/mac-stage1-${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,19 +50,37 @@ jobs:
           sysctl machdep.cpu
           export RUNNER_USERDIR=`echo ~`
           echo "RUNNER_USERDIR=$RUNNER_USERDIR" >> $GITHUB_ENV
-          mkdir -p ~/downloads/artifacts
 
       - uses: actions/checkout@v4
         name: Clone 🧬
         with:
           submodules: 'true'
 
-      - uses: actions/download-artifact@v4
-        id: download-artifacts-mac-enable-profgen
-        name: Download artifact 📥
+      - uses: actions/setup-python@v5
         with:
-          name: floorp-mac-${{ env.ARCH_TYPE }}-build-with-profgen
-          path: ~/downloads/artifacts
+          python-version: '3.11'
+
+      - name: Download and verify Stage 1 package
+        id: acquire-stage1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGE1_ARTIFACT_ID: ${{ matrix.arch == 'x86_64' && inputs.x86_64_artifact_id || inputs.aarch64_artifact_id }}
+          STAGE1_ARTIFACT_DIGEST: ${{ matrix.arch == 'x86_64' && inputs.x86_64_artifact_digest || inputs.aarch64_artifact_digest }}
+        run: |
+          python3 .github/workflows/scripts/download_mac_pgo_stage1.py \
+            --artifact-id "$STAGE1_ARTIFACT_ID" \
+            --artifact-sha256 "$STAGE1_ARTIFACT_DIGEST" \
+            --arch "$ARCH_TYPE" --expected-build-id "$MOZ_BUILD_DATE" \
+            --output "$STAGE1_ARTIFACT_DIR"
+
+      - name: Retain Stage 1 acquisition receipts
+        if: ${{ always() && steps.acquire-stage1.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-stage1-acquisition-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.STAGE1_ARTIFACT_DIR }}/*.json
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Download macOS SDK
         uses: actions/download-artifact@v4
@@ -72,10 +103,6 @@ jobs:
         run: |
           # due to "Error: The `brew link` step did not complete successfully" we need to force link python3.12
           brew link --force --overwrite python@3.12
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
 
       - name: Set LLVM environment variables
         run: |
@@ -137,7 +164,7 @@ jobs:
       - name: Extract artifact 📂
         run: |
           set -euo pipefail
-          cd ~/downloads/artifacts
+          cd "$STAGE1_ARTIFACT_DIR"
           echo "Contents of download path:"
           ls -la
           echo "Extracting floorp-mac-${ARCH_TYPE}-moz-artifact.tar.gz..."
