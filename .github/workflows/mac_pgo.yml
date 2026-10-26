@@ -32,7 +32,6 @@ jobs:
     env:
       ARCH_TYPE: ${{ matrix.arch }}
       MOZ_BUILD_DATE: ${{ inputs.MOZ_BUILD_DATE }}
-      STAGE1_ARTIFACT_DIR: ${{ runner.temp }}/mac-stage1-${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +49,7 @@ jobs:
           sysctl machdep.cpu
           export RUNNER_USERDIR=`echo ~`
           echo "RUNNER_USERDIR=$RUNNER_USERDIR" >> $GITHUB_ENV
+          echo "STAGE1_ARTIFACT_DIR=$RUNNER_TEMP/mac-stage1-$ARCH_TYPE" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
         name: Clone 🧬
