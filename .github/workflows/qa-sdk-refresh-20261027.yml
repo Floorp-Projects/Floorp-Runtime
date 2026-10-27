@@ -2,7 +2,7 @@ name: QA content-matched SDK refresh 20261027
 'on':
   push:
     branches:
-      - b/qa-sdk-refresh-20261027
+      - b/qa-sdk-refresh-xcode266-20261027
 permissions:
   contents: read
 concurrency:
@@ -21,28 +21,27 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
-          test "$GITHUB_REF" = refs/heads/b/qa-sdk-refresh-20261027
+          test "$GITHUB_REF" = refs/heads/b/qa-sdk-refresh-xcode266-20261027
           test "$GITHUB_EVENT_NAME" = push
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$PUSH_CREATED" = true
           test "$PUSH_BEFORE" = 0000000000000000000000000000000000000000
-      - name: Select stable Xcode SDK 26.5
+      - name: Select the original Xcode 26.6 build 17F113 SDK
         shell: bash
         run: |
           set -euo pipefail
-          SDK_PATH=""
-          for xcode in /Applications/Xcode*.app; do
-            test -d "$xcode" || continue
-            test ! -L "$xcode" || continue
-            case "$xcode" in *[Bb]eta*) continue ;; esac
-            developer="$xcode/Contents/Developer"
-            version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
-            test "$version" = 26.5 || continue
-            SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
-            break
-          done
-          test -n "$SDK_PATH"
+          xcode=/Applications/Xcode_26.6.app
+          test -d "$xcode"
+          test ! -L "$xcode"
+          developer="$xcode/Contents/Developer"
+          xcode_version=$(DEVELOPER_DIR="$developer" xcodebuild -version)
+          test "$xcode_version" = $'Xcode 26.6\nBuild version 17F113'
+          version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
+          test "$version" = 26.5
+          SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
+          test "$SDK_PATH" = "$developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
           test -d "$SDK_PATH"
+          printf '{"xcodeVersion":"26.6","xcodeBuild":"17F113","sdkVersion":"26.5"}\n'
           echo "SDK_PATH=$SDK_PATH" >> "$GITHUB_ENV"
       - name: Require the original complete uncompressed tar identity
         shell: bash
@@ -50,8 +49,9 @@ jobs:
           set -euo pipefail
           tar -czf macos_sdk.tar.gz -C "$SDK_PATH" .
           checksum=$(gzip -dc macos_sdk.tar.gz | shasum -a 256 | cut -d ' ' -f 1)
-          test "$checksum" = 57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3
           bytes=$(gzip -dc macos_sdk.tar.gz | wc -c | tr -d '[:space:]')
+          printf '{"uncompressedTarSHA256":"%s","uncompressedTarBytes":%s}\n' "$checksum" "$bytes"
+          test "$checksum" = 57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3
           test "$bytes" = 760518144
       - name: Retain the matched SDK for the separately approved native job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
