@@ -1,0 +1,62 @@
+name: QA content-matched SDK refresh 20261027
+'on':
+  push:
+    branches:
+      - b/qa-sdk-refresh-20261027
+permissions:
+  contents: read
+concurrency:
+  group: qa-sdk-refresh-20261027
+  cancel-in-progress: false
+jobs:
+  download-macos-sdk:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Bound the separately approved initial SDK acquisition
+        env:
+          PUSH_CREATED: ${{ github.event.created }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+          test "$GITHUB_REF" = refs/heads/b/qa-sdk-refresh-20261027
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$PUSH_CREATED" = true
+          test "$PUSH_BEFORE" = 0000000000000000000000000000000000000000
+      - name: Select stable Xcode SDK 26.5
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_PATH=""
+          for xcode in /Applications/Xcode*.app; do
+            test -d "$xcode" || continue
+            test ! -L "$xcode" || continue
+            case "$xcode" in *[Bb]eta*) continue ;; esac
+            developer="$xcode/Contents/Developer"
+            version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
+            test "$version" = 26.5 || continue
+            SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
+            break
+          done
+          test -n "$SDK_PATH"
+          test -d "$SDK_PATH"
+          echo "SDK_PATH=$SDK_PATH" >> "$GITHUB_ENV"
+      - name: Require the original complete uncompressed tar identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf macos_sdk.tar.gz -C "$SDK_PATH" .
+          checksum=$(gzip -dc macos_sdk.tar.gz | shasum -a 256 | cut -d ' ' -f 1)
+          test "$checksum" = 57aeb200890ba97c382bf450f23f9dab3e0d4696fdf02323a705f82210b087e3
+          bytes=$(gzip -dc macos_sdk.tar.gz | wc -c | tr -d '[:space:]')
+          test "$bytes" = 760518144
+      - name: Retain the matched SDK for the separately approved native job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: macos-sdk
+          path: macos_sdk.tar.gz
+          retention-days: 2
+          if-no-files-found: error
