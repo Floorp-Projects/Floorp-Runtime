@@ -1,0 +1,42 @@
+{
+  "archive": {
+    "compressed": {
+      "bytes": 105599920,
+      "sha256": "15c6c4ba110a5ff7c231f85a352c5e226f5407243c961d5a04a548d73f3886de"
+    },
+    "headerFieldSHA256": {
+      "devmajor": "d5b9e5948410dab2f637a709abb132db546852d5adb003c419f8a37a21fde20d",
+      "devminor": "d5b9e5948410dab2f637a709abb132db546852d5adb003c419f8a37a21fde20d",
+      "gid": "f7318748ebb8ad79cafd8795982b56e3d62c18326f2e6f29a62e563ed88488ce",
+      "gname": "161fb317b028b4b443b07d1f2452c46f88a7627018c039cfcfea47296a3118e2",
+      "linkname": "ea54ec8353a0040b1eb6cda3f0ceda839d262ab3abf52a34b3b454c424d5018d",
+      "mode": "4e644ac63b2aa7e600bdfd0f0b34c7c454745ede4dbd66bb170736bd9c3b217a",
+      "mtime": "773105d59fa8d8ff377ded2af125cf069a99e8701768d51b55df3293cdbe05f6",
+      "pax_headers": "84ffd9224c0bdbf0aaf068da9973dc6e5d820eb0e369ddb02ed198a0c788e65c",
+      "type": "fb89fabc901630bf806803872dc80ac2636ab87a6b59c0367afb81401e70ba31",
+      "uid": "5bc18cacefdb1df82cb3be90abea0f26bd18c81561482963efd2038c8548bedc",
+      "uname": "fd4065c21f1df4457254fb62d0e82eb36bc3b49a87830942e38ab28720f8f1c7"
+    },
+    "memberOrderSHA256": "203dada4fc5a0eda8884f5f52f91bfc17f9692dbc2dd926282b171c7c541f061",
+    "sdkVersions": [
+      "26.5"
+    ],
+    "sortedMetadataSHA256": "c359f60b229d301044ca62b99fdc7edeb7ee1a74860e7fff7c97786cc89baaf7",
+    "tree": {
+      "canonicalSHA256": "c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f",
+      "logicalBytes": 704719765,
+      "members": 49701
+    },
+    "uncompressedTar": {
+      "bytes": 760518144,
+      "sha256": "f0d4937d3793e5bd0d17ec899df993fb3b68267dab88ddaa9bdc14ccab7c4a58"
+    }
+  },
+  "containerEncoding": "gzip-header-mtime-zero-v1",
+  "contract": "sdk-exact-archive-profile-v2",
+  "xcode": {
+    "build": "17F113",
+    "sdkVersion": "26.5",
+    "version": "26.6"
+  }
+}
