@@ -1,0 +1,187 @@
+name: QA single-image exact SDK 20261031
+'on':
+  push:
+    branches:
+    - b/qa-handoff-20261026
+    paths:
+    - .github/workflows/qa-sdk-single-image-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: qa-sdk-single-image-20261031
+  cancel-in-progress: false
+jobs:
+  single-image-sdk:
+    if: ${{ github.repository == 'Floorp-Projects/Floorp-Runtime' && github.ref == 'refs/heads/b/qa-handoff-20261026' && github.event_name == 'push' && github.run_attempt == 1 && github.event.created == false && github.event.before == '2fe74b81ac3329a66f0b1d9079beab3154205b86' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+    - name: Require the recorded initial single-image push
+      timeout-minutes: 1
+      env:
+        PUSH_CREATED: ${{ github.event.created }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        test "$GITHUB_REF" = refs/heads/b/qa-handoff-20261026
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test "$PUSH_CREATED" = false
+        test "$PUSH_BEFORE" = 2fe74b81ac3329a66f0b1d9079beab3154205b86
+    - name: Checkout only the single exact profile and pinned readers
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: |
+          .github/workflows/scripts/qa_sdk_archive_probe.py
+          .github/workflows/scripts/qa_sdk_exact_profile.py
+          .github/workflows/scripts/qa-sdk-exact-image-20261026.json
+        sparse-checkout-cone-mode: false
+    - name: Require Xcode 26.6 build 17F113 and SDK 26.5
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        xcode=/Applications/Xcode_26.6.app
+        test -d "$xcode"
+        test ! -L "$xcode"
+        developer="$xcode/Contents/Developer"
+        xcode_version=$(DEVELOPER_DIR="$developer" xcodebuild -version)
+        test "$xcode_version" = $'Xcode 26.6\nBuild version 17F113'
+        version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
+        test "$version" = 26.5
+        SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
+        test "$SDK_PATH" = "$developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
+        test -d "$SDK_PATH"
+        echo "SDK_PATH=$SDK_PATH" >> "$GITHUB_ENV"
+    - name: Record and require the single pinned image before archive creation
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        task_root="$RUNNER_TEMP/floorp-sdk-single-image-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -m 700 "$task_root"
+        /usr/bin/python3 - <<'PROVENANCE'
+        import hashlib,json,os,pathlib,platform,sys
+        pins={'qa_sdk_archive_probe.py': 'c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900', 'qa_sdk_exact_profile.py': 'eb1adb4cd781a8867193e599e9416051f28c43249c4845d48e9070d1cfa3e270', 'qa-sdk-exact-image-20261026.json': 'ce50e72c5aa2d163a39ba6de283c58f1e2930fb5e261a22ddb6160f54edaaf42'}
+        scripts=pathlib.Path('.github/workflows/scripts')
+        for name,expected in pins.items():
+            path=scripts/name
+            assert path.is_file() and not path.is_symlink()
+            assert hashlib.sha256(path.read_bytes()).hexdigest()==expected
+        context={key:os.environ.get(key) for key in ('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion')}
+        context.update(contract='sdk-single-image-producer-v4',pythonVersion=platform.python_version(),
+            machine=platform.machine(),macOSVersion=platform.mac_ver()[0],xcodeVersion='26.6',
+            xcodeBuild='17F113',sdkVersion='26.5',inputSHA256=pins,admission='PENDING_API_RECONCILIATION',
+            loaderAdmitted=False,freshFirefox45Executed=False,productQualification=False)
+        expected={'ImageOS':'macos26','ImageVersion':'20261026.0455.2','machine':'arm64',
+            'macOSVersion':'26.6.2','pythonVersion':'3.9.6'}
+        matched=sys.platform=='darwin' and all(context[key]==value for key,value in expected.items())
+        context.update(status='context-matched' if matched else 'context-rejected',
+            failureCode=None if matched else 'single-image-context-not-pinned',requestedContext=expected)
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-single-image-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        with (root/'producer.json').open('x') as out:out.write(json.dumps(context,sort_keys=True)+'\n')
+        print(json.dumps(context,sort_keys=True),flush=True)
+        raise SystemExit(0 if matched else 1)
+        PROVENANCE
+    - name: Require the complete single archive profile before SDK upload
+      timeout-minutes: 8
+      shell: bash
+      run: |
+        set -euo pipefail
+        task_root="$RUNNER_TEMP/floorp-sdk-single-image-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        tar -czf "$task_root/macos_sdk.original.tar.gz" -C "$SDK_PATH" .
+        /usr/bin/python3 - <<'INSPECT'
+        import hashlib,json,os,pathlib,sys
+        scripts=pathlib.Path('.github/workflows/scripts')
+        sys.path.insert(0,str(scripts.resolve()))
+        import qa_sdk_archive_probe as probe
+        import qa_sdk_exact_profile as exact
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-single-image-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        result={'contract':'sdk-single-image-exact-v4','admission':'PENDING_API_RECONCILIATION',
+            'loaderAdmitted':False,'freshFirefox45Executed':False,'productQualification':False}
+        try:
+            producer_bytes=(root/'producer.json').read_bytes()
+            producer=json.loads(producer_bytes,object_pairs_hook=exact._pairs,parse_constant=exact._constant)
+            probe.need(producer['contract']=='sdk-single-image-producer-v4'
+                and producer['status']=='context-matched' and producer['admission']=='PENDING_API_RECONCILIATION'
+                and producer['loaderAdmitted'] is False and producer['productQualification'] is False
+                and producer['freshFirefox45Executed'] is False,'single-image-producer')
+            pins={'qa_sdk_archive_probe.py': 'c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900', 'qa_sdk_exact_profile.py': 'eb1adb4cd781a8867193e599e9416051f28c43249c4845d48e9070d1cfa3e270', 'qa-sdk-exact-image-20261026.json': 'ce50e72c5aa2d163a39ba6de283c58f1e2930fb5e261a22ddb6160f54edaaf42'}
+            probe.need(exact.same(producer['inputSHA256'],pins),'single-image-reader-pins')
+            expected={'ImageOS':'macos26','ImageVersion':'20261026.0455.2','machine':'arm64',
+                'macOSVersion':'26.6.2','pythonVersion':'3.9.6'}
+            probe.need(exact.same(producer['requestedContext'],expected)
+                and all(producer[key]==value for key,value in expected.items()),'single-image-pinned-context')
+            probe.need(producer['xcodeVersion']=='26.6' and producer['xcodeBuild']=='17F113'
+                and producer['sdkVersion']=='26.5','single-image-xcode')
+            for key in ('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion'):
+                probe.need(producer[key]==os.environ.get(key),'single-image-producer-context')
+            for name,expected_hash in pins.items():
+                probe.need(hashlib.sha256((scripts/name).read_bytes()).hexdigest()==expected_hash,'single-image-reader-changed')
+            profile,profile_sha=exact.load_profile(scripts/'qa-sdk-exact-image-20261026.json')
+            probe.need(profile_sha==pins['qa-sdk-exact-image-20261026.json'],'single-image-profile')
+            result['producerSHA256']=hashlib.sha256(producer_bytes).hexdigest()
+            result['profileSHA256']=profile_sha
+            result['container']=exact.normalize_container(root/'macos_sdk.original.tar.gz',root/'macos_sdk.tar.gz')
+            checked=exact.check_report(probe.inspect_archive(root/'macos_sdk.tar.gz'),profile,profile_sha)
+            result.update(archive=checked['archive'],mismatches=checked['mismatches'])
+            probe.need(checked['status']=='exact-match' and not checked['mismatches'],'single-image-archive-mismatch')
+            result.update(status='exact-match',failureCode=None)
+        except Exception as error:
+            result.update(status='failed',failureCode=str(error) if isinstance(error,probe.ProbeError) else 'single-image-read')
+        with (root/'exact-profile-report.json').open('x') as out:out.write(json.dumps(result,sort_keys=True)+'\n')
+        print(json.dumps(result,sort_keys=True),flush=True)
+        raise SystemExit(0 if result['status']=='exact-match' else 1)
+        INSPECT
+    - name: Preserve hash-only single-image evidence on failure
+      if: always()
+      timeout-minutes: 2
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: sdk-single-image-report-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          ${{ runner.temp }}/floorp-sdk-single-image-${{ github.run_id }}-${{ github.run_attempt }}/producer.json
+          ${{ runner.temp }}/floorp-sdk-single-image-${{ github.run_id }}-${{ github.run_attempt }}/exact-profile-report.json
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Preserve exact SDK pending authenticated API reconciliation
+      if: ${{ success() }}
+      timeout-minutes: 3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: macos-sdk-single-image-v4
+        path: ${{ runner.temp }}/floorp-sdk-single-image-${{ github.run_id }}-${{ github.run_attempt }}/macos_sdk.tar.gz
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Clean only owned single-image files
+      if: always()
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        /usr/bin/python3 - <<'CLEANUP'
+        import json,os,pathlib,stat
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-single-image-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        if root.exists() or root.is_symlink():
+            before=root.lstat()
+            assert stat.S_ISDIR(before.st_mode) and before.st_uid==os.geteuid()
+            paths=list(root.iterdir())
+            assert set(p.name for p in paths)<=set(('macos_sdk.original.tar.gz','macos_sdk.tar.gz','exact-profile-report.json','producer.json'))
+            for path in paths:
+                state=path.lstat()
+                assert stat.S_ISREG(state.st_mode) and state.st_uid==os.geteuid() and state.st_nlink==1
+            for path in paths:path.unlink()
+            root.rmdir()
+            result='clean'
+        else:result='not-created'
+        print(json.dumps({'ownedSDKSingleImageCleanup':result,'sdkAdmitted':False}))
+        CLEANUP
