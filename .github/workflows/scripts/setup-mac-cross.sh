@@ -20,11 +20,8 @@ tar -xzf ~/macos-sdk-artifact/macos_sdk.tar.gz -C ~/macos-sdk --warning=no-unkno
 
 # Install LLVM toolchain
 echo "Installing LLVM 19 toolchain for cross-compilation..."
-wget https://apt.llvm.org/llvm.sh
-chmod +x llvm.sh
-sudo ./llvm.sh 19
-sudo apt-get update
-sudo apt-get install -y lld-19
+sudo apt-get -o Acquire::Retries=3 update
+sudo apt-get -o Acquire::Retries=3 install -y clang-19 llvm-19 lld-19
 
 # Create symlinks for the tools
 sudo ln -sf /usr/bin/ld.lld-19 /usr/bin/ld64.lld
