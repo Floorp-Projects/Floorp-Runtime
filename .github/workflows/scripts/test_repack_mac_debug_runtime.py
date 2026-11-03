@@ -15,6 +15,9 @@ from repack_mac_debug_runtime import SOURCE_ROOT, repack
 
 class MacRepackTest(unittest.TestCase):
     def setUp(self):
+        self.version = json.loads(
+            (SOURCE_ROOT / ".github/runtime-upstream.json").read_text()
+        )["upstream"]["version"]
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)
         self.app = Path(self.work.name) / "Floorp Debug.app"
@@ -27,7 +30,7 @@ class MacRepackTest(unittest.TestCase):
         (self.resources / "chrome.manifest").write_text("resource gre .\n")
         (self.resources / "modules/Fixture.sys.mjs").write_bytes(b"export const n=157;\n")
         (self.resources / "application.ini").write_text(
-            "[App]\nVersion=157.0.1\nBuildID=20261006190514\n"
+            f"[App]\nVersion={self.version}\nBuildID=20261006190514\n"
         )
         (self.resources / "platform.ini").write_text("[Build]\nBuildID=20261006190514\n")
         self.evidence = Path(self.work.name) / "proof.json"
@@ -72,7 +75,7 @@ class MacRepackTest(unittest.TestCase):
                 (resources / "chrome.manifest").write_text("resource gre .\n")
                 module = b"export const mode=" + mode.encode() + b";\n"
                 (resources / "modules/Fixture.sys.mjs").write_bytes(module)
-                identity = f"[App]\nVersion=157.0.1\nBuildID={build_id}\n"
+                identity = f"[App]\nVersion={self.version}\nBuildID={build_id}\n"
                 (resources / "application.ini").write_text(identity)
                 (resources / "platform.ini").write_text(f"[Build]\nBuildID={build_id}\n")
                 proof = app.parent / "proof.json"

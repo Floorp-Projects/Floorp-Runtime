@@ -40,7 +40,7 @@
     },
     {
       "path": ".github/patches/upstream/macos-app-shim-pwa-input-and-compositor.patch",
-      "sha256": "1817c8704b384efa6c5ce877da7fded0b4611d2031d8281a66008c50c8c2ef92"
+      "sha256": "571a545a9cda7d71cd73af766b71e4e00aba0dd50b21c949f95e67b387383dfc"
     },
     {
       "path": ".github/patches/upstream/moz.build.patch",
