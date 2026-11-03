@@ -1,0 +1,74 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+name: Blacksmith startup probe
+
+on:
+  push:
+    branches:
+      - codex/blacksmith-minimal-probe-qa317
+    paths:
+      - .github/workflows/blacksmith-startup-probe.yml
+
+permissions: {}
+
+concurrency:
+  group: blacksmith-minimal-probe-qa317
+  cancel-in-progress: false
+
+jobs:
+  startup:
+    if: >-
+      github.repository == 'Floorp-Projects/Floorp-Runtime' &&
+      github.ref == 'refs/heads/codex/blacksmith-minimal-probe-qa317' &&
+      github.event.created == true &&
+      github.run_attempt == 1
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Report CPU memory and disk capacity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import platform
+          import shutil
+          from pathlib import Path
+
+          cpu_model = next(
+              line.split(":", 1)[1].strip()
+              for line in Path("/proc/cpuinfo").read_text().splitlines()
+              if line.startswith("model name")
+          )
+          memory = {}
+          for line in Path("/proc/meminfo").read_text().splitlines():
+              key, value = line.split(":", 1)
+              if key in ("MemTotal", "MemAvailable"):
+                  amount, unit = value.split()
+                  if unit != "kB":
+                      raise ValueError("Unexpected memory unit")
+                  memory[key] = int(amount) * 1024
+
+          disk = shutil.disk_usage("/")
+          report = {
+              "cpu": {
+                  "architecture": platform.machine(),
+                  "logical_processors": os.cpu_count(),
+                  "available_processors": len(os.sched_getaffinity(0)),
+                  "model": cpu_model,
+              },
+              "memory": {
+                  "total_bytes": memory["MemTotal"],
+                  "available_bytes": memory["MemAvailable"],
+              },
+              "disk": {
+                  "mount": "/",
+                  "total_bytes": disk.total,
+                  "used_bytes": disk.used,
+                  "free_bytes": disk.free,
+              },
+          }
+          print("BLACKSMITH_RESOURCE_REPORT=" + json.dumps(report, sort_keys=True))
+          PY
