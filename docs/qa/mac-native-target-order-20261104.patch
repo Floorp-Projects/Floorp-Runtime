@@ -1,0 +1,5 @@
+--- a/.github/workflows/mac-native-firefox45-nss-binding-20261103.yml
++++ b/.github/workflows/mac-native-firefox45-nss-binding-20261103.yml
+@@ -551 +551 @@
+-            required=('configure','effective-config','fresh45-exports',*UPSTREAM_STAGES[:2],*TARGET_STAGES,*UPSTREAM_STAGES[2:])
++            required=('configure','effective-config','fresh45-exports',*UPSTREAM_STAGES[:3],*TARGET_STAGES,*UPSTREAM_STAGES[3:])
