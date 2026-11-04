@@ -1,0 +1,185 @@
+name: QA exact image SDK forensic snapshot 20261031
+'on':
+  push:
+    branches: [b/qa-handoff-20261026]
+    paths: [.github/workflows/qa-sdk-image-snapshot-20261031.yml]
+permissions:
+  contents: read
+concurrency:
+  group: qa-sdk-image-snapshot-20261031
+  cancel-in-progress: false
+jobs:
+  image-snapshot:
+    if: ${{ github.repository == 'Floorp-Projects/Floorp-Runtime' && github.ref == 'refs/heads/b/qa-handoff-20261026' && github.event_name == 'push' && github.run_attempt == 1 && github.event.created == false && github.event.before == '7b1d90302a668c96022055894340cd7616be2451' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+    - name: Require the recorded initial snapshot push
+      timeout-minutes: 1
+      env:
+        PUSH_CREATED: ${{ github.event.created }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        test "$GITHUB_REF" = refs/heads/b/qa-handoff-20261026
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test "$PUSH_CREATED" = false
+        test "$PUSH_BEFORE" = 7b1d90302a668c96022055894340cd7616be2451
+    - name: Checkout only the unchanged pinned readers
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: |
+          .github/workflows/scripts/qa_sdk_archive_probe.py
+          .github/workflows/scripts/qa_sdk_exact_profile.py
+        sparse-checkout-cone-mode: false
+    - name: Require Xcode 26.6 build 17F113 and SDK 26.5
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        xcode=/Applications/Xcode_26.6.app
+        test -d "$xcode"
+        test ! -L "$xcode"
+        developer="$xcode/Contents/Developer"
+        xcode_version=$(DEVELOPER_DIR="$developer" xcodebuild -version)
+        test "$xcode_version" = $'Xcode 26.6\nBuild version 17F113'
+        version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
+        test "$version" = 26.5
+        SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
+        test "$SDK_PATH" = "$developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
+        test -d "$SDK_PATH"
+        echo "SDK_PATH=$SDK_PATH" >> "$GITHUB_ENV"
+    - name: Record and require the newly observed exact image
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        task_root="$RUNNER_TEMP/floorp-sdk-snapshot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -m 700 "$task_root"
+        /usr/bin/python3 - <<'PROVENANCE'
+        import hashlib,json,os,pathlib,platform,sys
+        pins={'qa_sdk_archive_probe.py':'c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900',
+              'qa_sdk_exact_profile.py':'eb1adb4cd781a8867193e599e9416051f28c43249c4845d48e9070d1cfa3e270'}
+        scripts=pathlib.Path('.github/workflows/scripts')
+        for name,expected in pins.items():
+            path=scripts/name
+            assert path.is_file() and not path.is_symlink()
+            assert hashlib.sha256(path.read_bytes()).hexdigest()==expected
+        context={key:os.environ.get(key) for key in ('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion')}
+        context.update(contract='sdk-exact-image-snapshot-producer-v1',pythonVersion=platform.python_version(),
+            machine=platform.machine(),macOSVersion=platform.mac_ver()[0],xcodeVersion='26.6',
+            xcodeBuild='17F113',sdkVersion='26.5',inputSHA256=pins,admission='NOT_ADMITTED',
+            loaderAdmitted=False,freshFirefox45Executed=False,productQualification=False)
+        expected={'ImageOS':'macos26','ImageVersion':'20261026.0455.2','machine':'arm64',
+            'macOSVersion':'26.6.2','pythonVersion':'3.9.6'}
+        matched=sys.platform=='darwin' and all(context[key]==value for key,value in expected.items())
+        context.update(status='context-matched' if matched else 'context-rejected',
+            failureCode=None if matched else 'snapshot-context-not-pinned',requestedContext=expected)
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-snapshot-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        with (root/'producer.json').open('x') as out:out.write(json.dumps(context,sort_keys=True)+'\n')
+        print(json.dumps(context,sort_keys=True),flush=True)
+        raise SystemExit(0 if matched else 1)
+        PROVENANCE
+    - name: Inspect every member without admitting an SDK
+      timeout-minutes: 8
+      shell: bash
+      run: |
+        set -euo pipefail
+        task_root="$RUNNER_TEMP/floorp-sdk-snapshot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        tar -czf "$task_root/macos_sdk.original.tar.gz" -C "$SDK_PATH" .
+        /usr/bin/python3 - <<'INSPECT'
+        import hashlib,json,os,pathlib,sys
+        scripts=pathlib.Path('.github/workflows/scripts')
+        sys.path.insert(0,str(scripts.resolve()))
+        import qa_sdk_archive_probe as probe
+        import qa_sdk_exact_profile as exact
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-snapshot-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        result={'contract':'sdk-exact-image-snapshot-v1','admission':'NOT_ADMITTED',
+            'loaderAdmitted':False,'freshFirefox45Executed':False,'productQualification':False}
+        try:
+            producer_bytes=(root/'producer.json').read_bytes()
+            producer=json.loads(producer_bytes)
+            probe.need(producer['contract']=='sdk-exact-image-snapshot-producer-v1'
+                and producer['status']=='context-matched' and producer['admission']=='NOT_ADMITTED'
+                and producer['loaderAdmitted'] is False and producer['productQualification'] is False
+                and producer['freshFirefox45Executed'] is False,
+                'snapshot-producer')
+            pins={'qa_sdk_archive_probe.py':'c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900',
+                  'qa_sdk_exact_profile.py':'eb1adb4cd781a8867193e599e9416051f28c43249c4845d48e9070d1cfa3e270'}
+            probe.need(exact.same(producer['inputSHA256'],pins),'snapshot-reader-pins')
+            expected={'ImageOS':'macos26','ImageVersion':'20261026.0455.2','machine':'arm64',
+                'macOSVersion':'26.6.2','pythonVersion':'3.9.6'}
+            probe.need(exact.same(producer['requestedContext'],expected)
+                and all(producer[key]==value for key,value in expected.items()),'snapshot-pinned-context')
+            for key in ('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion'):
+                probe.need(producer[key]==os.environ.get(key),'snapshot-producer-context')
+            for name,expected_hash in pins.items():
+                probe.need(hashlib.sha256((scripts/name).read_bytes()).hexdigest()==expected_hash,'snapshot-reader-changed')
+            result['producerSHA256']=hashlib.sha256(producer_bytes).hexdigest()
+            result['container']=exact.normalize_container(root/'macos_sdk.original.tar.gz',root/'macos_sdk.tar.gz')
+            report=probe.inspect_archive(root/'macos_sdk.tar.gz')
+            result['archive']={key:report[key] for key in sorted(exact.ARCHIVE_KEYS)}
+            probe.need(report['status']=='inspected' and report['admission']=='NOT_ADMITTED'
+                and report['productQualification'] is False,'snapshot-archive-report')
+            probe.need(exact.same(report['tree'],probe.ORIGINAL_TREE),'snapshot-content-tree')
+            probe.need(exact.same(report['sdkVersions'],['26.5']),'snapshot-sdk-version')
+            result.update(status='inspected',failureCode=None,originalTreeMatched=True,sdkVersionMatched=True)
+        except Exception as error:
+            result.update(status='failed',failureCode=str(error) if isinstance(error,probe.ProbeError) else 'snapshot-read')
+        with (root/'snapshot-report.json').open('x') as out:out.write(json.dumps(result,sort_keys=True)+'\n')
+        print(json.dumps(result,sort_keys=True),flush=True)
+        raise SystemExit(0 if result['status']=='inspected' else 1)
+        INSPECT
+    - name: Preserve hash-only snapshot evidence on failure
+      if: always()
+      timeout-minutes: 2
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: sdk-image-snapshot-report-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          ${{ runner.temp }}/floorp-sdk-snapshot-${{ github.run_id }}-${{ github.run_attempt }}/producer.json
+          ${{ runner.temp }}/floorp-sdk-snapshot-${{ github.run_id }}-${{ github.run_attempt }}/snapshot-report.json
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Preserve the separate NOT_ADMITTED forensic snapshot
+      if: ${{ success() }}
+      timeout-minutes: 3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: sdk-image-snapshot-NOT_ADMITTED-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/floorp-sdk-snapshot-${{ github.run_id }}-${{ github.run_attempt }}/macos_sdk.tar.gz
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Clean only owned snapshot files
+      if: always()
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        /usr/bin/python3 - <<'CLEANUP'
+        import json,os,pathlib,stat
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-snapshot-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        if root.exists() or root.is_symlink():
+            before=root.lstat()
+            assert stat.S_ISDIR(before.st_mode) and before.st_uid==os.geteuid()
+            paths=list(root.iterdir())
+            assert set(p.name for p in paths)<=set(('macos_sdk.original.tar.gz','macos_sdk.tar.gz','snapshot-report.json','producer.json'))
+            for path in paths:
+                state=path.lstat()
+                assert stat.S_ISREG(state.st_mode) and state.st_uid==os.geteuid() and state.st_nlink==1
+            for path in paths:path.unlink()
+            root.rmdir()
+            result='clean'
+        else:result='not-created'
+        print(json.dumps({'ownedSDKSnapshotCleanup':result,'sdkAdmitted':False}))
+        CLEANUP
