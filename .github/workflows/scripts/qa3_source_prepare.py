@@ -252,7 +252,7 @@ def prepare_source(root, runtime, objdir, output):
         or policy["comparisonPolicy"] != "common-baseline-with-diagnostics"
     ):
         raise ValueError("unsupported source preparation policy")
-    if len(policy["commonPatches"]) != 27 or len(policy["debugPatches"]) != 3:
+    if len(policy["commonPatches"]) != 28 or len(policy["debugPatches"]) != 3:
         raise ValueError("reduced source patch policy")
     verify_patches(root, policy["commonPatches"], ".github/patches/upstream")
     verify_patches(root, policy["debugPatches"], ".github/patches/debug")
