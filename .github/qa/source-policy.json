@@ -23,6 +23,10 @@
       "sha256": "7ce5c08329053846d3714266c4228df1a4f675d6582fb1d9cd1a875f832e19b6"
     },
     {
+      "path": ".github/patches/upstream/build-moz.configure-update-programs.configure.patch",
+      "sha256": "ebe86bf87f11d959f4692249516f55b56905c82f44fa7717ddfecfa7d7c1aa07"
+    },
+    {
       "path": ".github/patches/upstream/common.nsh.patch",
       "sha256": "69bcf9c0a3a2109b2821c7a49b4015995eb669f5684fb27055d1744d9a0ddeb6"
     },
