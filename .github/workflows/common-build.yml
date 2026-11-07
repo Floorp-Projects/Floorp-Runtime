@@ -211,6 +211,10 @@ jobs:
             --source "$GITHUB_WORKSPACE" --objdir "$GITHUB_WORKSPACE/obj-x86_64-pc-linux-gnu" \
             --build-id "$QA3_BUILD_ID" --output "$RUNNER_TEMP/qa3-packaging-preflight"
 
+      - name: Retain build toolchain for KAN92 tests
+        if: github.ref == 'refs/heads/qa/kan92-native-xpcshell-b22b05e'
+        run: echo 'QA3_KEEP_CARGO_FOR_TEST_PACKAGING=1' >> "$GITHUB_ENV"
+
       - name: Build and package
         run: |
           ./.github/workflows/scripts/build-and-package.sh \
@@ -221,6 +225,20 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: 'on'
           SCCACHE_MAX_FRAME_LENGTH: '1048576'
+
+      - name: Run KAN92 native localization suite
+        if: github.ref == 'refs/heads/qa/kan92-native-xpcshell-b22b05e' && inputs.platform == 'linux' && inputs.arch == 'x86_64' && inputs.debug && !inputs.pgo
+        timeout-minutes: 25
+        run: python3 .github/workflows/scripts/kan92_xpcshell.py
+
+      - name: Preserve KAN92 xpcshell evidence
+        if: always() && github.ref == 'refs/heads/qa/kan92-native-xpcshell-b22b05e'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kan92-xpcshell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kan92-xpcshell/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify and record compiled Runtime source
         if: ${{ hashFiles('.github/runtime-upstream.json') != '' }}
