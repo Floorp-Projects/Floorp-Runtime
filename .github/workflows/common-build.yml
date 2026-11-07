@@ -211,6 +211,10 @@ jobs:
             --source "$GITHUB_WORKSPACE" --objdir "$GITHUB_WORKSPACE/obj-x86_64-pc-linux-gnu" \
             --build-id "$QA3_BUILD_ID" --output "$RUNNER_TEMP/qa3-packaging-preflight"
 
+      - name: Retain build toolchain for KAN49 tests
+        if: github.ref == 'refs/heads/qa/kan49-native-timer-shutdown'
+        run: echo 'QA3_KEEP_CARGO_FOR_TEST_PACKAGING=1' >> "$GITHUB_ENV"
+
       - name: Build and package
         run: |
           ./.github/workflows/scripts/build-and-package.sh \
@@ -221,6 +225,22 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: 'on'
           SCCACHE_MAX_FRAME_LENGTH: '1048576'
+
+      - name: Run KAN49 native timer suite
+        id: kan49-suite
+        continue-on-error: true
+        if: github.ref == 'refs/heads/qa/kan49-native-timer-shutdown' && inputs.platform == 'linux' && inputs.arch == 'x86_64' && inputs.debug && !inputs.pgo
+        timeout-minutes: 25
+        run: python3 .github/workflows/scripts/kan49_xpcshell.py
+
+      - name: Preserve KAN49 xpcshell evidence
+        if: always() && github.ref == 'refs/heads/qa/kan49-native-timer-shutdown'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kan49-xpcshell-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kan49-xpcshell/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify and record compiled Runtime source
         if: ${{ hashFiles('.github/runtime-upstream.json') != '' }}
@@ -294,6 +314,10 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.qa3-debug-tests && 1 || 0 }}
           overwrite: true
+
+      - name: Preserve KAN49 test failure after artifact upload
+        if: always() && github.ref == 'refs/heads/qa/kan49-native-timer-shutdown' && steps.kan49-suite.outcome == 'failure'
+        run: exit 1
 
       - name: Upload PGO profile generation package (Windows)
         if: >-
