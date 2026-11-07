@@ -14,6 +14,23 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def summarize_events(events, expected_tests):
+    ends = [event for event in events if event.get('action') == 'test_end']
+    completed = {str(event.get('test', '')).replace('\\', '/').rsplit('/', 1)[-1]
+                 for event in ends if event.get('status') == 'PASS'}
+    unexpected = [event for event in events
+                  if ('expected' in event and event.get('status') != event['expected'])
+                  or event.get('action') == 'crash'
+                  or (event.get('action') == 'test_end'
+                      and event.get('status') not in ['PASS', 'SKIP'])]
+    return {
+        'testEnds': ends,
+        'missingRunnableTests': sorted(set(expected_tests) - completed),
+        'unexpected': unexpected,
+        'brandingTestRan': 'test_floorp_branding.js' in completed,
+    }
+
+
 def main():
     source = Path.cwd()
     output = Path(os.environ['RUNNER_TEMP']) / 'kan92-xpcshell'
@@ -21,6 +38,7 @@ def main():
     result = {
         'scope': 'Same-build Linux x64 Debug native xpcshell localization suite; not signed complete Floorp acceptance',
         'productCodeBase': 'b22b05e77088c0719a7224f26df2f6881ef2ad9c',
+        'testCorrectionHead': '0c30d3d988f430240434b25e55fd489f779e703e',
         'qaHead': os.environ['GITHUB_SHA'],
         'runId': os.environ['GITHUB_RUN_ID'],
         'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
@@ -64,17 +82,8 @@ def main():
                                       'sha256': digest(binary / name)} for name in names}
         result['binariesUnchanged'] = result['binaryBefore'] == result['binaryAfter']
         events = [json.loads(line) for line in raw.read_text().splitlines() if line.strip()] if raw.exists() else []
-        ends = [event for event in events if event.get('action') == 'test_end']
-        result['testEnds'] = ends
-        completed = {str(event.get('test', '')).replace('\\', '/').rsplit('/', 1)[-1]
-                     for event in ends if event.get('status') == 'OK'}
-        result['missingRunnableTests'] = sorted(set(result['expectedRunnableTests']) - completed)
-        result['unexpected'] = [event for event in events
-                                if ('expected' in event and event.get('status') != event['expected'])
-                                or event.get('action') == 'crash']
-        result['brandingTestRan'] = any(str(event.get('test', '')).endswith('test_floorp_branding.js')
-                                        and event.get('status') == 'OK' for event in ends)
-        result['passed'] = (result['exitCode'] == 0 and bool(ends)
+        result.update(summarize_events(events, result['expectedRunnableTests']))
+        result['passed'] = (result['exitCode'] == 0 and bool(result['testEnds'])
                             and result['brandingTestRan'] and not result['unexpected']
                             and not result['missingRunnableTests']
                             and result['binariesUnchanged'])

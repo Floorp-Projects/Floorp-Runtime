@@ -2,7 +2,7 @@ name: KAN92 native localization xpcshell
 
 on:
   push:
-    branches: [qa/kan92-native-xpcshell-b22b05e]
+    branches: [qa/kan92-native-xpcshell-missing-mode]
 
 permissions:
   contents: read
