@@ -3,10 +3,6 @@
   "comparisonPolicy": "common-baseline-with-diagnostics",
   "commonPatches": [
     {
-      "path": ".github/patches/upstream/LocalizationCpp.patch",
-      "sha256": "61e0476c14f9e065e8bba1cbd281db406f1981513e341069c165728cfa2d508b"
-    },
-    {
       "path": ".github/patches/upstream/artifacts.py.patch",
       "sha256": "34d9b3d625fc9fef589aba604bdc56b55203828abe3321f38d837f5dafc8bb1a"
     },
@@ -35,8 +31,12 @@
       "sha256": "e0fc458b8d8025a87f80692f53db3089b5825006b59a049bfd4023f9683daf2f"
     },
     {
-      "path": ".github/patches/upstream/localizeFfiLib.patch",
-      "sha256": "fb4e8297fedc9be79c63028163e934fb9bf67dcc1fcae6e1f5435a255461b701"
+      "path": ".github/patches/upstream/fluent-brand-test.patch",
+      "sha256": "d7611d20bbfc2d3702af01a341445a70ba38526145b2bc93b496430a5ba809c0"
+    },
+    {
+      "path": ".github/patches/upstream/fluent-brand-text.patch",
+      "sha256": "89c89e3a536d15812ac2350be19b8e6f3cf0031bae1c05b6435d7a894c47fafa"
     },
     {
       "path": ".github/patches/upstream/macos-app-shim-pwa-input-and-compositor.patch",
