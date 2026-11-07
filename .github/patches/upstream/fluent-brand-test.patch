@@ -11,7 +11,7 @@ diff --git a/intl/l10n/test/test_floorp_branding.js b/intl/l10n/test/test_floorp
 new file mode 100644
 --- /dev/null
 +++ b/intl/l10n/test/test_floorp_branding.js
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,54 @@
 +/* Any copyright is dedicated to the Public Domain.
 +   http://creativecommons.org/publicdomain/zero/1.0/ */
 +
@@ -54,6 +54,15 @@ new file mode 100644
 +    Assert.equal(withoutIsolation(messages[4].attributes[0].value), `Ablaze: ${name}`);
 +  }
 +  const missing = [{ id: "missing" }];
-+  Assert.deepEqual(l10n.formatValuesSync(missing), [null]);
-+  Assert.deepEqual(await l10n.formatValues(missing), [null]);
++  // Match upstream's production-mode missing-message checks in xpcshell.
++  const automationPref =
++    "security.turn_off_all_security_so_that_viruses_can_take_over_this_computer";
++  const wasInAutomation = Services.prefs.getBoolPref(automationPref);
++  Services.prefs.setBoolPref(automationPref, false);
++  try {
++    Assert.deepEqual(l10n.formatValuesSync(missing), [null]);
++    Assert.deepEqual(await l10n.formatValues(missing), [null]);
++  } finally {
++    Services.prefs.setBoolPref(automationPref, wasInAutomation);
++  }
 +});

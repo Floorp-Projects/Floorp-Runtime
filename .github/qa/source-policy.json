@@ -32,7 +32,7 @@
     },
     {
       "path": ".github/patches/upstream/fluent-brand-test.patch",
-      "sha256": "9136e108a2e413c3d2198e495ae1a1e699cf3ff3775ec36474c2ae2d48d4b3c3"
+      "sha256": "d7611d20bbfc2d3702af01a341445a70ba38526145b2bc93b496430a5ba809c0"
     },
     {
       "path": ".github/patches/upstream/fluent-brand-text.patch",
