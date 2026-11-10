@@ -57,26 +57,26 @@ class UpstreamSyncTests(unittest.TestCase):
             args=["git", "apply"],
             returncode=1,
             stdout=b"",
-            stderr=b"error: patch failed: bad-\\xa0name\\n",
+            stderr=b"error: patch failed: bad-\xa0name\n",
         )
         with mock_patch("upstream_sync.subprocess.run", return_value=result):
             with self.assertRaises(ValueError) as failure:
                 git(self.runtime, "apply", "--cached", "--3way", "upstream.patch")
         self.assertIn("Git apply failed (exit 1)", str(failure.exception))
-        self.assertIn(r"bad-\\xa0name", str(failure.exception))
+        self.assertIn(r"bad-\xa0name", str(failure.exception))
         self.assertIn("patch failed", str(failure.exception))
 
     def test_git_non_utf8_stdout_is_escaped(self):
         result = subprocess.CompletedProcess(
             args=["git", "status"],
             returncode=0,
-            stdout=b" M bad-\\xa0name\\n",
+            stdout=b" M bad-\xa0name\n",
             stderr=b"",
         )
         with mock_patch("upstream_sync.subprocess.run", return_value=result):
             self.assertEqual(
                 git(self.runtime, "status", "--porcelain"),
-                r"M bad-\\xa0name",
+                r"M bad-\xa0name",
             )
 
     def test_git_error_without_diagnostics_preserves_exit_status(self):
