@@ -75,8 +75,6 @@
   <string name="home_bookmarks_menu_item_remove">削除</string>
   <!-- About content. %1$s is the name of the app (for example "Firefox"). -->
   <string name="about_content" tools:ignore="BrandUsage">%1$s は Mozilla の製品です。</string>
-  <!-- Private Browsing -->
-  <string name="private_browsing_common_myths">プライベートブラウジングについての誤解</string>
   <!--
     Private Browsing
 
@@ -215,6 +213,10 @@
   <string name="browser_menu_no_extensions_installed_description">有効な拡張機能がありません</string>
   <!-- The description of the browser menu appears when the user hasn't installed any extensions and there are recommended extensions. -->
   <string name="browser_menu_try_a_recommended_extension_description">おすすめの拡張機能をお試しください</string>
+  <!-- In the browser menu: Message under the Extensions menu item, displayed when one or more extensions have updates that require approving changes to their permission settings. %1$s is a comma-separated list of one or more extension names. -->
+  <string name="browser_menu_extensions_review_update_description">%1$s の更新内容を確認</string>
+  <!-- In the browser menu: Message under an extension name, displayed when the update requires approving changes to extension settings. -->
+  <string name="browser_menu_extension_review_update_description">更新する設定を確認してください</string>
   <!-- Browser menu button that opens account settings -->
   <string name="browser_menu_account_settings">アカウント情報</string>
   <!-- Browser menu button that opens the settings menu -->
@@ -269,8 +271,6 @@
   <string name="browser_menu_syncing_paused_caption">同期を一時停止中</string>
   <!-- Browser menu caption label for an authenticated user -->
   <string name="browser_menu_signed_in_caption">バックアップと同期する内容を管理する</string>
-  <!-- Browser menu label that creates a private tab -->
-  <string name="browser_menu_new_private_tab">新しいプライベートタブ</string>
   <!-- Browser menu label that navigates to the Password screen -->
   <string name="browser_menu_passwords">パスワード</string>
   <!-- Content description (not visible, for screen readers etc.) for the handle used to drag the main menu at the bottom of the screen. -->
@@ -478,18 +478,6 @@
   <string name="onboarding_preferences_dialog_positive_button">完了</string>
   <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here -->
   <string name="onboarding_welcome_to_firefox" tools:ignore="BrandUsage">Firefox へようこそ</string>
-  <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text_2 as text (“Firefox Terms of Use”). -->
-  <string name="onboarding_term_of_service_line_one_2">続けると、%1$s に同意したものとみなされます。</string>
-  <!-- Used as text for the link in onboarding_term_of_service_line_one_2. -->
-  <string name="onboarding_term_of_service_line_one_link_text_2" tools:ignore="BrandUsage">Firefox 利用規約</string>
-  <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (“Privacy Notice”). -->
-  <string name="onboarding_term_of_service_line_two_2" tools:ignore="BrandUsage">Firefox はあなたのプライバシーを重視します。詳細は %1$s をご覧ください。</string>
-  <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
-  <string name="onboarding_term_of_service_line_two_link_text">プライバシー通知</string>
-  <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$s is replaced by an active link using onboarding_term_of_service_line_three_link_text as text (“Manage”). -->
-  <string name="onboarding_term_of_service_line_three" tools:ignore="BrandUsage">ブラウザーの改善に役立てるため、Firefox は診断情報と対話データを Mozilla に送信します。%1$s</string>
-  <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
-  <string name="onboarding_term_of_service_line_three_link_text">管理</string>
   <!-- Terms of use (ToU) onboarding redesign title. -->
   <string name="onboarding_redesign_tou_title" tools:ignore="UnusedResources">究極の Android ブラウザーを起動</string>
   <!-- Terms of use (ToU) first subheader. -->
@@ -592,20 +580,6 @@
   <string name="nova_onboarding_set_to_default_subtitle">私たちはあなたのデータを保護し、企業によるクリックの監視を自動的にブロックします。</string>
   <!-- "Set to default" onboarding button. -->
   <string name="nova_onboarding_set_to_default_button">既定のブラウザーに設定</string>
-  <!-- Toolbar selection onboarding title. -->
-  <string name="nova_onboarding_toolbar_selection_title">アドレスバーの選択</string>
-  <!-- Toolbar selection onboarding "top" option label. -->
-  <string name="nova_onboarding_toolbar_selection_top_label">画面上部</string>
-  <!-- Toolbar selection onboarding "bottom" option label. -->
-  <string name="nova_onboarding_toolbar_selection_bottom_label">画面下部</string>
-  <!-- Theme selection onboarding title. -->
-  <string name="nova_onboarding_theme_selection_title" tools:ignore="UnusedResources">テーマの選択</string>
-  <!-- Theme selection onboarding "automatic" option label. -->
-  <string name="nova_onboarding_theme_selection_automatic_label" tools:ignore="UnusedResources">自動</string>
-  <!-- Theme selection onboarding "light" option label. -->
-  <string name="nova_onboarding_theme_selection_light_label" tools:ignore="UnusedResources">ライト</string>
-  <!-- Theme selection onboarding "dark" option label. -->
-  <string name="nova_onboarding_theme_selection_dark_label" tools:ignore="UnusedResources">ダーク</string>
   <!-- Sync onboarding title. -->
   <string name="nova_onboarding_sync_title">中断したところからすぐに再開できます</string>
   <!-- Sync onboarding subtitle. -->
@@ -670,12 +644,6 @@
   <string name="nova_onboarding_notifications_subtitle" tools:ignore="BrandUsage,UnusedResources">Firefox の最新のプライバシー機能を発見して、常に最新の保護方法を把握しましょう。</string>
   <!-- Notifications onboarding button. -->
   <string name="nova_onboarding_notifications_button">通知をオンにする</string>
-  <!-- "Add search widget" onboarding title. -->
-  <string name="nova_onboarding_add_search_widget_title">すべての検索をよりプライベートに</string>
-  <!-- "Add search widget" onboarding subtitle. 'Firefox' is intentionally hardcoded. -->
-  <string name="nova_onboarding_add_search_widget_subtitle" tools:ignore="BrandUsage">すべての検索をスマートフォンのホーム画面から開始しましょう。Firefox の自動保護機能があなたをサポートします。</string>
-  <!-- "Add search widget" onboarding button. 'Firefox' is intentionally hardcoded. -->
-  <string name="nova_onboarding_add_search_widget_button" tools:ignore="BrandUsage">Firefox ウィジェットを追加</string>
   <!-- Customize prompt onboarding title. -->
   <string name="nova_onboarding_customize_prompt_title" tools:ignore="UnusedResources">タップするだけで簡単にカスタマイズでき、プライバシーも向上します</string>
   <plurals name="nova_onboarding_customize_prompt_body" tools:ignore="UnusedResources">
@@ -720,12 +688,6 @@
   <string name="search_bar_with_lens_widget_description">画像検索、プライベート検索、音声検索に対応した検索バー</string>
   <!-- Widget description in the widget picker screen for the compact search bar widget -->
   <string name="compact_search_bar_widget_description">コンパクトな検索バー</string>
-  <!--
-    Preferences
-
-    Title for the settings page
-  -->
-  <string name="settings">設定</string>
   <!--
     Preferences
 
@@ -841,6 +803,8 @@
   <string name="preferences_toolbar_select_shortcut">ショートカットを選択</string>
   <!-- Title of a menu option allowing to change the shortcut button shown in the toolbar -->
   <string name="toolbar_shortcut_menu_edit_option">ショートカットを編集</string>
+  <!-- Preference category for menu customization -->
+  <string name="preferences_menu">メニュー</string>
   <!-- Preference for gestures based actions -->
   <string name="preferences_gestures">ジェスチャー</string>
   <!-- Preference for settings related to visual options -->
@@ -917,6 +881,10 @@
   <string name="preferences_open_links_in_apps_ask">開く前に確認する</string>
   <!-- Preference for open links in third party apps never open in apps option -->
   <string name="preferences_open_links_in_apps_never">使用しない</string>
+  <!-- Preference category header for media related open links in apps settings -->
+  <string name="preferences_media_category">メディア</string>
+  <!-- Preference label for choosing whether links open in the YouTube app -->
+  <string name="preferences_open_links_in_youtube">YouTube アプリでリンクを開く</string>
   <!-- Preference category for file storage. -->
   <string name="preferences_category_file_storage">ファイルストレージ</string>
   <!-- Preference title for downloads default location. -->
@@ -1301,6 +1269,12 @@
   <string name="preference_simple_toolbar">シンプル</string>
   <!-- Preference for using expanded toolbar -->
   <string name="preference_expanded_toolbar">展開表示</string>
+  <!-- Preference for changing where the search bar is positioned on the homepage, shown when the user has set the address bar to be displayed at the top of the screen -->
+  <string name="preferences_homepage_search_location">ホームページの検索バーの配置</string>
+  <!-- Preference for showing the homepage search bar in the middle of the homepage -->
+  <string name="preference_homepage_search_location_middle">中央</string>
+  <!-- Preference for showing the homepage search bar at the top of the homepage (combined with the address bar, already displayed at the top) -->
+  <string name="preference_homepage_search_location_top">画面上部</string>
   <!-- New tab shortcut in toolbar customization -->
   <string name="toolbar_customize_shortcut_new_tab">新しいタブを開く</string>
   <!-- Share shortcut in toolbar customization -->
@@ -1610,8 +1584,6 @@
   <string name="open_tabs_menu">タブメニューを開く</string>
   <!-- Content description (not visible, for screen readers etc.): Return to tab manager -->
   <string name="tab_manager_search_bar_back_content_description">タブマネージャーに戻る</string>
-  <!-- Open tabs menu item to save tabs to collection -->
-  <string name="tabs_menu_save_to_collection1">タブをコレクションに保存</string>
   <!-- Text for the menu button to delete a collection -->
   <string name="collection_delete">コレクションを削除</string>
   <!-- Text for the menu button to rename a collection -->
@@ -1957,6 +1929,8 @@
   <string name="download_search_no_results_found">検索結果はありません</string>
   <!-- Text for the "Select all" button, which selects all downloaded items in the downloads list. -->
   <string name="download_select_all_items">すべて選択</string>
+  <!-- Shown in the downloads list in place of a website name when a file came from a data: or blob: URL that has no website address. "data" refers to the data: URL scheme. -->
+  <string name="download_item_source_data">(データ)</string>
   <!--
     Downloads Content Type Filters
 
@@ -2005,8 +1979,6 @@
   <string name="webcompat_reporter_label_mandatory_description">問題について、できるだけ詳しく書いてください。調査の助けになります</string>
   <!-- The label/title of a optional field in the Web Compat Reporter feature for adding additional information. -->
   <string name="webcompat_reporter_label_optional_description">問題について、できるだけ詳しく書いてください。調査の助けになります (任意)</string>
-  <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
-  <string name="webcompat_reporter_cancel">キャンセル</string>
   <!-- The button text for the send button to submit the provided form data. -->
   <string name="webcompat_reporter_send_report">報告を送信</string>
   <!-- Text for a snackbar to confirm the successful submission of a WebCompat report. -->
@@ -2528,8 +2500,6 @@
   <string name="qr_scanner_dialog_invalid">ウェブアドレスが正しくありません。</string>
   <!-- QR code scanner prompt dialog positive option when there is an error -->
   <string name="qr_scanner_dialog_invalid_ok">OK</string>
-  <!-- Tab collection deletion prompt dialog message. %1$s is the collection name. -->
-  <string name="tab_collection_dialog_message">本当に %1$s を削除してもよろしいですか？</string>
   <!-- Sample text for accessibility font size -->
   <string name="accessibility_text_size_sample_text_1">これはサンプルテキストです。この設定でテキストサイズを変更したときに、テキストがどのように表示されるかを示します。</string>
   <!-- Summary for Accessibility Text Size Scaling Preference -->
@@ -3264,6 +3234,14 @@
   <string name="credit_cards_warning_dialog_set_up_now">今すぐ設定</string>
   <!-- Negative button to ignore warning dialog if users have no device authentication set up -->
   <string name="credit_cards_warning_dialog_later">後で</string>
+  <!-- Title of the dialog shown on Android Automotive OS (in cars) when users have no device authentication set up and try to access their saved passwords, payment methods, or sign in to their account -->
+  <string name="automotive_authentication_setup_dialog_title">機密データを保護してください</string>
+  <!-- Message of the dialog shown on Android Automotive OS (in cars) when users have no device authentication set up and try to access their saved passwords, payment methods, or sign in to their account -->
+  <string name="automotive_authentication_setup_dialog_message">端末のロックパターンや PIN、パスワードを設定して保存された機密データを保護してください。他の人が車を運転しているときに不正にアクセスされないようにしましょう。</string>
+  <!-- Primary button on the dialog shown on Android Automotive OS (in cars). Tapping it directs users to the device settings to set up a device lock -->
+  <string name="automotive_authentication_setup_dialog_set_up_now">今すぐ設定</string>
+  <!-- Secondary button of the dialog shown on Android Automotive OS (in cars). Tapping closes the dialogue and cancels the action that triggered the dialogue. -->
+  <string name="automotive_authentication_setup_dialog_cancel">キャンセル</string>
   <!-- Title of PIN verification dialog to direct users to re-enter their device credentials to access their credit cards -->
   <string name="credit_cards_biometric_prompt_message_pin">端末のロック解除</string>
   <!-- Message displayed in biometric prompt for authentication, before allowing users to use their stored payment method information -->
@@ -3406,10 +3384,6 @@
   <string name="browser_menu_remove_from_shortcuts">ショートカットから削除</string>
   <!-- Message in delete confirmation dialog for password -->
   <string name="login_deletion_confirmation_2">本当にこのパスワードを削除してもよろしいですか？</string>
-  <!-- Positive action of a dialog asking to delete -->
-  <string name="dialog_delete_positive">削除</string>
-  <!-- Negative action of a dialog asking to delete login -->
-  <string name="dialog_delete_negative">キャンセル</string>
   <!-- The page title for editing a saved password. -->
   <string name="edit_2">パスワードを編集</string>
   <!-- The page title for adding new password. -->
@@ -3894,11 +3868,6 @@
   <string name="protection_panel_etp_toggle_enabled_description_2">このサイトでの動作がおかしい場合は、オフにしてみてください。</string>
   <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is disabled. -->
   <string name="protection_panel_etp_toggle_disabled_description_2">追跡防止をオンにすることをお勧めします。</string>
-  <!--
-    Text for displaying the total number of trackers blocked in the protection panel.
-    %d is a placeholder for the number of trackers blocked.
-  -->
-  <string name="protection_panel_num_trackers_blocked">ブロックされた追跡: %d</string>
   <!-- Text for when tracking protection is disabled and no trackers are blocked. -->
   <string name="protection_panel_etp_disabled_no_trackers_blocked">トラッカーがブロックされません</string>
   <!-- Link text to navigate to privacy and security settings from the protection panel. -->
@@ -4464,6 +4433,39 @@
   <!-- Link text for terms_of_use_prompt_body_line_two_alternative that links to a site with more information about the Terms of Use -->
   <string name="terms_of_use_prompt_body_line_two_alternative_link" tools:ignore="UnusedResources">利用規約</string>
   <!--
+    Sports widget
+
+    Label shown on the sports widget scoreboard when a match is currently being played live.
+  -->
+  <string name="wrex_widget_match_live">ライブ</string>
+  <!-- Label shown on the sports widget match status badge when the start of a match has been delayed. -->
+  <string name="wrex_widget_match_delayed">遅延</string>
+  <!-- Label shown on the sports widget match status badge when a match has been suspended after it started. -->
+  <string name="wrex_widget_match_suspended">一時中断</string>
+  <!-- Label shown on the sports widget match status badge when a match has been postponed to a later date. -->
+  <string name="wrex_widget_match_postponed">延期</string>
+  <!-- Sports widget menu item to view the team's match results. -->
+  <string name="wrex_widget_results">結果</string>
+  <!-- Sports widget menu item to view the league standings table. -->
+  <string name="wrex_widget_standings">リーグ順位表</string>
+  <!-- Sports widget menu item to browse the team's wallpapers. -->
+  <string name="wrex_widget_wallpapers">壁紙</string>
+  <!-- Sports widget menu item to remove the widget from the homepage. -->
+  <string name="wrex_widget_remove_widget">ウィジェットを削除</string>
+  <!-- Content description (for accessibility, not displayed) for the overflow (more options) menu button on the sports widget card. -->
+  <string name="wrex_widget_more_options_content_description">他のオプション</string>
+  <!--
+    Content description (for accessibility, not displayed) used for the sports widget card header announcing a live match.
+    %s is the name of the competition the match belongs to (e.g. "FA Cup").
+  -->
+  <string name="wrex_widget_live_game_content_description">%s、試合中</string>
+  <!--
+    Content description (for accessibility, not displayed) for a paginated item.
+    %1$s is the name of the competition the match belongs to (e.g. "FA Cup"),
+    %2$d is the current page number, and %3$d is the total number of pages.
+  -->
+  <string name="wrex_widget_page_position_content_description">%1$s、ページ %2$d / %3$d</string>
+  <!--
     Privacy notice homepage banner
 
     A message we show the user on the homepage when there is a new version of the privacy notice. 'Firefox' is intentionally hardcoded.
@@ -4523,6 +4525,8 @@
   <string name="lens_camera_loading_status">この画像を検索中</string>
   <!-- Button shown under an image picked from the gallery or taken with the camera while it is being sent to Google Lens. Tapping it stops the search and returns to the camera. -->
   <string name="lens_camera_loading_cancel_button">キャンセル</string>
+  <!-- Snackbar message shown when an image picked from the gallery or taken with the camera could not be opened or read, so it was never sent to Google Lens. Shown after returning to the camera. -->
+  <string name="lens_camera_image_load_failed_v2">この画像を読み込めませんでした。</string>
   <!-- Snackbar message shown when an image picked from the gallery could not be opened or read, so it was never sent to Google Lens. Shown after returning to the camera. -->
   <string name="lens_camera_image_load_failed">この画像を読み込めませんでした。別の画像を選択してください。</string>
   <!-- Snackbar message shown when an image picked from the gallery or taken with the camera could not be searched because of a network problem or an error from Google Lens. Shown after returning to the camera, next to the lens_camera_upload_failed_retry_button action. -->
@@ -4588,7 +4592,7 @@
 
     Content description for accessibility (used by screen readers): Description for the button that triggers the start of a signature workflow on the PDF displayed on the screen.
   -->
-  <string name="pdf_tools_sign_content_description">PDF に署名</string>
+  <string name="pdf_tools_sign_content_description_2">署名を追加</string>
   <!-- Content description for accessibility (used by screen readers): Description of the button that downloads the PDF displayed on the screen to the user's device. -->
   <string name="pdf_tools_download_content_description">PDF をダウンロード</string>
   <!-- Content description for accessibility (used by screen readers): Description for the button that opens the printing dialogue window for the PDF displayed on the screen. -->
@@ -4609,6 +4613,14 @@
   <string name="pdf_tools_signature_clear_button">消去</string>
   <!-- The text for the button that adds the signature the user has typed to the PDF. -->
   <string name="pdf_tools_signature_add_button">追加</string>
+  <!-- Content description for accessibility (used by screen readers): Description for the loading indicator when a signature is in the process of being added to a PDF. -->
+  <string name="pdf_tools_signature_adding_content_description">署名を追加します</string>
+  <!--
+    Listen to page
+
+    Content description for the reader view panel: a group of buttons floating over the content, which allow customizing the reader view or activating the Listen to Page feature
+  -->
+  <string name="reader_mode_panel_content_description_2">リーダービューのオプション</string>
   <!--
     Listen to page
 
@@ -4619,4 +4631,6 @@
   <string name="reader_mode_panel_listen_content_description">読み上げ</string>
   <!-- Content description for media player displayed in Reader view when the Listen to Page (Read Aloud) feature is selected -->
   <string name="reader_mode_panel_media_player_content_description">メディアプレーヤー</string>
+  <!-- Content description for the reader view button Reader view facilitates readability and has a Listen to Page feature. Button icon is a document with headphones, and is displayed next to the page URL when the feature is available. -->
+  <string name="browser_menu_read_or_listen">リーダービューでページを読む、または聴く</string>
 </resources>
