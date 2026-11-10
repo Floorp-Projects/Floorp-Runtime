@@ -1,12 +1,7 @@
 diff --git a/browser/app/moz.build b/browser/app/moz.build
-index 37f9b0f8bed5d..71210bc367f8d 100644
 --- a/browser/app/moz.build
 +++ b/browser/app/moz.build
-@@ -180,3 +180,19 @@ if CONFIG["MOZ_ASAN"] or CONFIG["MOZ_DEBUG"]:
-     WINCONSOLE = True
- else:
-     WINCONSOLE = False
-+
+@@ -179,4 +179,20 @@
 +if CONFIG["OS_TARGET"] == "WINNT":
 +    checkOSBuildFloorp = "windows"
 +elif CONFIG["OS_TARGET"] == "Darwin":
@@ -22,3 +17,8 @@ index 37f9b0f8bed5d..71210bc367f8d 100644
 +        checkOSBuildFloorp,
 +        icon,
 +    )
++
+ if CONFIG["MOZ_ASAN"] or CONFIG["MOZ_DEBUG"]:
+     WINCONSOLE = True
+ else:
+     WINCONSOLE = False
