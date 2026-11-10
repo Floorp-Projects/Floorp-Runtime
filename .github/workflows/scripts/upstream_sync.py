@@ -163,8 +163,7 @@ def integrate_upstream(root, upstream, base_manifest=None):
         if delta.stat().st_size:
             git(root, "apply", "--cached", "--3way", str(delta), env=env)
         integrated_tree = git(root, "write-tree", env=env)
-        for patch in patches:
-            git(root, "apply", "--cached", "--whitespace=error-all", str(patch), env=env)
+        apply_required_patches(root, patches, env)
         for path in native["patched_files"]:
             content = subprocess.check_output(
                 ["git", "-C", str(root), "show", ":" + path], env=env,
@@ -214,26 +213,26 @@ def required_patches(root):
     return required
 
 
+def apply_required_patches(root, patches, env):
+    """Report all incompatibilities; never publish a partly patched index."""
+    failures = []
+    for patch in patches:
+        try:
+            git(root, "apply", "--cached", "--whitespace=error-all",
+                str(patch), env=env)
+        except ValueError as error:
+            failures.append(f"Required upstream patch {patch.name}: {error}")
+    if failures:
+        raise ValueError("\n".join(failures))
+
+
 def check_patches(root):
     patches = required_patches(root)
     with tempfile.TemporaryDirectory(prefix="upstream-patch-check-") as temporary:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(temporary).resolve() / "index")}
         git(root, "read-tree", "HEAD", env=env)
         git(root, "add", "--all", "--force", ".", env=env)
-        for patch in patches:
-            try:
-                git(
-                    root,
-                    "apply",
-                    "--cached",
-                    "--whitespace=error-all",
-                    str(patch),
-                    env=env,
-                )
-            except ValueError as error:
-                raise ValueError(
-                    f"Required upstream patch {patch.name}: {error}"
-                ) from error
+        apply_required_patches(root, patches, env)
     return len(patches)
 
 
