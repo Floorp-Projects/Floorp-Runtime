@@ -33,13 +33,10 @@ diff --git a/python/mozboot/mozboot/bootstrap.py b/python/mozboot/mozboot/bootst
  }
 
  FINISHED = """
-@@ -507,7 +496,8 @@
-         elif git and checkout_type == "git":
+@@ -508,4 +497,5 @@
              should_configure_git = False
              if not self.instance.no_interactive:
 -                should_configure_git = self.instance.prompt_yesno(prompt=CONFIGURE_GIT)
-+                # No need to configure git-cinnabar because of noraneko repo cannot be merged to mozilla-central by compatibility.
++                # Do not configure Mozilla's Git tooling for the Floorp fork.
 +                should_configure_git = False
              else:
-                 # Assuming default configuration setting applies to all VCS.
-                 should_configure_git = self.hg_configure

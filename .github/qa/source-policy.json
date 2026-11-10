@@ -12,7 +12,7 @@
     },
     {
       "path": ".github/patches/upstream/bootstrap.py.patch",
-      "sha256": "678754694a8ca39628604b5c98edb97eebea869a10110f265e56bb284f6df7d3"
+      "sha256": "cc270547668afd90872c114c35e5d3679c0b37d19b7020a6d906747f01c479b0"
     },
     {
       "path": ".github/patches/upstream/brandingFileIcon.patch",
