@@ -50,6 +50,83 @@ def sync_action(root, upstream, base_manifest=None):
     return "integrate"
 
 
+# Reviewed Firefox 159 -> 160 Cocoa conflicts. These are Git blob identities,
+# not branch names: any change to any input must go through ordinary 3-way
+# integration and, if still conflicting, a new review. Never select ours/theirs
+# wholesale or relax the required-patch checks to make an update pass.
+REVIEWED_COCOA_BLOBS = {
+    "widget/cocoa/moz.build": (
+        "42b17196b4c05f4c291be52782203bc6f02d9071",
+        "2fecc34acaf876603ea07603d9b7ef3201a4de1e",
+        "ffb56bbb414f65208180e00fee5e89542382f7de",
+    ),
+    "widget/cocoa/nsMenuUtilsX.mm": (
+        "b6816b90b37bda889cabb29c5e9223903bb6e3b9",
+        "7803eed2ef3bd4b45e0a08751e5ac14b56404178",
+        "b1b4f27fb5e5207aa7611e3daa90f6af37491664",
+    ),
+}
+
+
+def resolve_reviewed_cocoa(path, base, ours, theirs):
+    """Combine the reviewed edits without discarding either side's behavior."""
+    if path == "widget/cocoa/moz.build":
+        # Both sides appended at EOF. Preserve upstream's complete header
+        # inventory and Floorp's complete ARC/link/include/App Shim block.
+        if not ours.startswith(base) or not ours[len(base):].startswith(
+            b"\n# App Shim sources use ARC independently"
+        ):
+            raise ValueError("Reviewed App Shim build baseline differs")
+        return theirs + ours[len(base):]
+    if path == "widget/cocoa/nsMenuUtilsX.mm":
+        before = b"  if (hiddenWindowWidgetNoCOMPtr) {\n"
+        guarded = (
+            b"  if (hiddenWindowWidgetNoCOMPtr &&\n"
+            b"      !hiddenWindowWidgetNoCOMPtr->IsMacWebAppWidget()) {\n"
+        )
+        new_condition = b"  if (hiddenWindowWidget) {\n"
+        if (
+            base.count(before) != 1
+            or base.replace(before, guarded) != ours
+            or theirs.count(new_condition) != 1
+        ):
+            raise ValueError("Reviewed hidden-window menu baseline differs")
+        # Keep Mozilla's owning nsCOMPtr and already_AddRefed return type.
+        # A MacWebAppWidget is not an nsCocoaWindow and must not be cast to one.
+        return theirs.replace(
+            new_condition,
+            b"  if (hiddenWindowWidget && !hiddenWindowWidget->IsMacWebAppWidget()) {\n",
+        )
+    raise ValueError("Unreviewed Cocoa resolution path: " + path)
+
+
+def stage_reviewed_cocoa(root, recorded, current, env, temporary):
+    """Stage only exact, reviewed inputs in the disposable integration index."""
+    resolved = []
+    for path, expected in REVIEWED_COCOA_BLOBS.items():
+        entries = [
+            git(root, "ls-tree", ref, "--", path).split()
+            for ref in (recorded, "HEAD", current)
+        ]
+        if any(len(entry) != 4 or entry[:2] != ["100644", "blob"]
+               for entry in entries):
+            continue
+        if tuple(entry[2] for entry in entries) != expected:
+            continue
+        inputs = [subprocess.check_output(
+            ["git", "-C", str(root), "cat-file", "blob", oid]
+        ) for oid in expected]
+        content = resolve_reviewed_cocoa(path, *inputs)
+        output = Path(temporary) / ("resolved-" + Path(path).name)
+        output.write_bytes(content)
+        oid = git(root, "hash-object", "-w", str(output))
+        git(root, "update-index", "--add", "--cacheinfo", "100644", oid,
+            path, env=env)
+        resolved.append(path)
+        print(f"Reviewed Cocoa resolution: {path}: {expected} -> {oid}")
+    return resolved
+
+
 def integrate_upstream(root, upstream, base_manifest=None):
     manifest = root / ".github/runtime-upstream.json"
     if not manifest.exists():
@@ -73,12 +150,14 @@ def integrate_upstream(root, upstream, base_manifest=None):
         index = Path(temporary) / "index"
         env = {**os.environ, "GIT_INDEX_FILE": str(index.resolve())}
         git(root, "read-tree", "HEAD", env=env)
+        resolved = stage_reviewed_cocoa(root, recorded, current, env, temporary)
         delta = Path(temporary) / "upstream.patch"
         with delta.open("wb") as stream:
             subprocess.run(
                 ["git", "-C", str(root), "diff", "--binary", "--full-index",
                  recorded, current, "--", ".", ":(exclude).github",
-                 ":(exclude)floorp", ":(exclude).gitmodules", ":(exclude)README.md"],
+                 ":(exclude)floorp", ":(exclude).gitmodules", ":(exclude)README.md",
+                 *[":(exclude)" + path for path in resolved]],
                 stdout=stream, check=True,
             )
         if delta.stat().st_size:
