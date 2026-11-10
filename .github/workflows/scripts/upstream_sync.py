@@ -20,12 +20,19 @@ def git(root, *args, env=None):
         ["git", "-C", str(root), *args],
         env=env,
         capture_output=True,
-        text=True,
         check=False,
     )
+    # Git may emit non-UTF-8 pathname bytes in its diagnostics. Decode
+    # losslessly for logs instead of hiding an apply failure behind a
+    # UnicodeDecodeError.
+    stdout = result.stdout.decode("utf-8", errors="backslashreplace").strip()
+    stderr = result.stderr.decode("utf-8", errors="backslashreplace").strip()
     if result.returncode:
-        raise ValueError(result.stderr.strip() or "Git operation failed")
-    return result.stdout.strip()
+        raise ValueError(
+            f"Git {args[0]} failed (exit {result.returncode}): "
+            f"{stderr or '(no diagnostic output)'}"
+        )
+    return stdout
 
 
 def sync_action(root, upstream, base_manifest=None):
