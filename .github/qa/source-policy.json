@@ -16,7 +16,7 @@
     },
     {
       "path": ".github/patches/upstream/brandingFileIcon.patch",
-      "sha256": "55d5bc554135564b6324b8206de28c21e87712c6d4a10093936cc0c228409fa0"
+      "sha256": "5982fc47bf96701305fc150ea4a01d6ebc0592ef2a342480feaf746e41a983ff"
     },
     {
       "path": ".github/patches/upstream/browser-installer-windows-nsis-shared.nsh.patch",
