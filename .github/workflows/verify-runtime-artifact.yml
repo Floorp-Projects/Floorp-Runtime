@@ -82,7 +82,7 @@ name: Verify Final Runtime Artifact
           - ubuntu-24.04
           - ubuntu-24.04-arm
           - macos-15-intel
-          - macos-14
+          - macos-15
       debug:
         description: Whether the artifact is a Debug build
         type: boolean
@@ -129,7 +129,7 @@ jobs:
                 artifact: "floorp-mac-universal-moz-artifact",
               }],
               ["Darwin/aarch64", {
-                runner: "macos-14",
+                runner: "macos-15",
                 artifact: "floorp-mac-universal-moz-artifact",
               }],
             ]);
