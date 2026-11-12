@@ -3,4 +3,6 @@ head = ""
 
 ["consumerNotifications.js"]
 
+["test_shutdown.js"]
+
 ["test_skipFirst.js"]
