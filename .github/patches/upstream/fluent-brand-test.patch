@@ -1,0 +1,68 @@
+diff --git a/intl/l10n/test/xpcshell.toml b/intl/l10n/test/xpcshell.toml
+--- a/intl/l10n/test/xpcshell.toml
++++ b/intl/l10n/test/xpcshell.toml
+@@ -23,3 +23,5 @@
+ ]
+
+ ["test_pseudo.js"]
++
++["test_floorp_branding.js"]
+diff --git a/intl/l10n/test/test_floorp_branding.js b/intl/l10n/test/test_floorp_branding.js
+new file mode 100644
+--- /dev/null
++++ b/intl/l10n/test/test_floorp_branding.js
+@@ -0,0 +1,54 @@
++/* Any copyright is dedicated to the Public Domain.
++   http://creativecommons.org/publicdomain/zero/1.0/ */
++
++add_task(async function test_floorp_branding_preserves_arguments() {
++  const registry = new L10nRegistry();
++  registry.registerSources([
++    L10nFileSource.createMock("floorp-brand-test", "app", ["en-US"],
++      "/localization/{locale}/", [{
++        path: "/localization/en-US/brand-test.ftl",
++        source: `
++-brand = Firefox
++literal = Mozilla Firefox
++page = Tab: { $name }
++attribute =
++    .title = Mozilla: { $name }
++term = { -brand }: { $name }
++choice = { $kind ->
++    [Mozilla] Firefox: { $name }
++   *[other] Mozilla: { $name }
++}
++`,
++      }]),
++  ]);
++  const l10n = new Localization(["brand-test.ftl"], true, registry, ["en-US"]);
++  const name = "Mozilla Firefox Firefox Mozilla \u65e5\u672c\u8a9e.exe";
++  const args = { name, kind: "Mozilla" };
++  const keys = ["literal", "page", "term", "choice"].map(id => ({ id, args }));
++  const expected = ["Ablaze Floorp", `Tab: ${name}`, `Floorp: ${name}`, `Floorp: ${name}`];
++  const withoutIsolation = value => value?.replace(/[\u2068\u2069]/g, "");
++  Assert.deepEqual(l10n.formatValuesSync(keys).map(withoutIsolation), expected);
++  Assert.deepEqual((await l10n.formatValues(keys)).map(withoutIsolation), expected);
++  for (let i = 0; i < keys.length; i++) {
++    Assert.equal(withoutIsolation(l10n.formatValueSync(keys[i].id, args)), expected[i]);
++    Assert.equal(withoutIsolation(await l10n.formatValue(keys[i].id, args)), expected[i]);
++  }
++  for (const messages of [l10n.formatMessagesSync([...keys, { id: "attribute", args }]),
++    await l10n.formatMessages([...keys, { id: "attribute", args }])]) {
++    Assert.deepEqual(messages.slice(0, 4).map(m => withoutIsolation(m.value)), expected);
++    Assert.equal(messages[4].value, null);
++    Assert.equal(withoutIsolation(messages[4].attributes[0].value), `Ablaze: ${name}`);
++  }
++  const missing = [{ id: "missing" }];
++  // Match upstream's production-mode missing-message checks in xpcshell.
++  const automationPref =
++    "security.turn_off_all_security_so_that_viruses_can_take_over_this_computer";
++  const wasInAutomation = Services.prefs.getBoolPref(automationPref);
++  Services.prefs.setBoolPref(automationPref, false);
++  try {
++    Assert.deepEqual(l10n.formatValuesSync(missing), [null]);
++    Assert.deepEqual(await l10n.formatValues(missing), [null]);
++  } finally {
++    Services.prefs.setBoolPref(automationPref, wasInAutomation);
++  }
++});
