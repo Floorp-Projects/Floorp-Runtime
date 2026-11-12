@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: MPL-2.0
+
+name: Diagnose macOS runner display
+
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/diag-macos-display.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-15
+          - macos-15-intel
+          - macos-26
+    steps:
+      - name: Platform
+        run: |
+          sw_vers
+          uname -m
+          sysctl -n machdep.cpu.brand_string
+          echo "ImageOS=${ImageOS:-unset} ImageVersion=${ImageVersion:-unset}"
+
+      - name: Screens through AppKit
+        run: |
+          osascript -l JavaScript <<'JXA' 2>&1 || echo "JXA failed"
+          ObjC.import('AppKit');
+          const rect = (r) => [r.origin.x, r.origin.y, r.size.width, r.size.height];
+          const screens = $.NSScreen.screens;
+          const out = [];
+          for (let i = 0; i < screens.count; i++) {
+            const s = screens.objectAtIndex(i);
+            out.push({index: i, frame: rect(s.frame), visibleFrame: rect(s.visibleFrame), scale: s.backingScaleFactor});
+          }
+          JSON.stringify(out);
+          JXA
+
+      - name: Dock and window manager state
+        run: |
+          for key in autohide tilesize orientation magnification; do
+            printf 'dock.%s=' "$key"
+            defaults read com.apple.dock "$key" 2>&1 || true
+          done
+          printf 'stagemanager='
+          defaults read com.apple.WindowManager GloballyEnabled 2>&1 || true
+          pgrep -lx Dock || echo "Dock not running"
+          pgrep -lx Finder || echo "Finder not running"
+
+      - name: Displays through system_profiler
+        run: system_profiler SPDisplaysDataType
