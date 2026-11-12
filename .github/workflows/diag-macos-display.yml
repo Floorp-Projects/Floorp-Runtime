@@ -56,5 +56,27 @@ jobs:
           pgrep -lx Dock || echo "Dock not running"
           pgrep -lx Finder || echo "Finder not running"
 
+      - name: Hide the Dock
+        run: |
+          defaults write com.apple.dock autohide -bool true
+          defaults write com.apple.dock autohide-delay -float 0
+          killall Dock
+          sleep 5
+          pgrep -lx Dock || echo "Dock not running"
+
+      - name: Screens through AppKit after hiding the Dock
+        run: |
+          osascript -l JavaScript <<'JXA' 2>&1 || echo "JXA failed"
+          ObjC.import('AppKit');
+          const rect = (r) => [r.origin.x, r.origin.y, r.size.width, r.size.height];
+          const screens = $.NSScreen.screens;
+          const out = [];
+          for (let i = 0; i < screens.count; i++) {
+            const s = screens.objectAtIndex(i);
+            out.push({index: i, frame: rect(s.frame), visibleFrame: rect(s.visibleFrame), scale: s.backingScaleFactor});
+          }
+          JSON.stringify(out);
+          JXA
+
       - name: Displays through system_profiler
         run: system_profiler SPDisplaysDataType
