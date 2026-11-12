@@ -75,8 +75,6 @@
   <string name="home_bookmarks_menu_item_remove">Mboguete</string>
   <!-- About content. %1$s is the name of the app (for example "Firefox"). -->
   <string name="about_content" tools:ignore="BrandUsage">%1$s ojapókuri Mozilla.</string>
-  <!-- Private Browsing -->
-  <string name="private_browsing_common_myths">Mombe’ugua’u kundahára ñemi rehegua</string>
   <!--
     Private Browsing
 
@@ -269,8 +267,6 @@
   <string name="browser_menu_syncing_paused_caption">Ñembojuehe mombytapyre</string>
   <!-- Browser menu caption label for an authenticated user -->
   <string name="browser_menu_signed_in_caption">Eñangareko eykeko ha embojuehéva</string>
-  <!-- Browser menu label that creates a private tab -->
-  <string name="browser_menu_new_private_tab">Tendayke pyahu ñemigua</string>
   <!-- Browser menu label that navigates to the Password screen -->
   <string name="browser_menu_passwords">Ñe’ẽñemi</string>
   <!-- Content description (not visible, for screen readers etc.) for the handle used to drag the main menu at the bottom of the screen. -->
@@ -478,18 +474,6 @@
   <string name="onboarding_preferences_dialog_positive_button">Apopyre</string>
   <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here -->
   <string name="onboarding_welcome_to_firefox" tools:ignore="BrandUsage">Eg̃uahẽporãite Firefox-pe</string>
-  <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text_2 as text (“Firefox Terms of Use”). -->
-  <string name="onboarding_term_of_service_line_one_2">Eku’ejeývo, emoneĩmbáma umi %1$s.</string>
-  <!-- Used as text for the link in onboarding_term_of_service_line_one_2. -->
-  <string name="onboarding_term_of_service_line_one_link_text_2" tools:ignore="BrandUsage">Firefox jeporukuaa rape</string>
-  <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (“Privacy Notice”). -->
-  <string name="onboarding_term_of_service_line_two_2" tools:ignore="BrandUsage">Firefox ojepy’apy nde rekoñemíre. Emoñe’ẽve ore %1$s rupi.</string>
-  <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
-  <string name="onboarding_term_of_service_line_two_link_text">Marandu’i ñemiguáva</string>
-  <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$s is replaced by an active link using onboarding_term_of_service_line_three_link_text as text (“Manage”). -->
-  <string name="onboarding_term_of_service_line_three" tools:ignore="BrandUsage">Oiko porãve hag̃ua pe kundahára, Firefox omondo techapy ha ñomongetakue Mozilla-pe. %1$s</string>
-  <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
-  <string name="onboarding_term_of_service_line_three_link_text">Ñangareko</string>
   <!-- Terms of use (ToU) onboarding redesign title. -->
   <string name="onboarding_redesign_tou_title" tools:ignore="UnusedResources">Emopñepyrũ kundahára Android oikóva</string>
   <!-- Terms of use (ToU) first subheader. -->
@@ -592,20 +576,6 @@
   <string name="nova_onboarding_set_to_default_subtitle">Romo’ã ne mba’ekuaarãita ha rojoko opaite mba’apohaguasuita oma’ẽñemíva eikehápe.</string>
   <!-- "Set to default" onboarding button. -->
   <string name="nova_onboarding_set_to_default_button">Ejapo kundahára ijypyguávarõ</string>
-  <!-- Toolbar selection onboarding title. -->
-  <string name="nova_onboarding_toolbar_selection_title">Eiporavo kundaharape rupa</string>
-  <!-- Toolbar selection onboarding "top" option label. -->
-  <string name="nova_onboarding_toolbar_selection_top_label">Yvatevéva</string>
-  <!-- Toolbar selection onboarding "bottom" option label. -->
-  <string name="nova_onboarding_toolbar_selection_bottom_label">Guýpe</string>
-  <!-- Theme selection onboarding title. -->
-  <string name="nova_onboarding_theme_selection_title" tools:ignore="UnusedResources">Eiporavo ne téma</string>
-  <!-- Theme selection onboarding "automatic" option label. -->
-  <string name="nova_onboarding_theme_selection_automatic_label" tools:ignore="UnusedResources">ijeheguietéva</string>
-  <!-- Theme selection onboarding "light" option label. -->
-  <string name="nova_onboarding_theme_selection_light_label" tools:ignore="UnusedResources">Tesakã</string>
-  <!-- Theme selection onboarding "dark" option label. -->
-  <string name="nova_onboarding_theme_selection_dark_label" tools:ignore="UnusedResources">Ypytũ</string>
   <!-- Sync onboarding title. -->
   <string name="nova_onboarding_sync_title">Eku’ejey pya’e eheja haguetégui</string>
   <!-- Sync onboarding subtitle. -->
@@ -670,12 +640,6 @@
   <string name="nova_onboarding_notifications_subtitle" tools:ignore="BrandUsage,UnusedResources">Eikuaa Firefox rekoñemi rembiapoite ipyahuvéva eime hag̃ua opaite ára tekorosã añetetépe.</string>
   <!-- Notifications onboarding button. -->
   <string name="nova_onboarding_notifications_button">Emyandy marandu’i</string>
-  <!-- "Add search widget" onboarding title. -->
-  <string name="nova_onboarding_add_search_widget_title">Ejapo nde jeheka hekorosãve hag̃ua</string>
-  <!-- "Add search widget" onboarding subtitle. 'Firefox' is intentionally hardcoded. -->
-  <string name="nova_onboarding_add_search_widget_subtitle" tools:ignore="BrandUsage">Eñepyrũ peteĩteĩva jeheka ne pumbyry mba’erechaha guive ha péicha eikuaáta Firefox ñemo’ã eguerekoha.</string>
-  <!-- "Add search widget" onboarding button. 'Firefox' is intentionally hardcoded. -->
-  <string name="nova_onboarding_add_search_widget_button" tools:ignore="BrandUsage">Embjuaju Firefox widget</string>
   <!-- Customize prompt onboarding title. -->
   <string name="nova_onboarding_customize_prompt_title" tools:ignore="UnusedResources">Ndahasýi iñemboava ha hekoñemive peteĩteĩva jekutúpe</string>
   <plurals name="nova_onboarding_customize_prompt_body" tools:ignore="UnusedResources">
@@ -721,12 +685,6 @@
   <string name="search_bar_with_lens_widget_description">Hekaha rupa ñemigua jeheka ndive, ta’ãnga ha ayvúre</string>
   <!-- Widget description in the widget picker screen for the compact search bar widget -->
   <string name="compact_search_bar_widget_description">Hekaha rupa oikóva</string>
-  <!--
-    Preferences
-
-    Title for the settings page
-  -->
-  <string name="settings">Ñemboheko</string>
   <!--
     Preferences
 
@@ -918,6 +876,10 @@
   <string name="preferences_open_links_in_apps_ask">Eporandu embojuruja mboyve</string>
   <!-- Preference for open links in third party apps never open in apps option -->
   <string name="preferences_open_links_in_apps_never">Araka’eve</string>
+  <!-- Preference category header for media related open links in apps settings -->
+  <string name="preferences_media_category">Momaranduha</string>
+  <!-- Preference label for choosing whether links open in the YouTube app -->
+  <string name="preferences_open_links_in_youtube">Embojuruja juajuha YouTube rupi</string>
   <!-- Preference category for file storage. -->
   <string name="preferences_category_file_storage">Marandurenda ñembyaty</string>
   <!-- Preference title for downloads default location. -->
@@ -1302,6 +1264,12 @@
   <string name="preference_simple_toolbar">Simple</string>
   <!-- Preference for using expanded toolbar -->
   <string name="preference_expanded_toolbar">Myasãimbyre</string>
+  <!-- Preference for changing where the search bar is positioned on the homepage, shown when the user has set the address bar to be displayed at the top of the screen -->
+  <string name="preferences_homepage_search_location">Hekaha rendaite kuatiarogue ñepyrũhápe</string>
+  <!-- Preference for showing the homepage search bar in the middle of the homepage -->
+  <string name="preference_homepage_search_location_middle">Mbyte</string>
+  <!-- Preference for showing the homepage search bar at the top of the homepage (combined with the address bar, already displayed at the top) -->
+  <string name="preference_homepage_search_location_top">Yvatevéva</string>
   <!-- New tab shortcut in toolbar customization -->
   <string name="toolbar_customize_shortcut_new_tab">Tendayke pyahúpe jeike</string>
   <!-- Share shortcut in toolbar customization -->
@@ -1612,8 +1580,6 @@
   <string name="open_tabs_menu">Embojuruja poravorã rendayke</string>
   <!-- Content description (not visible, for screen readers etc.): Return to tab manager -->
   <string name="tab_manager_search_bar_back_content_description">Eguevi tendayke ñangarekohápe</string>
-  <!-- Open tabs menu item to save tabs to collection -->
-  <string name="tabs_menu_save_to_collection1">Eñongatu tendayke atyhápe</string>
   <!-- Text for the menu button to delete a collection -->
   <string name="collection_delete">Emboguete atygua</string>
   <!-- Text for the menu button to rename a collection -->
@@ -1962,6 +1928,8 @@
   <string name="download_search_no_results_found">Ndaipóri tembiapokue</string>
   <!-- Text for the "Select all" button, which selects all downloaded items in the downloads list. -->
   <string name="download_select_all_items">Mbosa’ypa</string>
+  <!-- Shown in the downloads list in place of a website name when a file came from a data: or blob: URL that has no website address. "data" refers to the data: URL scheme. -->
+  <string name="download_item_source_data">(mba’ekuaarã)</string>
   <!--
     Downloads Content Type Filters
 
@@ -2010,8 +1978,6 @@
   <string name="webcompat_reporter_label_mandatory_description">Ehaipaite apañuái rehegua ore pytyvõkuaa hag̃ua rohapykuehóvo</string>
   <!-- The label/title of a optional field in the Web Compat Reporter feature for adding additional information. -->
   <string name="webcompat_reporter_label_optional_description">Ehaipaite apañuái rehegua ore pytyvõkuaa hag̃ua rohapykuehóvo (ejaposérõ)</string>
-  <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
-  <string name="webcompat_reporter_cancel">Heja</string>
   <!-- The button text for the send button to submit the provided form data. -->
   <string name="webcompat_reporter_send_report">Emondo marandu’i</string>
   <!-- Text for a snackbar to confirm the successful submission of a WebCompat report. -->
@@ -2533,8 +2499,6 @@
   <string name="qr_scanner_dialog_invalid">Pe kundaharape ndoikói.</string>
   <!-- QR code scanner prompt dialog positive option when there is an error -->
   <string name="qr_scanner_dialog_invalid_ok">MONEĨ</string>
-  <!-- Tab collection deletion prompt dialog message. %1$s is the collection name. -->
-  <string name="tab_collection_dialog_message">¿Emboguetesépa añetehápe %1$s?</string>
   <!-- Sample text for accessibility font size -->
   <string name="accessibility_text_size_sample_text_1">Kóva moñe’ẽrã techapyrãva. Oĩ ohechauka hag̃ua mba’éichapa ojehecháta moñe’ẽrã tuicha ha michĩvévo ko ñembohekópe.</string>
   <!-- Summary for Accessibility Text Size Scaling Preference -->
@@ -3270,6 +3234,14 @@
   <string name="credit_cards_warning_dialog_set_up_now">Emboheko ko’ág̃a</string>
   <!-- Negative button to ignore warning dialog if users have no device authentication set up -->
   <string name="credit_cards_warning_dialog_later">Upéi</string>
+  <!-- Title of the dialog shown on Android Automotive OS (in cars) when users have no device authentication set up and try to access their saved passwords, payment methods, or sign in to their account -->
+  <string name="automotive_authentication_setup_dialog_title">Eñongatu ne mba’ekuaarã ñemiguáva</string>
+  <!-- Message of the dialog shown on Android Automotive OS (in cars) when users have no device authentication set up and try to access their saved passwords, payment methods, or sign in to their account -->
+  <string name="automotive_authentication_setup_dialog_message">Emboheko mba’e’oka jokoha rape, PIN térã ñe’ẽñemi emo’ã hag̃ua mba’e’okaita ñemi ñongatupyre ambue oikeséva ikatu’ỹre omboguatáramo nde cóche.</string>
+  <!-- Primary button on the dialog shown on Android Automotive OS (in cars). Tapping it directs users to the device settings to set up a device lock -->
+  <string name="automotive_authentication_setup_dialog_set_up_now">Emboheko ko’ág̃a</string>
+  <!-- Secondary button of the dialog shown on Android Automotive OS (in cars). Tapping closes the dialogue and cancels the action that triggered the dialogue. -->
+  <string name="automotive_authentication_setup_dialog_cancel">Eheja</string>
   <!-- Title of PIN verification dialog to direct users to re-enter their device credentials to access their credit cards -->
   <string name="credit_cards_biometric_prompt_message_pin">Embojuruja ne mba’e’oka</string>
   <!-- Message displayed in biometric prompt for authentication, before allowing users to use their stored payment method information -->
@@ -3412,10 +3384,6 @@
   <string name="browser_menu_remove_from_shortcuts">Emboguete mbopya’ehágui</string>
   <!-- Message in delete confirmation dialog for password -->
   <string name="login_deletion_confirmation_2">Emboguesetépa añetehápe ko ñe’ẽñemi</string>
-  <!-- Positive action of a dialog asking to delete -->
-  <string name="dialog_delete_positive">Mboguete</string>
-  <!-- Negative action of a dialog asking to delete login -->
-  <string name="dialog_delete_negative">Heja</string>
   <!-- The page title for editing a saved password. -->
   <string name="edit_2">Embosako’i ñe’ẽñemi</string>
   <!-- The page title for adding new password. -->
@@ -3901,11 +3869,6 @@
   <string name="protection_panel_etp_toggle_enabled_description_2">Oĩramo naiporãmbáiva ko tendápe, eñeha’ãntema eipe’a.</string>
   <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is disabled. -->
   <string name="protection_panel_etp_toggle_disabled_description_2">Oje’e ndéve emyandy haguã jehapykueho rehegua.</string>
-  <!--
-    Text for displaying the total number of trackers blocked in the protection panel.
-    %d is a placeholder for the number of trackers blocked.
-  -->
-  <string name="protection_panel_num_trackers_blocked">Tapykuehoha jokopyre: %d</string>
   <!-- Text for when tracking protection is disabled and no trackers are blocked. -->
   <string name="protection_panel_etp_disabled_no_trackers_blocked">Jehapykuehoita ndojejokói</string>
   <!-- Link text to navigate to privacy and security settings from the protection panel. -->
@@ -4537,6 +4500,8 @@
   <string name="lens_camera_loading_status">Aheka marandu hesegua</string>
   <!-- Button shown under an image picked from the gallery or taken with the camera while it is being sent to Google Lens. Tapping it stops the search and returns to the camera. -->
   <string name="lens_camera_loading_cancel_button">Eheja</string>
+  <!-- Snackbar message shown when an image picked from the gallery or taken with the camera could not be opened or read, so it was never sent to Google Lens. Shown after returning to the camera. -->
+  <string name="lens_camera_image_load_failed_v2">Ndaikatúi henyhẽvo ta’ãnga.</string>
   <!-- Snackbar message shown when an image picked from the gallery could not be opened or read, so it was never sent to Google Lens. Shown after returning to the camera. -->
   <string name="lens_camera_image_load_failed">Noñemyanyhẽi ko ta’ãnga. Eha’ã ambuépe.</string>
   <!-- Snackbar message shown when an image picked from the gallery or taken with the camera could not be searched because of a network problem or an error from Google Lens. Shown after returning to the camera, next to the lens_camera_upload_failed_retry_button action. -->
@@ -4603,12 +4568,6 @@
     Content description for accessibility (used by screen readers): Description for the button that triggers the start of a signature workflow on the PDF displayed on the screen.
   -->
   <string name="pdf_tools_sign_content_description_2">Embojuaju teraguapy</string>
-  <!--
-    PDF viewer toolbar and buttons
-
-    Content description for accessibility (used by screen readers): Description for the button that triggers the start of a signature workflow on the PDF displayed on the screen.
-  -->
-  <string name="pdf_tools_sign_content_description">Emboguejy PDF</string>
   <!-- Content description for accessibility (used by screen readers): Description of the button that downloads the PDF displayed on the screen to the user's device. -->
   <string name="pdf_tools_download_content_description">Emboguejy PDF</string>
   <!-- Content description for accessibility (used by screen readers): Description for the button that opens the printing dialogue window for the PDF displayed on the screen. -->
@@ -4629,6 +4588,14 @@
   <string name="pdf_tools_signature_clear_button">Mopotĩ</string>
   <!-- The text for the button that adds the signature the user has typed to the PDF. -->
   <string name="pdf_tools_signature_add_button">Mbojuaju</string>
+  <!-- Content description for accessibility (used by screen readers): Description for the loading indicator when a signature is in the process of being added to a PDF. -->
+  <string name="pdf_tools_signature_adding_content_description">Embojuaju teraguapy</string>
+  <!--
+    Listen to page
+
+    Content description for the reader view panel: a group of buttons floating over the content, which allow customizing the reader view or activating the Listen to Page feature
+  -->
+  <string name="reader_mode_panel_content_description_2">Moñe’ẽrã reko poravorã</string>
   <!--
     Listen to page
 
@@ -4639,4 +4606,6 @@
   <string name="reader_mode_panel_listen_content_description">Emoñe’ẽ ayvúpe</string>
   <!-- Content description for media player displayed in Reader view when the Listen to Page (Read Aloud) feature is selected -->
   <string name="reader_mode_panel_media_player_content_description">Mba’e ñambopuha</string>
+  <!-- Content description for the reader view button Reader view facilitates readability and has a Listen to Page feature. Button icon is a document with headphones, and is displayed next to the page URL when the feature is available. -->
+  <string name="browser_menu_read_or_listen">Moñe’ẽrã jehecha, moñe’ẽ térã kuatiarogue ñehendu</string>
 </resources>

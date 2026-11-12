@@ -52,6 +52,30 @@ These source-contract updates do not qualify a new native campaign: all native
 readiness flags remain unverified, and prior campaign evidence retains its
 original revision.
 
+## Firefox 160.0.1 source compatibility
+
+The Firefox 160.0.1 Runtime sync at `25ea25835a61d84e05fec9a49e8ad43d7fc1c9a4`
+updates **only eight** of the 62 source-material SHA-256 entries used by the
+private/hosted QA3 plans. All 62 inputs were independently read from this
+candidate's exact Git revision and hashed byte-for-byte; the other 54 still
+match their existing pins. The changed files are:
+
+- The three selected manifests (browser-performance, xpcshell, tabbrowser/tabs)
+- `python/mozbuild/mozbuild/action/test_archive.py`
+- `testing/mochitest/runtests.py` and `testing/mochitest/mochitest_options.py`
+- `testing/xpcshell/runxpcshelltests.py`
+- `xpcom/tests/unit/test_iniParser.js`
+
+The four fixed selected test paths remain declared in their manifests.
+Selected test identities, minimum assertion counts (1, 1, 3, 100),
+required-no-skip checks, canaries, native execution contracts, and
+`publicationAuthorized=false` are **unchanged**. QA3 must still execute
+its public wrapper/AST behavior and negative-contract tests successfully
+against these new hashes; a hash match by itself is not evidence of
+functional compatibility. Prior evidence remains bound to its earlier
+immutable revision. Native Firefox 160.0.1 QA and signed-product
+qualification are **UNVERIFIED** until executed on the new build.
+
 ## Original campaign resource limits
 
 The producer remains on a public standard GitHub-hosted Ubuntu runner, whose
