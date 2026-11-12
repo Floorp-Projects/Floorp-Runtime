@@ -483,6 +483,17 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+      - name: Hide the Dock for the native GUI geometry
+        if: inputs.platform == 'Darwin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          defaults write com.apple.dock autohide -bool true
+          defaults write com.apple.dock autohide-delay -float 0
+          killall Dock
+          sleep 5
+          osascript -l JavaScript -e "ObjC.import('AppKit'); const s = \$.NSScreen.mainScreen; const f = s.frame; const v = s.visibleFrame; JSON.stringify({frame: [f.size.width, f.size.height], visibleFrame: [v.origin.x, v.origin.y, v.size.width, v.size.height]})" || true
+
       - name: Verify macOS universal final runtime natively
         if: inputs.platform == 'Darwin'
         shell: bash
