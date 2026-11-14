@@ -1,0 +1,23 @@
+name: Validate macOS helper requirements
+
+on:
+  pull_request:
+    paths:
+      - .github/patches/upstream/build-moz.configure-update-programs.configure.patch
+      - .github/tests/test_macos_helper_requirements.py
+      - .github/workflows/validate-macos-helper-requirements.yml
+      - build/moz.configure/update-programs.configure
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper-requirements:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s .github/tests -p test_macos_helper_requirements.py -v
