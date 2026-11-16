@@ -43,7 +43,7 @@ def commit(root):
 
 def fixture(root):
     subprocess.run(["git", "init", "-q", str(root)], check=True)
-    for i in range(27):
+    for i in range(28):
         save(root, f"c{i}.txt", "0\n")
     save(root, "build/application.ini.in", OLD_URL + "\n")
     save(root, ".gitignore", "ignored*\n")
@@ -89,7 +89,7 @@ def fixture(root):
     common = []
     debug = []
     for directory, count, before, after, entries in (
-        ("upstream", 27, "0", "1", common),
+        ("upstream", 28, "0", "1", common),
         ("debug", 3, "1", "2", debug),
     ):
         for i in range(count):
@@ -256,7 +256,7 @@ class SourcePreparationTests(unittest.TestCase):
         self.assertEqual(record["ingestion"]["relation"], "verified-ancestor")
         self.assertNotEqual(record["common"]["B"], record["finalTree"])
         self.assertEqual(capture_tree(self.source), final)
-        self.assertEqual(len(record["operations"]), 32)
+        self.assertEqual(len(record["operations"]), 33)
         self.assertEqual((self.source / "c0.txt").read_text(), "2\n")
         self.assertEqual((self.source / "c26.txt").read_text(), "1\n")
         self.assertEqual(

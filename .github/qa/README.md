@@ -31,8 +31,13 @@ PGO builds and final product artifacts are not qualified by that run.
 
 ## Common source and variant contracts
 
-`source-policy.json` pins all 27 common patches and the three Debug diagnostic
-patches in UTF-8 path order. Policy preflight checks complete membership, order,
+`source-policy.json` pins all 28 common patches and the three Debug diagnostic
+patches in UTF-8 path order. The current 28-patch source cohort includes the
+macOS helper trust requirement patch and is distinct from the earlier 27-patch
+cohort. Previously recorded native evidence remains bound to its original
+immutable revision and does not qualify this new cohort; native product
+qualification remains UNVERIFIED and publication is not authorized.
+Policy preflight checks complete membership, order,
 bytes and expected Runtime HEAD. It records the upstream canonical Git
 repository and full revision separately from Runtime R. It does not prove that
 patches were applied or that the resulting source was compiled.
