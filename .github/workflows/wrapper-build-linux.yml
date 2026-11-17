@@ -27,6 +27,11 @@ permissions:
           - aarch64
         default: x86_64
         required: true
+      native_validation_only:
+        description: 'Nonpublishing native-artifact proof (approved candidate branch only)'
+        type: boolean
+        default: false
+        required: false
       requested_MOZ_BUILD_DATE:
         description: 'Optional 14-digit build ID assertion'
         type: string
@@ -53,6 +58,12 @@ permissions:
         type: string
         required: true
     outputs:
+      native-debug-artifact-id:
+        description: 'Versioned same-build native Debug support artifact ID (Linux x64 only)'
+        value: ${{ jobs.build-normal.outputs.native-debug-artifact-id }}
+      native-debug-artifact-digest:
+        description: 'Immutable native Debug artifact ZIP SHA-256'
+        value: ${{ jobs.build-normal.outputs.native-debug-artifact-digest }}
       artifact-name:
         description: 'Primary final build artifact name'
         value: >-
@@ -96,7 +107,7 @@ jobs:
     name: >-
       Linux ${{ inputs.arch || 'x86_64' }}
       ${{ inputs.debug && ' Debug' || '' }}
-    if: ${{ !inputs.pgo || inputs.arch == 'aarch64' }}
+    if: ${{ inputs.native_validation_only || !inputs.pgo || inputs.arch == 'aarch64' }}
     needs: resolve-build-context
     uses: ./.github/workflows/common-build.yml
     with:
@@ -104,6 +115,9 @@ jobs:
       arch: ${{ inputs.arch || 'x86_64' }}
       debug: ${{ inputs.debug }}
       pgo: false
+      qa3-debug-tests: ${{ inputs.native_validation_only && inputs.debug && !inputs.pgo && (inputs.arch == 'x86_64' || inputs.arch == '') }}
+      native-debug-validation: ${{ inputs.native_validation_only || false }}
+      native-debug-artifacts: ${{ inputs.native_validation_only && inputs.debug && !inputs.pgo && (inputs.arch == 'x86_64' || inputs.arch == '') }}
       MOZ_BUILD_DATE: >-
         ${{ needs.resolve-build-context.outputs.expected-build-id }}
 
@@ -111,7 +125,7 @@ jobs:
     name: >-
       Linux ${{ inputs.arch || 'x86_64' }} PGO Stage 1
       ${{ inputs.debug && ' Debug' || '' }}
-    if: ${{ inputs.pgo && inputs.arch != 'aarch64' }}
+    if: ${{ !inputs.native_validation_only && inputs.pgo && inputs.arch != 'aarch64' }}
     needs: resolve-build-context
     uses: ./.github/workflows/common-build.yml
     with:
@@ -125,7 +139,7 @@ jobs:
 
   collect-profiles:
     name: Linux ${{ inputs.arch || 'x86_64' }} PGO Stage 2
-    if: ${{ inputs.pgo && inputs.arch != 'aarch64' }}
+    if: ${{ !inputs.native_validation_only && inputs.pgo && inputs.arch != 'aarch64' }}
     needs: [resolve-build-context, build-pgo-stage1]
     uses: ./.github/workflows/generate-pgo-profile-linux.yml
     secrets: inherit
@@ -144,7 +158,7 @@ jobs:
     name: >-
       Linux ${{ inputs.arch || 'x86_64' }} PGO Stage 3
       ${{ inputs.debug && ' Debug' || '' }}
-    if: ${{ inputs.pgo && inputs.arch != 'aarch64' }}
+    if: ${{ !inputs.native_validation_only && inputs.pgo && inputs.arch != 'aarch64' }}
     needs: [resolve-build-context, collect-profiles]
     uses: ./.github/workflows/common-build.yml
     with:
