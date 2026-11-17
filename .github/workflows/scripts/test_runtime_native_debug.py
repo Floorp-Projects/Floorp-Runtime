@@ -3,6 +3,8 @@ import copy
 import hashlib
 import os
 import re
+import tempfile
+import shutil
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -52,6 +54,12 @@ class NativeDebugContracts(unittest.TestCase):
             with self.subTest(key=key, bad=bad), mock.patch.dict(os.environ, altered, clear=True), self.assertRaises(ValueError):
                 hosted.context_from_environment("20261117180000")
 
+        old = dict(env)
+        old["GITHUB_REF"] = "refs/heads/codex/debug-native-artifacts"
+        old["GITHUB_WORKFLOW_REF"] = old["GITHUB_WORKFLOW_REF"].replace(native.VALIDATION_BRANCH, "codex/debug-native-artifacts")
+        with mock.patch.dict(os.environ, old, clear=True), self.assertRaises(ValueError):
+            hosted.context_from_environment("20261117180000")
+
     def test_foreign_contexts_rejected(self):
         for key, bad in {"GITHUB_REPOSITORY": "fork/runtime", "GITHUB_REF": "refs/heads/main",
                          "GITHUB_EVENT_NAME": "pull_request", "GITHUB_WORKFLOW_SHA": "b" * 40,
@@ -75,15 +83,63 @@ class NativeDebugContracts(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=True), self.assertRaises(ValueError):
             hosted.context_from_environment("20261117180000")
 
-    def test_patch_is_exact_pinned_bytes(self):
-        self.assertEqual(hashlib.sha256((ROOT / native.PATCH).read_bytes()).hexdigest(), native.PRODUCT_PROFILE["patches"][0]["sha256"])
+    def test_exact_excluded_debug_patches_and_no_extra_allowance(self):
+        for name, digest in native.EXCLUDED_DEBUG_PATCHES.items():
+            self.assertEqual(hashlib.sha256((ROOT / ".github/patches/debug" / name).read_bytes()).hexdigest(), digest)
+        self.assertFalse((ROOT / ".github/patches/native-debug/noraneko-chrome-csp-allowlist.patch").exists())
+        self.assertEqual(native.PRODUCT_PROFILE["additionalPatches"], [])
         self.assertFalse(native.PRODUCT_PROFILE["productTestsExecuted"])
+
+    def test_security_source_bytes_and_unknown_patch_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            shutil.copytree(ROOT / ".github/patches/debug", source / ".github/patches/debug")
+            for relative in native.ASSERTION_SOURCE_FILES:
+                path = source / relative; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"original assertion and enforcement bytes")
+            with mock.patch.object(hosted, "raw_git", return_value=b"original assertion and enforcement bytes"):
+                self.assertEqual(native.verify_product_profile(source), native.PRODUCT_PROFILE)
+                changed = source / native.ASSERTION_SOURCE_FILES[0]
+                changed.write_bytes(b"return NS_OK; assertion bypass")
+                with self.assertRaises(ValueError): native.verify_product_profile(source)
+                changed.write_bytes(b"original assertion and enforcement bytes")
+                (source / ".github/patches/debug/unknown.patch").write_text("unknown patch")
+                with self.assertRaises(ValueError): native.verify_product_profile(source)
+
+    def test_strict_setup_is_validation_only_and_mode_bounded(self):
+        env = self.env(); env.update(RUNTIME_NATIVE_DEBUG_VALIDATION="true", MOZ_BUILD_DATE="20261117180000")
+        env["GITHUB_REF"] = "refs/heads/" + native.VALIDATION_BRANCH
+        env["GITHUB_WORKFLOW_REF"] = env["GITHUB_WORKFLOW_REF"].replace("nora-0.2.0", native.VALIDATION_BRANCH)
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(hosted, "raw_git", return_value=("a" * 40).encode()), mock.patch.object(native, "verify_product_profile") as verify:
+            native.strict_setup(ROOT, "linux", "x86_64", "true", "false", "")
+            verify.assert_called_once_with(ROOT)
+            for mode in (("linux", "x86_64", "false", "false", ""), ("linux", "x86_64", "true", "true", "use"), ("windows", "x86_64", "true", "false", ""), ("mac", "x86_64", "true", "false", "")):
+                with self.assertRaises(ValueError): native.strict_setup(ROOT, *mode)
+        env["RUNTIME_NATIVE_DEBUG_VALIDATION"] = "false"
+        with mock.patch.dict(os.environ, env, clear=True), self.assertRaises(ValueError):
+            native.strict_setup(ROOT, "linux", "x86_64", "true", "false", "")
+
+    def test_precompile_config_must_keep_debug_tests_and_no_pgo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            config = "ac_add_options --target=x86_64-pc-linux-gnu\nac_add_options --enable-debug\nac_add_options --enable-tests\n"
+            with mock.patch.object(native, "strict_setup"):
+                (source / "mozconfig").write_text(config); native.prepare(source)
+                for changed in (config.replace("--enable-debug", "--disable-debug"), config.replace("--enable-tests", "--disable-tests"), config + "ac_add_options --enable-profile-use=cross\n"):
+                    (source / "mozconfig").write_text(changed)
+                    with self.assertRaises(ValueError): native.prepare(source)
+
+    def test_recipe_verification_binds_assertion_source_hashes(self):
+        value = {"context": {"profile": native.VALIDATION_PROFILE}, "assertionSourceSha256": {p: "a" * 64 for p in native.ASSERTION_SOURCE_FILES}}
+        with mock.patch.object(native, "assertion_source_identity", return_value={p: "b" * 64 for p in native.ASSERTION_SOURCE_FILES}), self.assertRaisesRegex(ValueError, "assertion source differs"):
+            hosted.verify_recipe_metadata(ROOT, value)
 
     def test_producer_requires_exact_product_profile(self):
         from test_qa3_hosted import producer, HOST
         for profile in (native.PROFILE, native.VALIDATION_PROFILE):
             value = producer(); value["context"]["profile"] = profile
             value["productProfile"] = copy.deepcopy(native.PRODUCT_PROFILE)
+            value["assertionSourceSha256"] = {p: "b" * 64 for p in native.ASSERTION_SOURCE_FILES}
             with mock.patch.object(hosted, "host_identity", return_value=HOST), mock.patch.object(hosted, "worker_boot_identity", return_value="d" * 64):
                 self.assertEqual(hosted.validate_producer(value, value["context"])["consumerVerdict"], "UNVERIFIED")
                 for bad in (None, {}, {**native.PRODUCT_PROFILE, "productTestsExecuted": True}):
@@ -96,7 +152,7 @@ class NativeDebugContracts(unittest.TestCase):
         wrapper = yaml.safe_load((ROOT / ".github/workflows/wrapper-build-linux.yml").read_text())
         expression = wrapper["jobs"]["build-normal"]["with"]["native-debug-artifacts"][3:-2].strip()
         for branch, debug, pgo, arch, validation, expected in (
-            ("nora-0.2.0", True, False, "x86_64", False, True),
+            ("nora-0.2.0", True, False, "x86_64", False, False),
             ("other-branch", True, False, "x86_64", False, False),
             ("other-branch", False, False, "x86_64", False, False),
             ("nora-0.2.0", False, False, "x86_64", False, False),
@@ -145,10 +201,10 @@ class NativeDebugContracts(unittest.TestCase):
         steps = {step.get("name"): step for step in common["jobs"]["build"]["steps"]}
         upload = steps["Upload same-run Debug support"]["with"]
         self.assertIn("native-debug-validation", upload["name"])
-        self.assertIn("-linux-x86_64-v1-", upload["name"])
+        self.assertIn("-linux-x86_64-v2-", upload["name"])
         self.assertIn("90", upload["retention-days"])
         self.assertNotIn("overwrite", upload)
-        self.assertEqual(steps["Apply bound native Debug product profile"]["if"], "inputs.qa3-debug-tests && inputs.native-debug-artifacts")
+        self.assertEqual(steps["Verify strict native Debug source policy"]["if"], "inputs.qa3-debug-tests && inputs.native-debug-artifacts")
 
 
 if __name__ == "__main__": unittest.main()

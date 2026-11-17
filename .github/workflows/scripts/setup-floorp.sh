@@ -41,7 +41,11 @@ fi
 cd "$GITHUB_WORKSPACE"
 
 # Apply debug patches if in debug mode
-if [[ "$DEBUG" == "true" ]]; then
+if [[ "$DEBUG" == "true" && "${RUNTIME_NATIVE_DEBUG_ARTIFACTS:-false}" == "true" ]]; then
+  python3.12 .github/workflows/scripts/runtime_native_debug.py strict-setup \
+    --source "$GITHUB_WORKSPACE" --platform "$PLATFORM" --arch "$ARCH" \
+    --debug "$DEBUG" --pgo "$PGO" --mode "$PGO_MODE"
+elif [[ "$DEBUG" == "true" ]]; then
   PATCH_DIR=".github/patches/debug"
   if [ -d "$PATCH_DIR" ]; then
     echo "Applying debug patches..."
