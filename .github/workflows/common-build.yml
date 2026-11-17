@@ -319,7 +319,7 @@ jobs:
             ${{ format('~/output/floorp-{0}-{1}-moz-artifact-bundle',
             inputs.platform, inputs.arch) }}
           if-no-files-found: error
-          retention-days: ${{ inputs.qa3-debug-tests && !inputs.native-debug-artifacts && 1 || 0 }}
+          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}
           overwrite: true
 
       - name: Upload PGO profile generation package (Windows)
@@ -371,7 +371,7 @@ jobs:
             ${{ format('~/output/floorp-{0}-{1}-moz-artifact-bundle/dist-host',
             inputs.platform, inputs.arch) }}
           if-no-files-found: error
-          retention-days: ${{ inputs.qa3-debug-tests && !inputs.native-debug-artifacts && 1 || 0 }}
+          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}
           overwrite: true
 
       - name: Upload application.ini for MAR
@@ -382,7 +382,7 @@ jobs:
             ${{ format('~/output/floorp-{0}-{1}-moz-artifact-bundle/floorp-application.ini',
             inputs.platform, inputs.arch) }}
           if-no-files-found: error
-          retention-days: ${{ inputs.qa3-debug-tests && !inputs.native-debug-artifacts && 1 || 0 }}
+          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}
           overwrite: true
 
   qa3-consumer:

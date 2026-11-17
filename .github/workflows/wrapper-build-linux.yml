@@ -115,9 +115,9 @@ jobs:
       arch: ${{ inputs.arch || 'x86_64' }}
       debug: ${{ inputs.debug }}
       pgo: false
-      qa3-debug-tests: ${{ inputs.debug && !inputs.pgo && (inputs.arch == 'x86_64' || inputs.arch == '') }}
+      qa3-debug-tests: ${{ inputs.debug && !inputs.pgo && (inputs.arch == 'x86_64' || inputs.arch == '') && (github.ref == 'refs/heads/nora-0.2.0' || inputs.native_validation_only) }}
       native-debug-validation: ${{ inputs.native_validation_only || false }}
-      native-debug-artifacts: ${{ inputs.debug && !inputs.pgo && (inputs.arch == 'x86_64' || inputs.arch == '') }}
+      native-debug-artifacts: ${{ inputs.debug && !inputs.pgo && (inputs.arch == 'x86_64' || inputs.arch == '') && (github.ref == 'refs/heads/nora-0.2.0' || inputs.native_validation_only) }}
       MOZ_BUILD_DATE: >-
         ${{ needs.resolve-build-context.outputs.expected-build-id }}
 

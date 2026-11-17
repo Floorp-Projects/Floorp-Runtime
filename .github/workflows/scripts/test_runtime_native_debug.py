@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import os
+import re
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -89,6 +90,42 @@ class NativeDebugContracts(unittest.TestCase):
                     value["productProfile"] = bad
                     with self.subTest(profile=profile, bad=bad), self.assertRaises(ValueError):
                         hosted.validate_producer(value, value["context"])
+
+    def test_wrapper_scope_preserves_other_branch_debug_and_release(self):
+        import yaml
+        wrapper = yaml.safe_load((ROOT / ".github/workflows/wrapper-build-linux.yml").read_text())
+        expression = wrapper["jobs"]["build-normal"]["with"]["native-debug-artifacts"][3:-2].strip()
+        for branch, debug, pgo, arch, validation, expected in (
+            ("nora-0.2.0", True, False, "x86_64", False, True),
+            ("other-branch", True, False, "x86_64", False, False),
+            ("other-branch", False, False, "x86_64", False, False),
+            ("nora-0.2.0", False, False, "x86_64", False, False),
+            ("nora-0.2.0", True, True, "x86_64", False, False),
+            ("nora-0.2.0", True, False, "aarch64", False, False),
+            (native.VALIDATION_BRANCH, True, False, "x86_64", True, True),
+            (native.VALIDATION_BRANCH, True, True, "x86_64", True, False),
+        ):
+            text = expression
+            values = {"inputs.debug": debug, "inputs.pgo": pgo, "inputs.arch": arch,
+                      "inputs.native_validation_only": validation, "github.ref": "refs/heads/" + branch}
+            for key, value in values.items(): text = text.replace(key, repr(value))
+            text = re.sub(r"!(?!=)", "not ", text).replace("&&", " and ").replace("||", " or ")
+            with self.subTest(branch=branch, debug=debug, pgo=pgo, arch=arch, validation=validation):
+                self.assertEqual(eval(text, {"__builtins__": {}}, {}), expected)
+
+    def test_validation_retention_matches_proof_and_legacy_default(self):
+        import yaml
+        common = yaml.safe_load((ROOT / ".github/workflows/common-build.yml").read_text())
+        steps = {step.get("name"): step for step in common["jobs"]["build"]["steps"]}
+        for name in ("Upload build artifact", "Upload dist/host for MAR", "Upload application.ini for MAR"):
+            expression = steps[name]["with"]["retention-days"][3:-2].strip()
+            for qa3, native_artifact, validation, expected in ((False, False, False, 0), (True, False, False, 1), (True, True, False, 0), (True, True, True, 1)):
+                text = expression
+                for key, value in {"inputs.qa3-debug-tests": qa3, "inputs.native-debug-artifacts": native_artifact, "inputs.native-debug-validation": validation}.items():
+                    text = text.replace(key, repr(value))
+                text = re.sub(r"!(?!=)", "not ", text).replace("&&", " and ").replace("||", " or ")
+                with self.subTest(name=name, qa3=qa3, native=native_artifact, validation=validation):
+                    self.assertEqual(eval(text, {"__builtins__": {}}, {}), expected)
 
     def test_normal_workflow_scope_and_retention(self):
         import yaml
