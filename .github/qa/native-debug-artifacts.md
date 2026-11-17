@@ -1,7 +1,7 @@
 # Native Debug artifact contract v1
 
 Only native Linux x64 canonical Debug (debug=true, pgo=false) is enabled.
-Windows/macOS and Linux arm64 retain existing behavior. Release and PGO builds,
+Windows/macOS, Linux arm64 and ordinary Debug dispatches on other branches retain existing behavior. Release and PGO builds,
 FTPS aliases, publication jobs, credentials and workflow permissions are unchanged.
 
 ## Producer
@@ -76,7 +76,7 @@ excluded. No schedule, daily workflow or arbitrary branch can use this route.
 
 Validation profile: runtime-native-debug-validation-v1.
 Validation artifact: native-debug-validation-linux-x86_64-v1-<SHA>-<BuildID>-<run>-<attempt>.
-Retention: one day. Normal consumers must reject this profile and namespace.
+Retention: one day, including generic primary/dist-host/application.ini artifacts. Normal consumers must reject this profile and namespace.
 Deep receipt validation recognizes it for proof diagnostics, not normal intake.
 No workflow dispatch is performed by adding this candidate.
 
@@ -85,7 +85,7 @@ No workflow dispatch is performed by adding this candidate.
     PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s .github/workflows/scripts -p test_runtime_native_debug.py -v
 
 Also run test_qa3_hosted and test_qa3_build_profile from that scripts directory.
-On Windows WSL Ubuntu, the combined suites pass 131 tests. The exact CSP patch
+On Windows WSL Ubuntu, the combined suites pass 133 tests. The exact CSP patch
 passes forward/reverse apply-check against the b72ff4d base in an isolated source
 snapshot. Host checks are not a substitute for a successful real build and native
 consumer run. Existing tests verify unchanged Release/PGO setup behavior and hash
