@@ -892,7 +892,7 @@ class HostedContracts(unittest.TestCase):
     def test_existing_build_steps_and_default_route_are_preserved(self):
         current = (SOURCE / ".github/workflows/common-build.yml").read_text()
         current = current.replace(
-            "          retention-days: ${{ inputs.qa3-debug-tests && 1 || 0 }}\n", ""
+            "          retention-days: ${{ inputs.qa3-debug-tests && !inputs.native-debug-artifacts && 1 || 0 }}\n", ""
         )
 
         def steps(text):
