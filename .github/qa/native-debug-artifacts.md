@@ -1,92 +1,104 @@
-# Native Debug artifact contract v1
+# Native Debug artifact contract v2: strict validation candidate
 
-Only native Linux x64 canonical Debug (debug=true, pgo=false) is enabled.
-Windows/macOS, Linux arm64 and ordinary Debug dispatches on other branches retain existing behavior. Release and PGO builds,
-FTPS aliases, publication jobs, credentials and workflow permissions are unchanged.
+This revision is VALIDATION-ONLY pending independent security and functionality
+review and a real product proof. It does not activate normal Debug artifacts yet.
+Ordinary Debug (including nora-0.2.0), Release, PGO, Windows/macOS, Linux arm64,
+existing QA3 proof, publication/FTPS routing and credentials retain prior behavior.
+Eventual normal Linux x64 Debug integration requires a separate activation review.
 
-## Producer
+## Why v1 cannot qualify
 
-The normal Linux wrapper selects the existing common-build QA3 preparation and
-same-OBJDIR test packaging. There is one normal compile, followed by the existing
-package-tests-common/mochitest/xpcshell targets, not a second product build.
-Original source delta, configure state and binary identities are compared before
-and after packaging. The normal route does not launch the old four-case cold proof.
+The superseded candidate added a Noraneko internal-page CSP validator allowlist.
+It also inherited three development Debug patches that bypassed assertions or
+security enforcement. Neither the prior validation run nor an old v1 artifact
+qualifies as strict product evidence. Removing only the added allowlist would not
+have restored the pre-patch security source.
 
-Normal context profile: runtime-native-debug-artifact-v1. Allowed source is
-Floorp-Projects/Floorp-Runtime, refs/heads/nora-0.2.0, matching controller/source SHA,
-manual daily-build or wrapper-build-linux workflow, or scheduled daily-build.
-Receipt context keeps schema qa3-hosted-context-v1 and its exact key shape.
+The new candidate deletes the added allowlist file and application machinery.
+Within the explicit native validation route only, setup-floorp.sh excludes exactly:
 
-Artifact name:
+- dom-security-nsContentSecurityManager.patch (privileged-load early success)
+- dom-security-nsContentSecurityUtils.patch (CSP visitor assertion bypasses)
+- dom-security-nsCSPService.patch (HTTP(S) CSP enforcement early success)
 
-    native-debug-linux-x86_64-v1-<sourceSHA>-<BuildID>-<run>-<attempt>
+The original development patch files remain unchanged for unrelated Debug calls.
+Their exact hashes are bound in runtime_native_debug.EXCLUDED_DEBUG_PATCHES. A
+missing, changed, symlinked or unknown Debug patch fails the strict policy. No new
+allowance, preference shortcut, assertion suppression or expectation override is
+introduced.
 
-Retention is 90 days (repository policy may cap it). Artifact ID and ZIP digest
-are exposed as reusable workflow outputs. No overwrite or mutable release alias
-is used. Expired/missing artifacts must fail closed, never silently rebuild or
-substitute a different run.
+Before configure and immediately before compile, strict validation checks that:
 
-The artifact ZIP contains exactly runtime.tar.xz, test-support.tar.gz and
-producer.json. Producer receipt schema remains qa3-hosted-debug-producer-v1;
-status PACKAGED_NOT_CONSUMED, consumerVerdict UNVERIFIED and
-publicationAuthorized=false are intentional. These fields never authorize or
-certify product publication. Full common/mochitest/xpcshell archive contents are
-merged into support, along with same-build helpers/modules and pinned offline
-Python material. The embedded QA3 plan covers four finite tests only. Its canary
-transforms affect browser-performance and xpcom unit manifests and are recorded;
-they do not establish Floorp P0/P1/P2 results. A consumer must independently bind
-and resolve its approved selection, product UI resources and manifest inventory.
+- the route is Linux x64, Debug, non-PGO, explicit validation-only;
+- all three dom/security/nsContentSecurityManager.cpp,
+  nsContentSecurityUtils.cpp and nsCSPService.cpp working files are byte-identical
+  to their corresponding immutable Runtime recipe Git blobs;
+- the recorded mozconfig enables Debug and native tests and contains no PGO mode.
 
-## Explicit product compatibility component
+Packaging rechecks those source bytes, plus the existing before/after source delta,
+configure state and compiled binary identities. This proves equality to the reviewed
+Runtime recipe for these three files; it is not a claim of whole-browser security
+or native product functionality. Changes anywhere outside that scope need their own
+review. Existing setup/profile regressions cover non-test routes.
 
-The separately identified floorp-native-debug-product-profile-v1 carries exactly
-the previously reviewed Floorp ea85c9274d6959e87d3bf3bfa9bc0d0c13971ef5 Noraneko
-Debug CSP internal-page allowlist patch. Its SHA256 is
-1d5c76d89966cefc4e51cd077e20c1a5cd8ca6094bc9ae8ae9635c13b4adba62.
-No new URI is added, no assertion is disabled, and the patch is not applied to
-Release, PGO, other platforms, or the original QA3 proof route. It is applied before
-the normal Debug compile with strict apply-check, then reverse-checked before
-recording productProfile. The trusted workflow order and original source/binary
-cohort checks bind that receipt. Real Floorp overlay execution remains required;
-a successful patch application is not product proof.
+## Producer and receipt
 
-## Cross-repository handoff
+The existing common-build compile is reused once, followed by same-OBJDIR
+package-tests-common/mochitest/xpcshell. No second product compile is added.
+The ZIP still contains runtime.tar.xz, test-support.tar.gz and producer.json.
+Producer schema remains qa3-hosted-debug-producer-v1, status PACKAGED_NOT_CONSUMED,
+consumerVerdict UNVERIFIED and publicationAuthorized=false.
 
-Use a trusted first-party download job with read-only Actions access. Pin repository,
-source SHA, run ID, attempt, artifact ID, artifact name and ZIP SHA256. Independently
-check API run branch/event/workflow/conclusion and artifact ownership/expiry/digest,
-then safely unpack the exact wrapper and verify inner hashes, producer context,
-recipe metadata, productProfile, build identities and support inventory. Existing
-qa3_hosted.validate_producer/verify_recipe_metadata/verify_support implement deep
-receipt checks; old acquire is proof-specific and must not be repurposed by
-bypassing its guards. The consumer must explicitly require the normal profile.
+Validation context profile is runtime-native-debug-validation-v2. The reserved
+normal profile runtime-native-debug-artifact-v2 is not enabled by the wrapper.
+The productProfile schema is floorp-native-debug-strict-profile-v2, with an exact
+excluded-patch map, no additional patches, and explicit validation-only activation.
+assertionSourceSha256 records the three original security source hashes.
+verify_recipe_metadata compares those hashes to the trusted recipe Git blobs;
+validate_producer checks the strict marker and complete hash inventory. Consumers
+must reject old profiles, old namespaces and source hash mismatches. A marker alone
+is not authentication and never substitutes for independently bound artifact bytes.
 
-GitHub Actions artifacts require authenticated download; this change adds no
-cross-repository credential. If the first-party job token cannot read the producer
-artifact, report the access blocker. Do not expose credentials to PR-controlled
-code or public forks, use FTPS aliases as fallback, or weaken provenance checks.
+Existing support merges full common/mochitest/xpcshell archives and includes
+same-build helpers/modules and pinned offline Python inputs. Embedded QA3 plan and
+canaries cover only four finite tests, not Floorp P0/P1/P2 qualification. Product UI
+assembly and exact native cohort execution remain separate unverified work.
 
-## Nonpublishing premerge validation
+## Nonpublishing proof route (not dispatched for this revision)
 
-The existing manual Linux wrapper has no release/FTP publication jobs. One
-explicit native_validation_only=true dispatch is supported only on the exact
-codex/debug-native-artifacts candidate branch, with debug=true, pgo=false,
-arch=x86_64. Invalid target/mode combinations fail before build and PGO jobs are
-excluded. No schedule, daily workflow or arbitrary branch can use this route.
+Manual wrapper-build-linux.yml on exact candidate branch codex/debug-native-artifacts-strict:
 
-Validation profile: runtime-native-debug-validation-v1.
-Validation artifact: native-debug-validation-linux-x86_64-v1-<SHA>-<BuildID>-<run>-<attempt>.
-Retention: one day, including generic primary/dist-host/application.ini artifacts. Normal consumers must reject this profile and namespace.
-Deep receipt validation recognizes it for proof diagnostics, not normal intake.
-No workflow dispatch is performed by adding this candidate.
+    debug=true
+    pgo=false
+    arch=x86_64
+    native_validation_only=true
 
-## Host checks
+Only this branch/manual wrapper route selects strict source policy. Invalid target
+or mode fails before build; PGO jobs are excluded. The wrapper has no publication
+jobs. No daily or scheduled strict validation is enabled. Namespace:
 
-    PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s .github/workflows/scripts -p test_runtime_native_debug.py -v
+    native-debug-validation-linux-x86_64-v2-<SHA>-<BuildID>-<run>-<attempt>
 
-Also run test_qa3_hosted and test_qa3_build_profile from that scripts directory.
-On Windows WSL Ubuntu, the combined suites pass 133 tests. The exact CSP patch
-passes forward/reverse apply-check against the b72ff4d base in an isolated source
-snapshot. Host checks are not a substitute for a successful real build and native
-consumer run. Existing tests verify unchanged Release/PGO setup behavior and hash
-all original build steps after normalizing only opt-in artifact-retention policy.
+All validation artifacts retain for one day. Normal consumers must reject this
+validation namespace/profile. No new workflow dispatch, push or merge occurred in
+preparing the strict follow-up. The already-running v1 proof is superseded for
+qualification, not silently treated as v2.
+
+## Review and access boundaries
+
+First-party consumers need trusted read-only Actions retrieval, pinned repository,
+source/run/attempt/artifact ID/name/ZIP digest and strict inner receipt/material
+checks. Missing/expired/inaccessible artifacts fail closed, without alternate FTPS
+aliases or credentials in PR-controlled code. Source equality and host fixtures do
+not prove test/STG/production functionality; activation awaits independent review
+of those environments and genuine native results.
+
+Host checks:
+
+    PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest test_runtime_native_debug test_qa3_hosted test_qa3_build_profile -v
+
+Run from .github/workflows/scripts. Current WSL result:137 tests pass, including
+exact excluded-patch hashes, changed/unknown policy rejection, source byte mutation,
+Debug/tests/PGO flag checks, bounded validation routing and preserved original
+Release/PGO build-step regressions. No assertion or native-test expectation is
+relaxed to obtain these results.

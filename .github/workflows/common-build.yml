@@ -220,11 +220,11 @@ jobs:
             SCCACHE_GHA_ENABLED: 'on'
             SCCACHE_MAX_FRAME_LENGTH: '1048576'
 
-      - name: Apply bound native Debug product profile
+      - name: Verify strict native Debug source policy
         if: inputs.qa3-debug-tests && inputs.native-debug-artifacts
         env:
           MOZ_BUILD_DATE: ${{ inputs.MOZ_BUILD_DATE }}
-        run: python3.12 .github/workflows/scripts/runtime_native_debug.py prepare --source "$GITHUB_WORKSPACE"
+        run: python3.12 .github/workflows/scripts/runtime_native_debug.py verify --source "$GITHUB_WORKSPACE"
 
       - name: Check scoped Debug packaging Python before build
         if: inputs.qa3-debug-tests
@@ -274,7 +274,7 @@ jobs:
         id: qa3-support
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.native-debug-artifacts && format('{0}-linux-x86_64-v1-{1}-{2}-{3}-{4}', inputs.native-debug-validation && 'native-debug-validation' || 'native-debug', github.sha, inputs.MOZ_BUILD_DATE, github.run_id, github.run_attempt) || format('qa3-support-{0}-{1}', github.run_id, github.run_attempt) }}
+          name: ${{ inputs.native-debug-artifacts && format('{0}-linux-x86_64-v2-{1}-{2}-{3}-{4}', inputs.native-debug-validation && 'native-debug-validation' || 'native-debug', github.sha, inputs.MOZ_BUILD_DATE, github.run_id, github.run_attempt) || format('qa3-support-{0}-{1}', github.run_id, github.run_attempt) }}
           path: |
             ${{ runner.temp }}/qa3-hosted-producer/runtime.tar.xz
             ${{ runner.temp }}/qa3-hosted-producer/test-support.tar.gz

@@ -146,7 +146,7 @@ def context_from_environment(build_id):
 
 
 def validate_context(value):
-    if value.get("profile") in {"runtime-native-debug-artifact-v1", "runtime-native-debug-validation-v1"}:
+    if value.get("profile") in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
         from runtime_native_debug import validate_context as normal_validate
         return normal_validate(value)
     require(
@@ -412,6 +412,10 @@ def verify_compiled_source(value, pin, runtime):
 
 
 def verify_recipe_metadata(recipe, value):
+    if value.get("context", {}).get("profile") in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
+        from runtime_native_debug import assertion_source_identity
+        require(value.get("assertionSourceSha256") == assertion_source_identity(recipe, working_tree=False),
+                "assertion source differs from trusted Runtime recipe")
     require(
         read_json(recipe / ".github/runtime-upstream.json") == value["runtimeUpstream"]
         and read_json(recipe / ".github/qa/source-policy.json") == value["sourcePolicy"]
@@ -1152,9 +1156,11 @@ def produce(args):
         "publicationAuthorized": False,
         "artifactStorageBudget": artifact_storage_budget(args.primary, output),
     }
-    if context["profile"] in {"runtime-native-debug-artifact-v1", "runtime-native-debug-validation-v1"}:
+    if context["profile"] in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
         from runtime_native_debug import verify_product_profile
         receipt["productProfile"] = verify_product_profile(args.source)
+        from runtime_native_debug import assertion_source_identity
+        receipt["assertionSourceSha256"] = assertion_source_identity(args.source)
     verify_support(support, receipt)
     write_json(output / "producer.json", receipt)
     require(
@@ -1180,9 +1186,12 @@ def validate_producer(value, context):
         and value.get("publicationAuthorized") is False,
         "foreign or incomplete producer",
     )
-    if context["profile"] in {"runtime-native-debug-artifact-v1", "runtime-native-debug-validation-v1"}:
+    if context["profile"] in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
         from runtime_native_debug import PRODUCT_PROFILE
         require(value.get("productProfile") == PRODUCT_PROFILE, "native product profile mismatch")
+        from runtime_native_debug import ASSERTION_SOURCE_FILES
+        require(set(value.get("assertionSourceSha256", {})) == set(ASSERTION_SOURCE_FILES), "missing assertion source identity")
+        for digest in value["assertionSourceSha256"].values(): hash_value(digest)
     hash_value(value["bootSha256"])
     require(
         value["bootSha256"] != worker_boot_identity(), "consumer reused producer boot"
