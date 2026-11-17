@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -2517,8 +2518,11 @@ class HostedBootstrapPrerequisites(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             seed_dir = Path(directory) / ".github/qa"
             seed_dir.mkdir(parents=True)
-            for name in ("hosted-consumer-seed.zip", "hosted-consumer-python.lock.json"):
+            for name in ("hosted-consumer-seed.zip", "hosted-consumer-python.lock.json", "source-policy.json"):
                 (seed_dir / name).write_bytes((SOURCE / ".github/qa" / name).read_bytes())
+            for directory_name in ("upstream", "debug"):
+                shutil.copytree(SOURCE / ".github/patches" / directory_name,
+                                Path(directory) / ".github/patches" / directory_name)
             args = SimpleNamespace(
                 source=Path(directory),
                 objdir=Path(directory) / "obj",

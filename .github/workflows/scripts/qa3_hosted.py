@@ -741,9 +741,17 @@ def run_diagnosed(argv, cwd, env, logs, name, timeout, **kwargs):
         raise
 
 
+def verify_source_patch_policy(source):
+    policy = read_json(source / ".github/qa/source-policy.json")
+    for field, directory in (("commonPatches", "upstream"), ("debugPatches", "debug")):
+        verify_patches(source, policy[field], ".github/patches/" + directory)
+    return policy
+
+
 def packaging_preflight(args):
     verify_seed_archive(args.source / ".github/qa/hosted-consumer-seed.zip",
                         read_json(args.source / ".github/qa/hosted-consumer-python.lock.json"))
+    verify_source_patch_policy(args.source)
     context = context_from_environment(args.build_id)
     env = producer_environment(args.source, args.objdir, context["buildID"])
     env.update(source_stamp_environment(args.source, context))
@@ -1179,9 +1187,7 @@ def produce(args):
     source_record = read_json(args.primary / "runtime-source-provenance.json")
     upstream = read_json(args.source / ".github/runtime-upstream.json")
     verify_compiled_source(source_record, upstream, context["runtimeRecipe"])
-    policy = read_json(args.source / ".github/qa/source-policy.json")
-    for field, directory in (("commonPatches", "upstream"), ("debugPatches", "debug")):
-        verify_patches(args.source, policy[field], ".github/patches/" + directory)
+    policy = verify_source_patch_policy(args.source)
     changes = raw_git(
         args.source, "diff", "--binary", "HEAD", "--", ".", ":(exclude).github"
     )
