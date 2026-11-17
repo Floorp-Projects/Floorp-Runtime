@@ -2515,6 +2515,10 @@ class HostedBootstrapPrerequisites(unittest.TestCase):
 
     def test_bootstrap_metadata_failure_prevents_decoder_and_build(self):
         with tempfile.TemporaryDirectory() as directory:
+            seed_dir = Path(directory) / ".github/qa"
+            seed_dir.mkdir(parents=True)
+            for name in ("hosted-consumer-seed.zip", "hosted-consumer-python.lock.json"):
+                (seed_dir / name).write_bytes((SOURCE / ".github/qa" / name).read_bytes())
             args = SimpleNamespace(
                 source=Path(directory),
                 objdir=Path(directory) / "obj",
