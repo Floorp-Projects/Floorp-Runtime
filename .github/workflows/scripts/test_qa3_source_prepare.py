@@ -43,7 +43,8 @@ def commit(root):
 
 def fixture(root):
     subprocess.run(["git", "init", "-q", str(root)], check=True)
-    for i in range(27):
+    common_patch_count = 28
+    for i in range(common_patch_count):
         save(root, f"c{i}.txt", "0\n")
     save(root, "build/application.ini.in", OLD_URL + "\n")
     save(root, ".gitignore", "ignored*\n")
@@ -89,7 +90,7 @@ def fixture(root):
     common = []
     debug = []
     for directory, count, before, after, entries in (
-        ("upstream", 27, "0", "1", common),
+        ("upstream", common_patch_count, "0", "1", common),
         ("debug", 3, "1", "2", debug),
     ):
         for i in range(count):

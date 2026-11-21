@@ -55,7 +55,7 @@ def verify_source_receipt(recipe, proof, baseline, final, runtime):
     verify_common(common)
     policy = read_json(recipe / ".github/qa/source-policy.json")
     upstream = read_json(recipe / ".github/runtime-upstream.json")["upstream"]
-    if len(policy["commonPatches"]) != 27 or len(policy["debugPatches"]) != 3:
+    if len(policy["commonPatches"]) != 28 or len(policy["debugPatches"]) != 3:
         raise ValueError("reduced source policy")
     verify_patches(recipe, policy["commonPatches"], ".github/patches/upstream")
     verify_patches(recipe, policy["debugPatches"], ".github/patches/debug")
