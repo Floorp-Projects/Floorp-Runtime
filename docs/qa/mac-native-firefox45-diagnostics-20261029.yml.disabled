@@ -1,0 +1,898 @@
+# Disabled diagnostic candidate. Native input freeze and SDK revalidation remain required.
+# This document does not dispatch a workflow or qualify Mac/product behavior.
+name: Disabled Mac Firefox45 encrypted diagnostic candidate 20261029
+'on':
+  push:
+    branches:
+    - b/qa-fresh45-diagnostics-20261029
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: isolated-intel-fresh-firefox45-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  FLOORP_FIXTURE_SHA: e9c88fbcbfa98da41989fa8656701cfb380cfd19
+  HARNESS_SHA: cbe45a7d7480d713b2c40a9ed348420126e6ccb0
+  RUNTIME_SHA: 7dd619742b25567e479eeda97ae071d10542ad0b
+  SDK_SOURCE_SHA256: 88ff6c5ea1941d7fc1e18f46e2426441eda04a186a23d79b9b0bc1d169e03f48
+  TARGET_HELPER_SHA256: c989a44b20f48f73784330d70be80d2d12b028b2af1cab510f4e2439d01ac8cf
+  PIPELINE_SHA256: 068e7961a639498f8ebc06a251a57c326acc5dbef69823114c0057d7aa647704
+  UPSTREAM_HELPER_SHA256: 4b740f3babb525661ab0aa0afc9c52f9aa8dce0ab28b984514947129693eed73
+  UPSTREAM_PLAN_SHA256: 514b9ef7af24c9a5eea9fac21260fb5e918759cf15b71f99b9c715bf1269e05f
+  ORIGIN_HELPER_SHA256: 9cc7590f5885befb1e3ce35e9d5a0df323ec357ecc6cc7642128c65f6836779a
+  FRESH_HELPER_SHA256: d113bf9881feb6341d5f3ebda19cb5e00f5c48e94615ddb6c5fd82e456e8de72
+  QA_SOURCE_PINS: '{"RECOVERY47_RUNNING_OBSERVATION.json":"fd2b793bdae02196ca1276898939c322d097f69d726626178fd97635add7f7a7","RECOVERY48_CURRENT_SDK_ROUTE_GATE.json":"c63bf420fc86995d8e60dfd0157763867fb1b4039094ae9774ca1e128628d854","RECOVERY48_CURRENT_SDK_ROUTE_REVIEW.json":"51412081777554843913a62f49487f5599642619c956604a6e2dbc90854723d4","RECOVERY48_IMPLEMENTATION_REVIEW.json":"25f94642a1e6a605ea57a1762c51a3d3dc789cfc87b5fc8ba047c90207eb194a","RECOVERY48_MINIMAL_MOZILLA_TARGET_REVIEW.json":"6edbefbc7b8a507283aaa458ad2077d0eec65dffd0f9cd76b31c1682d95d1436","RECOVERY48_PRELAUNCH_REVIEW.json":"5961083b189460e3555791bcfae85c80115a9d170150fe3bce8357d86585f8b3","RECOVERY48_PREPARATION.json":"e0e95e11041ab4ca7ec0e0de361097c8b4effbfb506d1707fade89b062629089","RECOVERY48_READER_REVIEW.json":"d2da7e8d608b787d1241b6fe1b6ba904215d766195b5fcceaf3118964e210990","RECOVERY48_RETRY_FEASIBILITY.json":"559185b514d597a21b0b8e6b6fd3e844887f7b40755e2e1754fb00e15eb62cae","RECOVERY48_RETRY_FEASIBILITY_ADDENDUM.json":"e5cb0c647ddc60787fd1937d90bf73789fbcd56b19cf6ad8ae5e4933b23db896","RECOVERY48_ROUTE_GATE.json":"494ac5765ddf0e7dcef1495618c5472f4c6c46b49615ddd971bd4491f6831587","RECOVERY48_SDK_SOURCE_IMPLEMENTATION_REVIEW.json":"6f8dba3b0fce0b092eaa0e480ea378b90cfde4a1c41f73a2d5d515b95b4fa9ac","RECOVERY48_SDK_SOURCE_MATCH.json":"ef5db03fffc74969a7628c5a277b7035e04b50bb99cceadd79cb78c5fdad02d3","RECOVERY48_SDK_SOURCE_PREPARATION.json":"ec625d65471612946ee24c1c42ae16c4b7977cc71d534c7d86070479e5837b67","RECOVERY48_SHARED_DEADLINE_DESIGN_REVIEW.json":"e46780b2e1ebc0ff70b1d4d99b9e127a97097dd7adf226d87acb7e4bdfe90ead","RECOVERY48_SHARED_DEADLINE_IMMUTABLE_REVIEW.json":"2e8ea06225e5938a5a2806fa8a63f5a3703c128450a53da35b87fc710f5b48cb","RECOVERY48_SHARED_DEADLINE_IMPLEMENTATION_REVIEW.json":"8a3047dc6aba043702436961269bd739775fb425782f6f28e16a842974502091","RECOVERY48_SHARED_DEADLINE_PREPARATION.json":"6007ed3bde2ba35e419c7c8f6b57269aeb43d8dda32d46e58036df471a797b79","RECOVERY48_SHARED_DEADLINE_ROUTE_GATE.json":"93b70e7a0956f614f861809803a455d12fab09493fac36fd393e9ec51db99e3a","RECOVERY48_SHARED_DEADLINE_STATIC_ROUTE_REVIEW.json":"9c76ff77a977c01e7fe2d53d2ab883dcae4e815b7158698122a16c6da30dddb3","RECOVERY49_DESIGN_REVIEW.json":"14116228014c8977d0aa9f6429876324fef0b05bb3656b6defeb8cee1224a660","RECOVERY49_IMPLEMENTATION_REVIEW.json":"e5693a83bbc15601073103fb0e690d84c4bb871e8111b3fcdc7fe71ea7b1fb3e","RECOVERY49_LOCAL_SERIALIZER_RESULT.json":"6258363a37a9e9e5db4fb5c5cd976fa588ca016825cb6b0ba8c35b6e1d1d5115","RECOVERY49_PRELAUNCH_REVIEW.json":"f94dcf0b85b9d7470c87dd2fc75fd94d0204dead80a64f6f8234b4fce47452d3","RECOVERY49_PREPARATION.json":"4b62cb20d2d1163a0a10096a52b4fd4c0cd7e6fc87431c77717a96e166d2f301","RECOVERY49_ROUTE_GATE.json":"1f10a42d08d410557b4307b5d5e340d7cd4d3c43b4b610c516a9d81cbcc2f559","anchor_inventory.py":"4c535e9358b33cf6d55ca0e707e6c22a598c0b9088d619c1a2b19fa59249c96e","boundary_diagnostic.py":"0d82dabc52b2054b7502dd3028b3042d9f043a1e56dc1276756c3109421b55a1","build_completion.py":"04c66c15dc63e136a5b2c9d48e6be2efac5a35496c8da54ede93ad237d990fab","build_completion_contract.py":"d39ed4398dbc3a9d6c2fb867edbd88dc8766686a96214002807015d65efae5e9","census_abi.c":"d62de0173995f0e963a42bdbdee80b0892558424f3439e4f723abe872f8f6912","census_convergence.py":"908d85e630b086db053d20f30379a11dc67f498760ef8eab5af80ded47b9e594","census_diagnostics.py":"b0c4a4a237b9c803e29ea6b26794e77ef338b52b51f6d5af47cdeb02544b4d3a","census_experiment.py":"8e7bac701ffb60bd109199f1e859bb1f52c7b15d2746682478ab3fe4cb516fb5","checkpoint-replay.json":"7261646e01ffd4abc456785335712cc49e48f6cadac864ed17c6910636cf0c9c","checkpoint.py":"184c55fb846764f9c0b3e0466dbd57ed3c5e915d0dbe4d5a7f917cd4f3ca6a6b","checkpoint_public.py":"4c6715ed0cd4f76f592504279141ad52d525ee891ae923fa096dc2b312e49955","checkpoint_replay.py":"29ba89cf178a98ae9ec4593f05f8556c9d6e923f1567e2806db926c48e02645e","checkpoint_transfer.py":"4c3ecb1d85912b9dead5b25b49c4eb38c9a481e2f73f9619eff7352c59cea4aa","completion_preflight.py":"c80319301aae1626ef5492a99319666b47c420baeff03ac4601d9e4165c63068","consumer_time.py":"629c5c92e80cf049b3f60e342f7d3ca13919ccaf0528e44f1cda96ecc39f7e65","darwin_activity.py":"fbdefbf8a0a1b4112ca7ed97ee723b763dfee765b5ecf17e471404d0d97a37fb","darwin_inventory.py":"08db5b9d54c589c185cab0c09f94ea79c212820dc447f889c32110cc9959705e","darwin_origin.py":"05c5d5d594661f8fee4f749ecf45b1e7596ed7cbe4079505d6ed4a4203da6420","diagnostic-recipient-20261029.pem":"874ad391d20a7ed468eba7a8da6c5c63542650ca4c1378a98e6e978cf8a6b094","diagnostic_archive.py":"7d944e620ef387ca18fbcccdeab5af21cd601eacc5fe33ae828ebe9e9ac73d5e","failure_excerpt.py":"f3d120a923b0abfda1afcbbb467eae2e693671380859a50887a97adb95808c32","fetch_sdk.py":"85981b61da4627b663321ee31771a86884884de156a2aa46903f4eebb14a0034","firefox_target_graph.py":"ffe2376b84a1e405255a41573d891fb1ad11f0a6d492630b5e4560b661f5be0a","firefox_target_observer.py":"fa9be7ee8852b1a3af1f2f6a52a4e271a38630e93507cb8f4b68da2728b014fb","fixtures/harness-shim_diagnostics.py":"4607da57c3ae874952f26b8926ec2bbe16e5ccdb86374b2a8a261c5f7be95a18","fixtures/harness-test-context-menu.py":"2863ce8f453a9a1b20a491887398c003b5523ed0bdbf7bd23fe4210249bef911","fixtures/harness-test-runtime.py":"39af468b4331fdff4ee3c21ad3665c883348a5990db2fb3364a181d587b62f5b","fresh45.py":"d113bf9881feb6341d5f3ebda19cb5e00f5c48e94615ddb6c5fd82e456e8de72","fresh45_preflight_catalog.json":"81d21a7868788a88b0f8f00f55d29b6a292a25681f9d5caa515f7572cfe85240","fresh_job_origin.py":"9cc7590f5885befb1e3ce35e9d5a0df323ec357ecc6cc7642128c65f6836779a","helper_import_preflight.py":"ef22db566b2f5e41dc976d9d40b5c3e6d458639d7abfe2911041c63f15c56d33","helper_timing_caller.py":"c03b688be6b957e18c9c67f3ba663e54752374ecad6c4b78fe772e37bdf2182f","helper_timing_selection.json":"390acf29b0559d39ae2320eb3399406282850a83d54e11f4a0390b358df6bdfb","inventory_stress.py":"b3954e8fdc47986e8f82947e6cdb5f8bfdeb2de3e1174fa6d8f17b3c196991b9","launch-services-host.patch":"de997184f529e3bd14a077625cfa8b10ad5794da6760bea034fa2e594a44a17e","materialize.py":"8f927ee0f8428e2a7b3de8d32e07bf1a9a51018776588d90afebd0494c875491","monitor_native_preflight.py":"873ccd2ee7458c796d5517e28f020d6f53b6902ba3123c211049c01cb5f25731","monitor_ps_lifetime.py":"19f31ea18e8430e8776e56a98d3c387d0e75355d185a9582ef9d6bddd99645e3","mozilla-smoke/negative/test_expected_failure.js":"4e860e91eb2ff3950ffbc6574829b95147802052fabdf3f154029e289b6466de","mozilla-smoke/negative/xpcshell.toml":"8704015158a335bd9931fbcdcc97529f317ebe8eecccf6b1f87dae25f45866d0","mozilla-smoke/positive/test_current_debug.js":"aecefb33e7768c489c5bf5a851c70d3df87dcb4f6986550108b49241fef0dff9","mozilla-smoke/positive/xpcshell.toml":"1ffa58e18b8cb51710d569aeceb56368ba9623cfeace6a99f69ade953f570943","mozilla-smoke.json":"1d8687026469552c5e241404603453742a5ed4ccb8985892d4660872c2bb092c","mozilla-upstream.json":"514b9ef7af24c9a5eea9fac21260fb5e918759cf15b71f99b9c715bf1269e05f","mozilla_harness_receipt.py":"80fe26e0476de8cff4c2130aa1c17afb3a532a114b62ccb3694a882abcaf26d6","mozilla_harness_smoke.py":"2562fd36c1e7dfb630abbf29fb567eec0dcdecf946174044718d81f6990bcabe","mozilla_target_build.py":"c989a44b20f48f73784330d70be80d2d12b028b2af1cab510f4e2439d01ac8cf","mozilla_upstream.py":"4b740f3babb525661ab0aa0afc9c52f9aa8dce0ab28b984514947129693eed73","native_cause.py":"23fe298ac1458ddf2a01f921d1c2f795b2aae098d7457c6730401179744cf300","native_processes.py":"c944d1d86724e57d79affc11d77791f7bc0c066c3651430d9b0b21d71e00d92b","native_selection_diagnostic.py":"f4a009cd3283908c94079ea2b464217535b4723d7d2320f21cf2d157be5857b3","native_suite.py":"c4270e18440e9c4079347cc9a67f58e399cca9913bc11b7eed8fe034db6f5499","origin_control.py":"ac33ca3d41669f21c071abb82f62e9009995b41a962f27db5df406d11b7a88b1","owned_native.py":"9b677774f13ce368bb59945659c4a5f9c71d59102e6692bd691a05d8b5dee2b3","pipeline.py":"068e7961a639498f8ebc06a251a57c326acc5dbef69823114c0057d7aa647704","plan.json":"33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460","primary_anchor.py":"0d25f3e5508514fa8dd75bc615fcba98cf2c2f3e06994a926c4227c7981dcb81","process_census.py":"652b6a9ca4e56b744d5eab33cdb21c136c6e30b9288494af5a14d65f352e2f62","qa_core.py":"13441551e1bfc96aed10fba97f16844b5a8cddbbf5685c72f4c07a7fc578e49a","readonly_boundary_experiment.py":"b29ff52e54add461c490779c49c91e9888075368dac325e52a83b139ffaf61cb","sdk_content_qualification.py":"aaf6c586622b8039022b604af59fd655da524378ca88c43820142469152a59d0","sdk_source-20261026.json":"e9703c285de63d17147bad8030081304d99e0d8e9f6f548c11b41d768490eaf5","sdk_source-20261027.json":"41a7cc5dfdf5371b616232f0be2da306d581bcb8db72f974d56d78b9a791926b","sdk_source-20261031.json":"88ff6c5ea1941d7fc1e18f46e2426441eda04a186a23d79b9b0bc1d169e03f48","sdk_source.json":"0832587ebb7089731cf2f7bb7e8715756256a4b1e70520daced0516c13aacf54","sdk_source.py":"4b2c98ee7b7ee82ca121aa6b514a9960103cf8199433509620d90958754df73c","shim-failure-recording.patch":"367f7095a17602fc986f90c344d44098366124e66384d1e2e8d3ba92f34ff3ad","support.py":"3fbce4e1821c2e3ded748b6bda97649dc81519dd59e38c2b64ab46642c8e66c3","task_api_experiment.py":"bd63c1f7a524f0c153da41315c385a6f3682fdf6856b3bb93c29fa7ffe4f9490","test_anchor_inventory.py":"5cf39799069b5f2c7f7c8d7ab348f549ab095edb7801ba5f08e6e982edb08130","test_anchor_mac_groups.py":"2a7b34d3d206ce09a412c5e1b40427aacc41d607520c0aa32de0fad9557ec060","test_anchor_wait_models.py":"1c5f9b3257dc3ecb128d976dfd9d458b8cb88fb8cd4912cd456bfd52493c2353","test_boundary_diagnostic.py":"4516e55daf8b1704e471096dc708e7d500dee4ca9a60e5addf450b8052b44880","test_build_completion.py":"15c28d7ebb933040937d7a0eb11ba8990c22e3e19adbffe59ea84bc5826517e2","test_build_completion_contract.py":"9a7c8fd0b559f0294ddaa84b2590e4c42c0b30d07057f1fc21758d130fd7f11d","test_census_convergence.py":"9369f2773975e4c14fecf0673dbd848b6c766f67026a051c11f6eb43da938e16","test_census_diagnostics.py":"a5b03f7ff0e6aad6260ed4c8b6bbc03757e11601c1ca5498fadbfe168867a55e","test_census_experiment.py":"f9a86d640395757bdd08118b2faaf5c53606cb50e53b88644b135cc933775e47","test_checkpoint.py":"aabf860135312b91f248174768493b1fdd555b4cbf73b9d01d39e5b333165623","test_checkpoint_prototype.py":"b8795db26866dcfd0915c6031ba90f5363f9d50ca0b56a33f970f023f451856e","test_checkpoint_public.py":"b9d7858eedd1c02e0fd852128d77b5a9ac6e1aed13d60548be7019010349c67a","test_checkpoint_replay.py":"7b20919a2d958c475ab3d16d6525229c2c048928db6d11a04900442286c5dcde","test_checkpoint_restore_replay.py":"740c2ced586a0173ccd7c1de597a9f3add5094826a670f3377ced8d6c1c0438e","test_checkpoint_transfer.py":"62a3844c09cadb067a63ff2726c75ea4700500950b43aa7f3627b80991cc6d0c","test_completion_preflight.py":"bb9211286187390f5fc3f59a27bdc83604c3ff66aebed872cb67819f0cb00235","test_consumer_time.py":"bd55c496ba98423b9b3d8236cea9a4613a0d94fc277157309cf7179a2c857866","test_darwin_inventory.py":"8703500ae37f84db116185325884fb67b3bbd3d5d01b6c0d235dabfebafc72d9","test_darwin_origin.py":"8a377af5cb7ef6e04bcf854d5d308106762809af7a7bcd058c0ea428114ecb0e","test_diagnostic_archive.py":"26b5ff7bf46fe1ffb0ff37a2c0374fc0c14610c30b253ac12c5cfe6f8c1e6687","test_failure_excerpt.py":"651bdb3edbde8ffcd1e80e9ff15c987679f003d530af060140ee75b6b6328b69","test_failure_recovery.py":"24530c3b0b5bc0869a5e7ccae018fd5b0a0765f65a4b666b579ef0b3ccd8b854","test_fresh45.py":"b14a174287e2093484af39769b5a096fef8f3ae6cc2ad019708604eb0b711a7d","test_fresh_job_origin.py":"cc02ba611911f43586fd1a9ab335499807bb48515fdab14f9e401f99f400d5ed","test_guards.py":"714389c64ee5825d4e13b8230ebf5af6406ca568ccd84a7caaefc2f7c6640a99","test_helper_import_preflight.py":"23c07b8c89a9c616227cd9533b5deec520be5888c84fd814446ca51822ca2893","test_helper_timing_caller.py":"e01a4ce39b34451bb607045a2d0187c0753613aff63013dc8428163d8d3fdbaf","test_helper_timing_origin.py":"68974639816f26bad77f122a1c7299fcb0133fb0707e13aff7fcc3a63c4afa91","test_inventory_progress.py":"29de259c4d06f02bde4e7227c498ddf581f7816f8072a2d4d79fe0ca2e794b10","test_inventory_startup.py":"7fca7e6f7252e2a8bab7b3524f040d7b1b7083d51e83ab4711e58f6784d098d1","test_inventory_stress.py":"3c9d0f132a33961f6f6c8c318e7dfe816f7402b7a1e7bf2878055ee4329266e5","test_inventory_timeout.py":"92892f68b769594f5aead398b1efd05ba542cabf245b4c185f9404cc556effb0","test_mac_recheck.py":"285cbad23a49f947bbb54068c831e6242734934ae558721785f1def0bd8ec3cc","test_mozilla_harness_receipt.py":"a5bae7b4f2445680a63ed31111ff5a89165c6da34eb2cefb451f8feb17c28b26","test_mozilla_harness_smoke.py":"6ae41fb5378d03f3674330e6e3518803d76ec987f077df24a1b8855311173d59","test_mozilla_target_build.py":"53fcf2fb20dfad2ef0c2e3d3fb4b379bf2b72e2740179fdb07b505a28f34a63a","test_mozilla_upstream.py":"799f16cb46023dfc34e40fc17a9d48144bd197fa18423ede9281270b7e069c53","test_native_processes.py":"02d6994d898d134c62f44c783a09a62a599df9594491a136f6c2e7b9b80f5e01","test_native_selection_diagnostic.py":"4f19dcb1ffdcb1c135f0d910526373cf83afb31c369d756c45d604c8058aedb8","test_owned_cleanup.py":"eaf3a7c85c1efbcb6a7f1c30d34958166ef14e11c331b259a36462706a5705c7","test_pipeline_restore.py":"a69731e4f612785d3b624b2538e9aa5f29a29212eae7a4c9b8b07d868dfd0fc6","test_primary_anchor.py":"9b9ed529145832b2bdb5f9e4f8210ac62bbef969bed685c50466fcf7b27437dc","test_process_census.py":"b785634ae2ef674bef0af993ba43472a90c818f0018eb21f38c83c133106278b","test_ps_lifetime.py":"2b8b8803371d4a1ea2d1ace988ce6ba3943e4b1baa47f1cc6332c9e96fb7b415","test_qa_core.py":"86c5af063a40f465765f7b14531ca1d536d6ef54ede4639a6f3bd499c7e80c82","test_readonly_boundary_experiment.py":"1ff6fc792264b49d6b5ca76074675842f629131eee9f3ffe19d04103ba383907","test_sdk_content_qualification.py":"b936103f1a173beeb392ab54d46b6f138789c55675a9acc15fcb6feb1486e85b","test_sdk_source.py":"e049c5c90c962bd3ba56496788b6fd42c60b36d535c39c7ebcfd75f121bdc95f","test_sdk_source_integration.py":"89f3b99926a8048b6b6668c68d695c705735dbfe2e61c4fceb7f0519eb2a215d","test_sdk_source_v4.py":"62e954983f34e55b1388781afb64fca463853fd071fdc882dea6e9047f1409ed","test_shim_failure_patch.py":"e273d0cd0919241a4e18069c22baa3f4347bc3e65ca045f00f59ec42814a2d0d","test_task_api_experiment.py":"ab880553ef6d40a6ed6df9df4c2ecebc8c58ee63f726de24fef83c411526adc7","test_unittest_receipt.py":"e4bd5249891926780eaee46c9f2dcfb28269d75945d81841defbb00eef317d59","unittest_receipt.py":"d08ca28513553b985188c41e1a4df864e004abbbfd4d08783c7a9135283e064d","workflow.yml.in":"14dc7fa3d849bdfb0cb37d0856cdb165acb2c938738b840213e621994bbec94e"}'
+  DIAGNOSTIC_RECIPIENT_SHA256: 874ad391d20a7ed468eba7a8da6c5c63542650ca4c1378a98e6e978cf8a6b094
+  LOCAL_CANDIDATE_QUALIFICATION: NOT_ADMITTED_NATIVE_INPUT_FREEZE_PENDING
+jobs:
+  fresh-firefox45:
+    name: fresh-firefox45
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    steps:
+    - name: Bound the initial authorized execution
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        [[ "$FLOORP_FIXTURE_SHA" =~ ^[0-9a-f]{40}$ ]]
+        [[ "$SDK_SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+        test "$GITHUB_REF" = refs/heads/b/qa-fresh45-diagnostics-20261029
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test '${{ github.event.created }}' = true
+        test '${{ github.event.before }}' = 0000000000000000000000000000000000000000
+        TASK_PYTHON="$RUNNER_TOOL_CACHE/Python/3.12.10/x64/bin/python3"
+        test -x "$TASK_PYTHON"
+        echo "TASK_PYTHON=$TASK_PYTHON" >> "$GITHUB_ENV"
+        test -x /usr/local/opt/openssl@3/bin/openssl
+        echo "DIAGNOSTIC_OPENSSL=/usr/local/opt/openssl@3/bin/openssl" >> "$GITHUB_ENV"
+        echo "TASK_ROOT=$RUNNER_TEMP/floorp-native-checkpoint" >> "$GITHUB_ENV"
+        [[ "$TARGET_HELPER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+        [[ "$PIPELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+
+        "$TASK_PYTHON" - <<'PINS'
+        import json,os,re
+        pins=json.loads(os.environ['QA_SOURCE_PINS'])
+        if not pins or any(type(value) is not str or re.fullmatch('[0-9a-f]{64}',value) is None for value in pins.values()):
+            raise SystemExit('source-pins-must-be-frozen')
+        PINS
+    - name: Checkout immutable reviewed fixture
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: Floorp-Projects/Floorp
+        ref: ${{ env.FLOORP_FIXTURE_SHA }}
+        path: fixture
+        persist-credentials: false
+        fetch-depth: 1
+    - name: Establish this job's fresh clock and task root
+      id: origin
+      timeout-minutes: 3
+      env:
+        JOB_READ_TOKEN: ${{ github.token }}
+        FRESH_PUSH_CREATED: ${{ github.event.created }}
+        FRESH_PUSH_BEFORE: ${{ github.event.before }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fresh_job_origin.py --diagnostics-20261029 --task "$TASK_ROOT"
+    - name: Prove encrypted diagnostic transport before acquiring SDK or building
+      id: diagnostic_probe
+      timeout-minutes: 2
+      shell: bash
+      run: |
+        set -euo pipefail
+        "$TASK_PYTHON" - <<'DIAGNOSTIC_PINS'
+        import hashlib,json,os,pathlib
+        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+        pins=json.loads(os.environ['QA_SOURCE_PINS'])
+        for name in ('diagnostic_archive.py','diagnostic-recipient-20261029.pem',
+                     'firefox_target_observer.py','fresh_job_origin.py','qa_core.py'):
+            path=helper/name
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest()!=pins[name]:
+                raise SystemExit('diagnostic-source-pin')
+        if pins['diagnostic-recipient-20261029.pem']!=os.environ['DIAGNOSTIC_RECIPIENT_SHA256']:
+            raise SystemExit('diagnostic-recipient-pin')
+        DIAGNOSTIC_PINS
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/diagnostic_archive.py --task "$TASK_ROOT" --certificate "$GITHUB_WORKSPACE/fixture/tools/qa/native-nonpgo/diagnostic-recipient-20261029.pem" --certificate-sha256 "$DIAGNOSTIC_RECIPIENT_SHA256" --openssl "$DIAGNOSTIC_OPENSSL" --output "$RUNNER_TEMP/floorp-qa-transport-probe-${{ github.run_id }}-${{ github.run_attempt }}.cms"
+    - name: Verify actual native process monitor before acquisition
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - > "$TASK_ROOT/monitor-preflight-driver.private.log" 2>&1 <<'PYCODE'
+        import json,os,pathlib,re,sys,unittest
+        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+        sys.path.insert(0,str(helper))
+        from support import Runner,clean_environment,require,write_json
+        from darwin_activity import probe
+        from unittest_receipt import receipt as unittest_receipt
+        from process_census import BINDING_KEYS,prepare_abi,load_abi,snapshot
+        task=pathlib.Path(os.environ['TASK_ROOT'])
+        plan=json.loads((helper/'plan.json').read_text())
+        runner=Runner(task,float((task/'started').read_text()),plan['limits'])
+        env=clean_environment(task)
+        temporary=task/'monitor-tmp'
+        temporary.mkdir(mode=0o700)
+        env['TMPDIR']=str(temporary)
+        env['PYTHONDONTWRITEBYTECODE']='1'
+        env['PYTHONWARNINGS']='error::ResourceWarning'
+        env['PATH']+=':/usr/local/bin'
+        result={'status':'failed'}
+        primary_error=None
+        phase='self-probe'
+        try:
+            own=probe().read(os.getpid(),os.getpgrp())
+            require(own['status']=='measured' and own['rssMiB']>0,'monitor-native-self-unavailable')
+            result['self']={key:own[key] for key in ('status','rssMiB','cpuSeconds','state')}
+            phase='abi'
+            abi=prepare_abi(task,runner,env)
+            os.environ['FLOORP_CENSUS_ABI']=str(abi)
+            env.update({key:os.environ[key] for key in (*BINDING_KEYS,'TASK_ROOT')})
+            env['FLOORP_CENSUS_ABI']=str(abi)
+            phase='identity-snapshot'
+            result['census']=snapshot(load_abi(abi))['measurement']
+            with pathlib.Path(os.environ['GITHUB_ENV']).open('a') as output:
+                output.write('FLOORP_CENSUS_ABI='+str(abi)+'\n')
+            if True:
+                suites=[('checkpoint-tests',[sys.executable,'-m','unittest','-v',
+                    'test_checkpoint','test_process_census','test_guards','test_shim_failure_patch',
+                    'test_completion_preflight','test_unittest_receipt','test_qa_core',
+                    'test_darwin_inventory','test_inventory_timeout','test_helper_import_preflight',
+                    'test_checkpoint_transfer','test_checkpoint_replay','test_failure_excerpt',
+                    'test_pipeline_restore','test_checkpoint_restore_replay','test_checkpoint_public',
+                    'test_mozilla_harness_receipt','test_mozilla_harness_smoke',
+                    'test_sdk_source','test_sdk_source_integration','test_consumer_time',
+                    'test_build_completion','test_build_completion_contract','test_mozilla_target_build','test_mozilla_upstream','test_fresh_job_origin','test_fresh45','test_sdk_content_qualification','test_inventory_startup','test_inventory_progress','test_diagnostic_archive','test_sdk_source_v4'],765,False),
+                    ('failure-recording-tests',[sys.executable,'-m','unittest','discover','-v',
+                    '-s',str(helper.parents[1]/'app-shim'),'-p','test_shim_failure_diagnostics.py'],14,True)]
+                catalog=json.loads((helper/'fresh45_preflight_catalog.json').read_text())
+                require(type(catalog) is dict and set(catalog)=={'schema','modules','tests'} and
+                        type(catalog['schema']) is int and catalog['schema']==1 and
+                        catalog['modules']==suites[0][1][4:] and type(catalog['tests']) is list,
+                        'checkpoint-mac-test-catalog')
+                def test_ids(suite):
+                    if isinstance(suite,unittest.TestSuite):
+                        return [name for child in suite for name in test_ids(child)]
+                    return [suite.id()]
+                actual=sorted(test_ids(unittest.defaultTestLoader.loadTestsFromNames(catalog['modules'])))
+                require(actual==catalog['tests'] and len(actual)==len(set(actual))==suites[0][2],
+                        'checkpoint-mac-test-catalog')
+                for test_stage,command,expected,recording in suites:
+                    phase=test_stage
+                    try:
+                        runner.run(test_stage,command,helper,env,360,phase_deadline_minutes=15)
+                    finally:
+                        result[test_stage]=unittest_receipt(task/(test_stage+'.private.log'),recording=recording)
+                    tests=result[test_stage]
+                    require(tests['complete'] and tests['status']=='passed' and
+                            tests['total']==expected and tests['skipped']==0,'checkpoint-mac-tests')
+            phase='owned-monitor-control'
+            script="import subprocess; [subprocess.run(['/bin/sh','-c','/bin/sleep 0.1'],check=True) for _ in range(20)]"
+            runner.run('monitor-preflight',[sys.executable,'-c',script],task,env,360,phase_deadline_minutes=15)
+            require(any(row['stage']=='monitor-preflight' and (row['lastActivity'] or {}).get('sampleComplete') is True and
+                        (row['lastActivity'] or {}).get('counterSource')=='libproc-taskallinfo' for row in runner.records),
+                    'monitor-preflight-no-complete-sample')
+            result['status']='passed'
+        except BaseException as error:
+            primary_error=error
+            result.update(status='failed',failurePhase=phase)
+            runner.fail('monitor-preflight','checkpoint-preflight-failure')
+            raise
+        finally:
+            result.update(stages=runner.records,monitorFailure=runner.monitor_failure,
+                          monitorDiagnostics=runner.monitor_diagnostics,firstFailure=runner.failure)
+            evidence_error=False
+            try:
+                write_json(task/'monitor-preflight.json',result)
+            except OSError:
+                evidence_error=True
+                runner.fail('preflight-evidence','checkpoint-preflight-evidence-write')
+                result.update(status='failed',evidenceWriteFailure=True,firstFailure=runner.failure)
+            print(json.dumps({'monitorPreflight':result}),flush=True)
+            if evidence_error and primary_error is None:
+                require(False,'checkpoint-preflight-evidence-write')
+        PYCODE
+    - name: Acquire the official unexpired renewed content-matched SDK
+      timeout-minutes: 12
+      env:
+        SDK_READ_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        "$TASK_PYTHON" - <<'PYCODE'
+        import hashlib,os,pathlib
+        path=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo/sdk_source-20261031.json'
+        raw=path.read_bytes()
+        if len(raw)>65536 or hashlib.sha256(raw).hexdigest()!=os.environ['SDK_SOURCE_SHA256']:
+            raise SystemExit('sdk-source-pin-mismatch')
+        PYCODE
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/fetch_sdk.py --plan fixture/tools/qa/native-nonpgo/plan.json --sdk-source fixture/tools/qa/native-nonpgo/sdk_source-20261031.json --output "$TASK_ROOT/sdk-download"
+    - name: Checkout immutable Runtime source
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ env.RUNTIME_SHA }}
+        path: source
+        persist-credentials: false
+        fetch-depth: 1
+        submodules: false
+    - name: Checkout immutable native harness
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: Floorp-Projects/Floorp
+        ref: ${{ env.HARNESS_SHA }}
+        path: harness
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: tools/app-shim
+    - name: Build fresh Firefox targets and stock child libs, then execute three smoke controls and unchanged XPCOM45
+      id: pipeline
+      shell: bash
+      run: |
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/pipeline.py --source "$GITHUB_WORKSPACE/source" --fixture "$GITHUB_WORKSPACE/fixture" --harness "$GITHUB_WORKSPACE/harness" --task "$TASK_ROOT" --fresh-firefox45 --sdk-source fixture/tools/qa/native-nonpgo/sdk_source-20261031.json > "$TASK_ROOT/pipeline.private.log"
+    - name: Verify fresh origin, scope45 expectations, fixed asset guards, source pins and owned cleanup
+      if: always()
+      env:
+        PIPELINE_OUTCOME: ${{ steps.pipeline.outcome }}
+        QA_DIAGNOSTIC_EXPORT: ${{ runner.temp }}/floorp-qa-public-${{ github.run_id }}-${{ github.run_attempt }}.json
+      shell: bash
+      run: |
+        if [[ ! -x "${TASK_PYTHON:-}" || -z "${TASK_ROOT:-}" ]]; then
+          echo '{"status":"failed","code":"initial-setup-incomplete","rawSummaryPublished":false}'
+          exit 1
+        fi
+        "$TASK_PYTHON" - <<'PYCODE'
+        import ast,datetime,hashlib,json,math,os,re,stat,sys,time,types
+        from pathlib import Path
+        sys.dont_write_bytecode=True
+        class Unconfirmed(Exception):pass
+        def need(value,code):
+            if not value:raise Unconfirmed(code)
+
+        def identity(value):
+         return tuple(getattr(value,key) for key in ('st_dev','st_ino','st_uid','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
+
+        def read_fixed(path,cap):
+         path=Path(path)
+         need(path.is_absolute() and path.resolve()==path,'binding')
+         directory=path.parent.stat();before=path.lstat()
+         need(stat.S_ISDIR(directory.st_mode) and directory.st_uid==os.geteuid() and
+          stat.S_ISREG(before.st_mode) and before.st_uid==os.geteuid() and before.st_nlink==1 and 0<=before.st_size<=cap,'binding')
+         fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_CLOEXEC',0))
+         try:
+          need(identity(before)==identity(os.fstat(fd)),'binding')
+          blocks=[];count=0
+          while True:
+           data=os.read(fd,min(131072,cap-count+1))
+           if not data:break
+           blocks.append(data);count+=len(data);need(count<=cap,'binding')
+          need(count==before.st_size and identity(before)==identity(os.fstat(fd))==identity(path.lstat()) and
+           identity(directory)==identity(path.parent.stat()),'binding')
+          return b''.join(blocks)
+         finally:os.close(fd)
+
+        def decode(raw):
+         def pairs(items):
+          out={}
+          for key,value in items:
+           need(key not in out,'receipt');out[key]=value
+          return out
+         return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:need(False,'receipt'))
+        def mapping(value):
+            return value if type(value) is dict else {}
+
+        def integer(value, expected):
+            return type(value) is int and value == expected
+
+        def case_ok(value, label, mode, code, status):
+            if type(value) is not dict:
+                return False
+            process=mapping(value.get('process'))
+            harness=mapping(value.get('harness'))
+            counts=mapping(harness.get('counts'))
+            end_statuses=mapping(counts.get('testEndStatuses'))
+            common=(value.get('case')==label and value.get('mode')==mode and
+                    integer(value.get('expectedExitCode'),code) and value.get('expectationSatisfied') is True and
+                    value.get('monitorFailure') is None and value.get('monitorFailureObserved') is False and
+                    all(value.get(key) is None for key in ('caseError','evidenceWriteFailure','evidenceCollectionFailure')) and
+                    harness.get('status')==status and harness.get('expectationSatisfied') is True and
+                    harness.get('completeLog') is True and harness.get('nativeQualification') is False and
+                    harness.get('buildQualification') is False and
+                    all(process.get(key) is True for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')) and
+                    integer(process.get('exitCode'),code) and
+                    all(integer(counts.get(key),1) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds')) and
+                    all(integer(counts.get(key),0) for key in ('skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits')))
+            if not common:
+                return False
+            if code==0:
+                natural=(value.get('runnerFailure') is None and value.get('caughtCode') is None and
+                         process.get('reason') is None and process.get('failurePhase') is None and
+                         integer(end_statuses.get('PASS'),1) and integer(end_statuses.get('FAIL'),0))
+                if label=='compiled-debug':
+                    subtests=mapping(counts.get('subtestStatuses')).get('PASS')
+                    natural=(natural and mapping(harness.get('markers')).get('debug') is True and
+                             type(subtests) is int and subtests>=3)
+                return natural
+            failure=mapping(value.get('runnerFailure'))
+            return (failure.get('stage')=='mozilla-xpcshell' and failure.get('code')=='nonzero-exit' and
+                    value.get('caughtCode')=='nonzero-exit' and process.get('reason')=='nonzero-exit' and
+                    process.get('failurePhase')=='wait' and integer(end_statuses.get('FAIL'),1) and
+                    integer(end_statuses.get('PASS'),0) and
+                    all(integer(counts.get(key),1) for key in ('unexpectedSubtests','unexpectedTestEnds',
+                                                              'unexpectedFailSubtests','unexpectedFailTestEnds')) and
+                    mapping(harness.get('markers')).get('failure') is True)
+
+        def sdk_ok(value):
+            if type(value) is not dict:return False
+            sdk=mapping(value.get('sdk'));acquired=mapping(sdk.get('acquisitionSource'));anchor=mapping(acquired.get('uncompressedTar'))
+            return (value.get('planSHA256')=='33fb00c07a7ad9f66950489f06c0b5039ee173bc78297bc13b39265b24f4d460' and
+                'sdkEvidenceError' not in value and integer(sdk.get('artifact'),SDK_PIN['artifact']) and
+                integer(sdk.get('sourceRun'),SDK_PIN['run']) and integer(sdk.get('attempt'),1) and
+                sdk.get('zipSHA256')==SDK_PIN['zipSHA256'] and sdk.get('tarSHA256')==SDK_PIN['tarSHA256'] and
+                sdk.get('baselineTarSHA256')=='2002b346bf7087cc14f7b0e52bfc25ed767af29461ae1106356feaaec841dcc4' and
+                sdk.get('canonicalSHA256')=='c3c01387c82e9ce1436fd517ec19308416663cc526c39be15f66f6bab22c3a5f' and
+                set(acquired)=={'qualification','sourceSHA256','baselinePlanSHA256','uncompressedTar','producerJob','producerRef','exactProfile'} and
+                acquired.get('qualification')=='official-artifact-exact-profile-v2' and
+                acquired.get('exactProfile')==SDK_PIN['exactProfile'] and
+                acquired.get('sourceSHA256')==os.environ.get('SDK_SOURCE_SHA256') and
+                acquired.get('baselinePlanSHA256')==value.get('planSHA256') and
+                integer(acquired.get('producerJob'),SDK_PIN['producerJob']) and
+                acquired.get('producerRef')==SDK_PIN['producerRef'] and set(anchor)=={'bytes','sha256'} and
+                integer(anchor.get('bytes'),760518144) and
+                anchor.get('sha256')=='f0d4937d3793e5bd0d17ec899df993fb3b68267dab88ddaa9bdc14ccab7c4a58')
+
+        def preflight_ok(value):
+            if type(value) is not dict:
+                return False
+            preflight=mapping(value.get('monitorPreflight'))
+            if not (preflight.get('status')=='passed' and 'firstFailure' in preflight and
+                    preflight['firstFailure'] is None and 'monitorFailure' in preflight and
+                    preflight['monitorFailure'] is None):
+                return False
+            for name,total in (('checkpoint-tests',765),('failure-recording-tests',14)):
+                tests=mapping(preflight.get(name))
+                if not (tests.get('complete') is True and tests.get('status')=='passed' and
+                        integer(tests.get('total'),total) and all(integer(tests.get(key),0) for key in
+                            ('failures','errors','skipped'))):
+                    return False
+            return True
+
+        def same_value(left,right):
+            if type(left) is not type(right):return False
+            if type(left) is dict:return left.keys()==right.keys() and all(same_value(left[key],right[key]) for key in left)
+            if type(left) is list:return len(left)==len(right) and all(same_value(a,b) for a,b in zip(left,right))
+            return left==right
+
+        def time_budget_ok(value):
+            return (type(value) is dict and type(EXPECTED_BUDGET) is dict and
+                EXPECTED_BUDGET.get('profile')=='fresh-firefox45-shared-job-deadline-v1' and
+                integer(EXPECTED_BUDGET.get('platformMinutes'),360) and
+                integer(EXPECTED_BUDGET.get('sharedWorkDeadlineMinutes'),345) and
+                integer(EXPECTED_BUDGET.get('cleanupReserveMinutes'),15) and
+                same_value(value.get('executionTimeBudget'),EXPECTED_BUDGET))
+
+        def final_ok(value):
+            if type(value) is not dict:
+                return False
+            mozilla=mapping(value.get('mozilla'))
+            inputs=mapping(mozilla.get('inputs'))
+            cases=mozilla.get('cases')
+            expected=[('compiled-debug','positive',0,'passed'),
+                      ('failure-control','negative-control',1,'failed'),
+                      ('upstream-version-comparator','positive',0,'passed')]
+            return (time_budget_ok(value) and sdk_ok(value) and preflight_ok(value) and
+                    value.get('status')=='mozilla-fresh45-ready' and value.get('freshFirefox45') is True and
+                    'firstFailure' in value and value['firstFailure'] is None and
+                    'monitorFailure' in value and value['monitorFailure'] is None and
+                    value.get('qualification')=='fresh-job-current-source-upstream-xpcom-v1' and
+                    mapping(value.get('run'))=={key:os.environ.get(name) for key,name in
+                        (('repository','GITHUB_REPOSITORY'),('id','GITHUB_RUN_ID'),('attempt','GITHUB_RUN_ATTEMPT'),
+                         ('executionHead','GITHUB_SHA'),('fixture','FLOORP_FIXTURE_SHA'))} and
+                    all(value.get(key) is True for key in ('freshObjdir','sameJob')) and value.get('checkpointUsed') is False and
+                    not any(key in value for key in ('checkpointRole','checkpointRestore','checkpointReplay',
+                        'checkpointReplayContext','resumedEffectiveConfigVerified')) and
+                    value.get('fullHostXUL')=='NOT_TESTED' and value.get('fullHostQualification') is False and value.get('stagePackage')=='NOT_TESTED' and
+                    value.get('nativeAuthentication')=='NOT_TESTED' and value.get('native') is None and
+                    all(value.get(key) is False for key in ('productQualification','retry')) and
+                    integer(value.get('newArtifacts'),0) and
+                    mozilla.get('status')=='passed' and mozilla.get('contract')=='current-source-mozilla-xpcshell-smoke-v1' and
+                    mozilla.get('monitorFailure') is None and mozilla.get('productQualification') is False and
+                    mozilla.get('nativeAuthentication')=='NOT_TESTED' and
+                    all(mozilla.get(key) is True for key in ('actualCompiledDebug','actualCurrentSourceUpstreamTest',
+                        'intentionalFailureDetected','allCasesExactReaped','allCasesGroupsGone','defaultUpstreamHeadLoaded',
+                        'verbose','sequential')) and mozilla.get('automaticRetry') is False and integer(mozilla.get('threads'),1) and
+                    inputs.get('sourceCommit')=='7dd619742b25567e479eeda97ae071d10542ad0b' and
+                    integer(inputs.get('sourceFilesVerified'),18) and integer(inputs.get('fixtureFilesVerified'),4) and
+                    type(cases) is list and len(cases)==3 and
+                    all(case_ok(case,*spec) for case,spec in zip(cases,expected)))
+
+        SOURCE_NAMES=('RECOVERY47_RUNNING_OBSERVATION.json', 'RECOVERY48_CURRENT_SDK_ROUTE_GATE.json', 'RECOVERY48_CURRENT_SDK_ROUTE_REVIEW.json', 'RECOVERY48_IMPLEMENTATION_REVIEW.json', 'RECOVERY48_MINIMAL_MOZILLA_TARGET_REVIEW.json', 'RECOVERY48_PRELAUNCH_REVIEW.json', 'RECOVERY48_PREPARATION.json', 'RECOVERY48_READER_REVIEW.json', 'RECOVERY48_RETRY_FEASIBILITY.json', 'RECOVERY48_RETRY_FEASIBILITY_ADDENDUM.json', 'RECOVERY48_ROUTE_GATE.json', 'RECOVERY48_SDK_SOURCE_IMPLEMENTATION_REVIEW.json', 'RECOVERY48_SDK_SOURCE_MATCH.json', 'RECOVERY48_SDK_SOURCE_PREPARATION.json', 'RECOVERY48_SHARED_DEADLINE_DESIGN_REVIEW.json', 'RECOVERY48_SHARED_DEADLINE_IMMUTABLE_REVIEW.json', 'RECOVERY48_SHARED_DEADLINE_IMPLEMENTATION_REVIEW.json', 'RECOVERY48_SHARED_DEADLINE_PREPARATION.json', 'RECOVERY48_SHARED_DEADLINE_ROUTE_GATE.json', 'RECOVERY48_SHARED_DEADLINE_STATIC_ROUTE_REVIEW.json', 'RECOVERY49_DESIGN_REVIEW.json', 'RECOVERY49_IMPLEMENTATION_REVIEW.json', 'RECOVERY49_LOCAL_SERIALIZER_RESULT.json', 'RECOVERY49_PRELAUNCH_REVIEW.json', 'RECOVERY49_PREPARATION.json', 'RECOVERY49_ROUTE_GATE.json', 'anchor_inventory.py', 'boundary_diagnostic.py', 'build_completion.py', 'build_completion_contract.py', 'census_abi.c', 'census_convergence.py', 'census_diagnostics.py', 'census_experiment.py', 'checkpoint-replay.json', 'checkpoint.py', 'checkpoint_public.py', 'checkpoint_replay.py', 'checkpoint_transfer.py', 'completion_preflight.py', 'consumer_time.py', 'darwin_activity.py', 'darwin_inventory.py', 'darwin_origin.py', 'diagnostic-recipient-20261029.pem', 'diagnostic_archive.py', 'failure_excerpt.py', 'fetch_sdk.py', 'firefox_target_graph.py', 'firefox_target_observer.py', 'fixtures/harness-shim_diagnostics.py', 'fixtures/harness-test-context-menu.py', 'fixtures/harness-test-runtime.py', 'fresh45.py', 'fresh45_preflight_catalog.json', 'fresh_job_origin.py', 'helper_import_preflight.py', 'helper_timing_caller.py', 'helper_timing_selection.json', 'inventory_stress.py', 'launch-services-host.patch', 'materialize.py', 'monitor_native_preflight.py', 'monitor_ps_lifetime.py', 'mozilla-smoke/negative/test_expected_failure.js', 'mozilla-smoke/negative/xpcshell.toml', 'mozilla-smoke/positive/test_current_debug.js', 'mozilla-smoke/positive/xpcshell.toml', 'mozilla-smoke.json', 'mozilla-upstream.json', 'mozilla_harness_receipt.py', 'mozilla_harness_smoke.py', 'mozilla_target_build.py', 'mozilla_upstream.py', 'native_cause.py', 'native_processes.py', 'native_selection_diagnostic.py', 'native_suite.py', 'origin_control.py', 'owned_native.py', 'pipeline.py', 'plan.json', 'primary_anchor.py', 'process_census.py', 'qa_core.py', 'readonly_boundary_experiment.py', 'sdk_content_qualification.py', 'sdk_source-20261026.json', 'sdk_source-20261027.json', 'sdk_source-20261031.json', 'sdk_source.json', 'sdk_source.py', 'shim-failure-recording.patch', 'support.py', 'task_api_experiment.py', 'test_anchor_inventory.py', 'test_anchor_mac_groups.py', 'test_anchor_wait_models.py', 'test_boundary_diagnostic.py', 'test_build_completion.py', 'test_build_completion_contract.py', 'test_census_convergence.py', 'test_census_diagnostics.py', 'test_census_experiment.py', 'test_checkpoint.py', 'test_checkpoint_prototype.py', 'test_checkpoint_public.py', 'test_checkpoint_replay.py', 'test_checkpoint_restore_replay.py', 'test_checkpoint_transfer.py', 'test_completion_preflight.py', 'test_consumer_time.py', 'test_darwin_inventory.py', 'test_darwin_origin.py', 'test_diagnostic_archive.py', 'test_failure_excerpt.py', 'test_failure_recovery.py', 'test_fresh45.py', 'test_fresh_job_origin.py', 'test_guards.py', 'test_helper_import_preflight.py', 'test_helper_timing_caller.py', 'test_helper_timing_origin.py', 'test_inventory_progress.py', 'test_inventory_startup.py', 'test_inventory_stress.py', 'test_inventory_timeout.py', 'test_mac_recheck.py', 'test_mozilla_harness_receipt.py', 'test_mozilla_harness_smoke.py', 'test_mozilla_target_build.py', 'test_mozilla_upstream.py', 'test_native_processes.py', 'test_native_selection_diagnostic.py', 'test_owned_cleanup.py', 'test_pipeline_restore.py', 'test_primary_anchor.py', 'test_process_census.py', 'test_ps_lifetime.py', 'test_qa_core.py', 'test_readonly_boundary_experiment.py', 'test_sdk_content_qualification.py', 'test_sdk_source.py', 'test_sdk_source_integration.py', 'test_sdk_source_v4.py', 'test_shim_failure_patch.py', 'test_task_api_experiment.py', 'test_unittest_receipt.py', 'unittest_receipt.py', 'workflow.yml.in')
+        EXPECTED_BUDGET=None
+        SDK_PIN={}
+        SOURCE_FAILURE_CODES=frozenset()
+        TARGET_STAGES=('mozilla-shell-build','mozilla-http3-build','mozilla-browser-build','mozilla-updater-build','mozilla-channel-build','mozilla-dmg-build','mozilla-resources-build')
+        UPSTREAM_STAGES=('mozilla-upstream-helpers-build','mozilla-upstream-helpers-install','mozilla-upstream-inventory','mozilla-upstream-child-build','mozilla-upstream-child-libs','mozilla-upstream-resources-build')
+        KNOWN_STAGES=('configure','fresh45-exports',)+TARGET_STAGES+UPSTREAM_STAGES+('mozilla-upstream-xpcom','mozilla-xpcshell',)+('checkpoint-restore','effective-config','sdk-materialize','tools-materialize','harness-startup-check','harness-startup-apply','harness-recording-check','harness-recording-apply','baseline-provenance','first-cause-patch','apply-first-cause','monitor-preflight','checkpoint-tests','failure-recording-tests','census-abi','census-abi-compile','mozilla-target-build','mozilla-target-assets','mozilla-harness','mozilla-target-final-evidence','final-proof')
+        CASE_SPECS=(('compiled-debug','positive',0,'passed'),('failure-control','negative-control',1,'failed'),('upstream-version-comparator','positive',0,'passed'))
+        def boolean(value):return value if type(value) is bool else None
+        def safe_stage(value):return value if type(value) is str and value in KNOWN_STAGES else 'other'
+        def failure_safe(value):
+            result=runner_failure(value)
+            if result is not None:
+                result['stage']=safe_stage(value.get('stage'))
+                if type(value.get('code')) is str and value['code'] in SOURCE_FAILURE_CODES:result['code']=value['code']
+            return result
+        def monitor_safe(value):
+            result=monitor_projection(value)
+            if result is not None:result['stage']=safe_stage(value.get('stage'))
+            return result
+        def stage_safe(row,api):
+            if type(row) is not dict:return {'stage':'other','complete':None}
+            result=stage_projection(row);result['stage']=safe_stage(row.get('stage'))
+            result['complete']=api.stage_complete(row) if api is not None else None
+            result['reasonAvailable']='reason' in row
+            result['reason']=None if 'reason' in row and row['reason'] is None else choice(row.get('reason'),FAILURE_CODES,'unconfirmed')
+            result['failurePhaseAvailable']='failurePhase' in row
+            result['failurePhase']=None if 'failurePhase' in row and row['failurePhase'] is None else choice(row.get('failurePhase'),('spawn','wait','monitor','drain','cleanup','start'),'unconfirmed')
+            return result
+        def log_safe(value):
+            if type(value) is not dict:return None
+            kinds=('termination','driver-error','source-error','linker-error','resource-error','rust-source-error','checkpoint-failure','unclassified-error-marker')
+            result={'complete':boolean(value.get('complete')),'rawContentPublished':False,'freeTextPublished':False,
+                'bytes':number(value.get('bytes'),integer=True),'lines':number(value.get('lines'),integer=True),
+                'sha256':value.get('sha256') if type(value.get('sha256')) is str and re.fullmatch('[0-9a-f]{64}',value['sha256']) else None,
+                'matchingRecords':number(value.get('matchingRecords'),integer=True),'recordsTruncated':boolean(value.get('recordsTruncated'))}
+            counts=mapping(value.get('diagnosticCounts'))
+            result['diagnosticCounts']={key:number(counts[key],integer=True) for key in kinds if key in counts}
+            records=value.get('records');result['records']=[]
+            for row in records[:16] if type(records) is list else []:
+                if type(row) is not dict:continue
+                item={'line':number(row.get('line'),integer=True),'kind':choice(row.get('kind'),kinds,'other')}
+                if row.get('messageClass') in LOG_CLASSES:item['messageClass']=row['messageClass']
+                if type(row.get('diagnosticCode')) is str and re.fullmatch('E[0-9]{4}',row['diagnosticCode']):item['diagnosticCode']=row['diagnosticCode']
+                if row.get('failureCode') in CHECKPOINT_CODES:
+                    item.update(failureCode=row['failureCode'],phase=choice(row.get('phase'),('replay-validation','transfer-validation','restore-validation','reference-validation','payload-validation','manifest-validation','resource-bound','build-boundary','checkpoint-validation'),'unconfirmed'))
+                result['records'].append(item)
+            if 'errorType' in value:result['errorType']=choice(value['errorType'],ERROR_TYPES+('UnicodeDecodeError','FileNotFoundError'),'unavailable')
+            return result
+        def case_safe(value,spec):
+            label,mode,code,status=spec
+            if type(value) is not dict:return {'case':label,'available':False,'verified':False}
+            harness=mapping(value.get('harness'));counts=mapping(harness.get('counts'));process=mapping(value.get('process'))
+            result={'case':label,'available':True,'verified':case_ok(value,*spec),'mode':choice(value.get('mode'),('positive','negative-control'),'unconfirmed'),
+                'expectedExitCode':number(value.get('expectedExitCode'),integer=True),'expectationSatisfied':boolean(value.get('expectationSatisfied')),
+                'harnessStatus':choice(harness.get('status'),('passed','failed','unavailable'),'unconfirmed'),
+                'completeLog':boolean(harness.get('completeLog')),'runnerFailure':failure_safe(value.get('runnerFailure')),
+                'monitorFailure':monitor_safe(value.get('monitorFailure'))}
+            result['counts']={key:number(counts.get(key),integer=True) for key in ('expectedTests','listedTests','suiteStarts','suiteEnds','testStarts','testEnds','skips','crashes','timeouts','otherFailures','errorLogs','nonzeroProcessExits','unexpectedSubtests','unexpectedTestEnds','unexpectedFailSubtests','unexpectedFailTestEnds')}
+            result['testEndStatuses']={key:number(mapping(counts.get('testEndStatuses')).get(key),integer=True) for key in ('PASS','FAIL')}
+            result['markers']={key:boolean(mapping(harness.get('markers')).get(key)) for key in ('debug','failure')}
+            result['process']={key:boolean(process.get(key)) for key in ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')}
+            result['process']['exitCode']=number(process.get('exitCode'),integer=True,signed=True)
+            result['monitorDiagnostics']=[monitor_safe(row) for row in value.get('monitorDiagnostics',[])[-16:]] if type(value.get('monitorDiagnostics')) is list else []
+            return result
+        def target_ok(value,api):
+            rows=value.get('stages') if type(value) is dict else None
+            required=('configure','effective-config','fresh45-exports',*UPSTREAM_STAGES[:2],*TARGET_STAGES,*UPSTREAM_STAGES[2:])
+            return (api is not None and type(rows) is list and 0<len(rows)<=128 and all(type(row) is dict for row in rows) and
+                tuple(api.STAGES)==TARGET_STAGES and upstream_ok(value,api.upstream_api) and
+                api.proof_complete(mapping(value.get('mozillaTargets')),mapping(value.get('mozilla')),rows) and
+                all(api.stage_complete(row) for row in rows) and
+                all(sum(row.get('stage')==name for row in rows)==1 for name in required) and
+                tuple(row.get('stage') for row in rows if row.get('stage') in required)==required and
+                not any(row.get('stage') in ('full-build','stage-package','native-suite','adhoc-copy','verify-copy','verify-copy-after') or
+                    type(row.get('stage')) is not str or row['stage'].startswith('checkpoint-') for row in rows))
+        def upstream_ok(value,api):
+            rows=value.get('stages') if type(value) is dict else None
+            result=mapping(value.get('mozillaUpstream'))
+            return (api is not None and type(rows) is list and tuple(api.EXTRA_STAGES)==UPSTREAM_STAGES and
+                    value.get('upstreamQualification')=='current-source-upstream-xpcom-manifest-v1' and
+                    result.get('planSHA256')==os.environ.get('UPSTREAM_PLAN_SHA256') and
+                                        api.proof_complete(result,rows) and
+                            all(same_value(api.asset_precondition_evidence(result.get(key)),
+                                {'schema':1,'status':'passed','checkedAssets':6,'failure':None,'inspection':None})
+                                and same_value(result.get(key),api.asset_precondition_evidence(result.get(key)))
+                                for key in ('nativeAssetPrecondition','postNativeAssetPrecondition')))
+        def digest_safe(value):
+            return value if type(value) is str and re.fullmatch('[0-9a-f]{64}',value) else None
+        def file_safe(value):
+            value=mapping(value)
+            return {'bytes':number(value.get('bytes'),integer=True),'sha256':digest_safe(value.get('sha256'))}
+        def projected_stage_safe(row):
+            if type(row) is not dict:return {'stage':'other','complete':None}
+            output=stage_projection(row);output['stage']=safe_stage(row.get('stage'));output['complete']=None
+            output['cleanupFailurePresent']=boolean(row.get('cleanupFailurePresent'))
+            output['cleanupFailureCode']=None if row.get('cleanupFailureCode') is None else choice(row.get('cleanupFailureCode'),tuple(FAILURE_CODES)+('owned-process-cleanup-timeout','cleanup-failure'),'unavailable')
+            return output
+        def case_error_safe(value):
+            return None if value is None else choice(value,tuple(SOURCE_FAILURE_CODES)+tuple(FAILURE_CODES)+tuple(ERROR_TYPES)+('nonzero-exit','runner-failure','exception'),'unavailable')
+        def inventory_diagnostic_safe(result,api):
+            value=mapping(result.get('inventoryDiagnostic'))
+            output={'status':'unavailable','journal':None,'receipt':file_safe(None),'collectionError':None}
+            output['collectionError']=choice(value.get('collectionError'),tuple(ERROR_TYPES)+('Unknown','MachError','ModuleNotFoundError','ImportError','JSONDecodeError'),'unavailable') if value.get('collectionError') is not None else None
+            if api is None or value.get('status')!='observed':return output
+            try:
+                journal=api.inventory_diagnostic(value.get('journal'))
+                raw=(json.dumps(journal,sort_keys=True,indent=2)+'\n').encode()
+                receipt=mapping(value.get('receipt'))
+                if type(receipt.get('bytes')) is not int or receipt['bytes']!=len(raw) or receipt.get('sha256')!=hashlib.sha256(raw).hexdigest():return output
+                output.update(status='observed',journal=journal,receipt=file_safe(receipt))
+            except Exception:
+                output['collectionError']='unavailable'
+            return output
+        def scope_diagnostic_safe(value,api):
+            if type(value) is not dict or api is None:return None
+            actions=mapping(value.get('actions'))
+            kinds=value.get('exceptionTypes')
+            return {'contract':'upstream-xpcom-log-diagnostic-v1',
+                'status':choice(value.get('status'),('observed','rejected','unavailable'),'unavailable'),
+                'reason':choice(value.get('reason'),api.RECEIPT_REASONS,'unavailable') if value.get('reason') is not None else None,
+                'recordsObserved':number(value.get('recordsObserved'),integer=True),
+                'actions':{name:number(actions.get(name),integer=True) for name in api.LOG_ACTIONS},
+                'exceptionTypes':[name for name in api.LOG_EXCEPTION_TYPES if type(kinds) is list and name in kinds],
+                'rawContentPublished':False,'freeTextPublished':False,'productQualification':False}
+
+        def upstream_safe(value,api):
+            result=mapping(value.get('mozillaUpstream'));inventory=mapping(result.get('inventory'))
+            case=mapping(result.get('case'));harness=mapping(case.get('harness'));counts=mapping(harness.get('counts'))
+            whole=mapping(inventory.get('global'));scope=mapping(inventory.get('scope'))
+            keys=('registeredRecords','activeRecords','manifestEnabledRecords','manifestDisabledRecords',
+                  'excludedByDefaultFilters','uniqueIds','uniqueEnabledIds','uniqueFiles','expectedFailureRecords')
+            project=lambda obj:{key:number(obj.get(key),integer=True) for key in keys}
+            output={'scope':'xpcom/tests/unit','contract':'current-source-upstream-xpcom-manifest-v1',
+                'verified':upstream_ok(value,api),'status':choice(result.get('status'),('passed','failed'),'unavailable'),
+                'fullUpstreamSuiteExecuted':False,'fullHostQualification':False,'nativeAuthentication':'NOT_TESTED',
+                'globalCoveragePercent':None,'globalInventory':project(whole),'scopeInventory':project(scope),
+                'inventoryStatus':choice(inventory.get('status'),('observed','failed'),'unavailable'),
+                'inventoryDiagnostic':inventory_diagnostic_safe(result,api),
+                'assetPreconditions':{'before':api.asset_precondition_evidence(result.get('nativeAssetPrecondition')) if api is not None else None,
+                    'after':api.asset_precondition_evidence(result.get('postNativeAssetPrecondition')) if api is not None else None},
+                'inventoryPlanSHA256':digest_safe(inventory.get('planSHA256')),
+                'inventoryReceipt':file_safe(result.get('inventoryReceipt')),
+                'globalDump':file_safe(whole.get('dump')),'scopeDump':file_safe(scope.get('dump')),
+                'inventoryTestsExecuted':number(inventory.get('testsExecuted'),integer=True),
+                'inventoryServerProcessesStarted':number(inventory.get('serverProcessesStarted'),integer=True),
+                'harnessStatus':choice(harness.get('status'),('passed','failed','unavailable'),'unavailable'),
+                'completeLog':boolean(harness.get('completeLog')),'harnessReceipt':file_safe(harness),
+                'harnessReceiptReason':choice(harness.get('reason'),api.RECEIPT_REASONS,'unavailable') if api is not None else 'unavailable',
+                'logDiagnostic':scope_diagnostic_safe(harness.get('diagnostic'),api),
+                'consoleLog':log_safe(case.get('consoleLog')),
+                'counts':{key:number(counts.get(key),integer=True) for key in ('selected','executed','passed',
+                    'expectedFailures','unexpectedResults','skipped','crashes','timeouts','errorLogs','unsupported','unattempted')},
+                'process':{key:boolean(mapping(case.get('process')).get(key)) for key in
+                    ('available','exactReaped','groupGone','cleanupClean','monitorFailureAbsent')},
+                'runnerFailure':failure_safe(case.get('runnerFailure')),'monitorFailure':monitor_safe(case.get('monitorFailure')),
+                'monitorFailureObserved':boolean(case.get('monitorFailureObserved')),
+                'inputBindingStable':boolean(case.get('inputBindingStable')),
+                'caseError':case_error_safe(case.get('caseError')),'caughtCode':case_error_safe(case.get('caughtCode')),
+                'caseFailurePhase':choice(case.get('caseFailurePhase'),('setup','source-binding','environment','launch','harness-receipt','post-source-binding'),'unavailable') if case.get('caseFailurePhase') is not None else None,
+                'stages':[projected_stage_safe(row) for row in case.get('stages',[])[:4]] if type(case.get('stages')) is list else [],
+                'subtestStatuses':{key:number(mapping(mapping(counts.get('rawLifecycle')).get('subtestStatuses')).get(key),integer=True) for key in ('PASS','FAIL','SKIP','ERROR','TIMEOUT','ASSERT','PRECONDITION_FAILED','NOTRUN')},
+                'evidenceCollectionFailure':choice(case.get('evidenceCollectionFailure'),ERROR_TYPES,'unavailable') if case.get('evidenceCollectionFailure') is not None else None,
+                'evidenceWriteFailure':choice(case.get('evidenceWriteFailure'),ERROR_TYPES,'unavailable') if case.get('evidenceWriteFailure') is not None else None,
+                'monitorDiagnostics':[monitor_safe(row) for row in case.get('monitorDiagnostics',[])[-16:]] if type(case.get('monitorDiagnostics')) is list else [],
+                'tests':[],'assets':{'binaries':{},'xpcomTypelibGeneratorInput':{**file_safe(mapping(result.get('assets')).get('xpcomTypelib')),'interfacesVerified':boolean(mapping(mapping(result.get('assets')).get('xpcomTypelib')).get('interfacesVerified'))}}}
+            output['process']['exitCode']=number(mapping(case.get('process')).get('exitCode'),integer=True,signed=True)
+            allowed={api.SCOPE+'/'+name for name in api.plan_definition()[0]['tests']} if api is not None else set()
+            tests=harness.get('tests')
+            for row in tests[:45] if type(tests) is list else []:
+                if type(row) is dict and row.get('id') in allowed:
+                    output['tests'].append({'id':row['id'],'expected':choice(row.get('expected'),('PASS','FAIL','SKIP'),'unavailable'),
+                        'actual':choice(row.get('actual'),('PASS','FAIL','SKIP','CRASH','TIMEOUT','ERROR','ASSERT','PRECONDITION_FAILED','OK'),'unavailable'),
+                        'satisfied':boolean(row.get('satisfied'))})
+            binaries=mapping(mapping(result.get('assets')).get('binaries'))
+            for label in ('TestArguments','TestBlockingProcess','TestPRIntN','TestQuickReturn','TestUnicodeArguments','plugin-container'):
+                item=mapping(binaries.get(label));output['assets']['binaries'][label]={**file_safe(item),
+                    'filetype':number(item.get('filetype'),integer=True),'uuid':item.get('uuid') if type(item.get('uuid')) is str and re.fullmatch('[0-9a-f]{32}',item['uuid']) else None,
+                    'sections':number(item.get('sections'),integer=True),'sectionsSHA256':digest_safe(item.get('sectionsSHA256'))}
+            total=number(whole.get('manifestEnabledRecords'),integer=True);executed=number(counts.get('executed'),integer=True)
+            output['unattemptedGlobalManifestEnabledRecords']=(total-executed if inventory.get('status')=='observed' and
+                harness.get('completeLog') is True and total is not None and executed is not None and total>=executed else None)
+            return output
+
+        def load_source_proof(helper):
+            global SOURCE_FAILURE_CODES,EXPECTED_BUDGET,SDK_PIN
+            pins=decode(os.environ['QA_SOURCE_PINS']);need(type(pins) is dict and set(pins)==set(SOURCE_NAMES),'source-pin')
+            sources={}
+            for name in SOURCE_NAMES:
+                expected=pins[name];need(type(expected) is str and re.fullmatch('[0-9a-f]{64}',expected) is not None,'source-pin')
+                raw=read_fixed(helper/name,1024**2)
+                need(hashlib.sha256(raw).hexdigest()==expected,'source-pin');sources[name]=raw
+            for name,key in (('mozilla_target_build.py','TARGET_HELPER_SHA256'),('pipeline.py','PIPELINE_SHA256'),
+                             ('mozilla_upstream.py','UPSTREAM_HELPER_SHA256'),('mozilla-upstream.json','UPSTREAM_PLAN_SHA256'),
+                             ('sdk_source-20261031.json','SDK_SOURCE_SHA256'),('fresh_job_origin.py','ORIGIN_HELPER_SHA256'),
+                             ('fresh45.py','FRESH_HELPER_SHA256')):
+                need(pins[name]==os.environ.get(key),'source-pin')
+            codes=set()
+            for name,raw in sources.items():
+                if not name.endswith('.py'):continue
+                for node in ast.walk(ast.parse(raw)):
+                    if isinstance(node,ast.Constant) and type(node.value) is str and re.fullmatch('(fresh|mozilla|owned)-[a-z0-9-]{1,90}',node.value):codes.add(node.value)
+            need(len(codes)<=2048,'source-pin');SOURCE_FAILURE_CODES=frozenset(codes)
+            def module(name,file):
+                result=types.ModuleType(name);result.__file__=str(helper/file)
+                exec(compile(sources[file],file,'exec'),result.__dict__);return result
+            target=module('qa_target_proof','mozilla_target_build.py')
+            upstream=module('qa_upstream_proof','mozilla_upstream.py')
+            timing=module('qa_fresh_time','consumer_time.py')
+            need(upstream.plan_definition()[1]==os.environ['UPSTREAM_PLAN_SHA256'],'source-pin')
+            plan=decode(sources['plan.json']);checksum=hashlib.sha256(sources['plan.json']).hexdigest()
+            EXPECTED_BUDGET=timing.select_fresh45_time(plan,checksum,enabled=True)['evidence']
+            sdk_module=module('qa_sdk_source_proof','sdk_source.py')
+            specification=sdk_module.load_sdk_source(helper/'plan.json',helper/'sdk_source-20261031.json')
+            pin=mapping(specification.get('pin'))
+            SDK_PIN={key:pin.get(key) for key in ('artifact','run','zipSHA256','tarSHA256')}
+            SDK_PIN['producerJob']=specification.get('producerJob')
+            SDK_PIN['producerRef']=specification.get('producerRef')
+            SDK_PIN['exactProfile']=specification.get('exactProfile')
+            need(SDK_PIN['producerRef']=='032085d9c0176b68d405fb7d3297629df6c1a971','source-pin')
+            need(all(type(SDK_PIN.get(key)) is int and SDK_PIN[key]>0 for key in ('artifact','run','producerJob')) and
+                all(type(SDK_PIN.get(key)) is str and re.fullmatch('[0-9a-f]{64}',SDK_PIN[key]) for key in ('zipSHA256','tarSHA256')),'source-pin')
+            target.upstream_api=upstream
+            return target
+        def persisted_failure(task):
+            try:
+                parent=task.stat()
+                need(task.is_absolute() and task.resolve()==task and stat.S_ISDIR(parent.st_mode) and parent.st_uid==os.geteuid(),'binding')
+                try:
+                    row=decode(read_fixed(task/'first-failure.json',65536))
+                except FileNotFoundError:
+                    need(identity(parent)==identity(task.stat()),'binding')
+                    try:(task/'first-failure.json').lstat()
+                    except FileNotFoundError:
+                        need(identity(parent)==identity(task.stat()),'binding')
+                        return 'absent',None
+                    return 'unconfirmed',None
+                need(type(row) is dict and type(row.get('stage')) is str and type(row.get('code')) is str and number(row.get('elapsedSeconds')) is not None,'receipt')
+                return 'observed',failure_safe(row)
+            except BaseException:return 'unconfirmed',None
+
+
+        def clock_proof(task,before=None):
+            fields=[];raws={}
+            for name in ('started-monotonic','started','job-origin.json'):
+                path=task/name;bound=identity(path.lstat());raw=read_fixed(path,4096)
+                need(bound==identity(path.lstat()),'clock');fields.append((raw,bound));raws[name]=raw
+            origin=float(raws['started-monotonic']);started=float(raws['started']);now=time.monotonic()
+            need(math.isfinite(origin) and origin>0 and origin<=now<origin+345*60 and math.isfinite(started) and started>0,'clock')
+            receipt=decode(raws['job-origin.json'])
+            keys={'schema','profile','repository','run','attempt','head','ref','event','job','jobName','startedAt',
+                  'platformMinutes','workDeadlineMinutes','clockResetAllowed'}
+            need(type(receipt) is dict and set(receipt)==keys and integer(receipt.get('schema'),1) and
+                receipt.get('profile')=='fresh-firefox45-diagnostics-job-origin-20261029-v1' and
+                receipt.get('repository')==os.environ.get('GITHUB_REPOSITORY')=='Floorp-Projects/Floorp-Runtime' and
+                type(receipt.get('run')) is int and str(receipt['run'])==os.environ.get('GITHUB_RUN_ID') and
+                integer(receipt.get('attempt'),1) and receipt.get('head')==os.environ.get('GITHUB_SHA') and
+                receipt.get('ref')==os.environ.get('GITHUB_REF')=='refs/heads/b/qa-fresh45-diagnostics-20261029' and
+                receipt.get('event')=='push' and type(receipt.get('job')) is int and receipt['job']>0 and
+                receipt.get('jobName')=='fresh-firefox45' and integer(receipt.get('platformMinutes'),360) and
+                integer(receipt.get('workDeadlineMinutes'),345) and receipt.get('clockResetAllowed') is False and
+                type(receipt.get('startedAt')) is str and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z',receipt['startedAt']) is not None,'clock')
+            timestamp=datetime.datetime.fromisoformat(receipt['startedAt'].replace('Z','+00:00')).timestamp()
+            need(started==timestamp,'clock')
+            current=tuple(fields);need(before is None or current==before,'clock')
+            return current
+
+
+        def emit_final(public, qualified, task, before, value, api):
+            """Output is a candidate receipt: only this verifier's natural zero can qualify it."""
+            evidence=decode(json.dumps(public,allow_nan=False).encode())
+            qualified=qualified is True
+            evidence.update(terminalVerifierExitZeroRequired=True,stdoutAloneQualifies=False,
+                            postEmitStateVerified=None,postEmitClockVerified=None)
+            primary=evidence.get('firstFailure');monitor=evidence.get('monitorFailure')
+
+            def reject(code):
+                nonlocal qualified
+                qualified=False
+                evidence.update(status='failed',qualification=None,upstreamQualification=None,
+                    upstreamProofVerified=False,targetProofVerified=False,postEmitStateVerified=False)
+                if evidence.get('finalizationFailureCode') is None:evidence['finalizationFailureCode']=code
+
+            def remember(view):
+                nonlocal primary,monitor
+                if type(view) is not dict:return
+                if view.get('firstFailure') is not None:
+                    if primary is None:
+                        primary=failure_safe(view['firstFailure'])
+                        evidence.update(firstFailure=primary,firstFailureAvailable=True,firstFailureSource='post-emit-summary')
+                    reject('summary-first-failure')
+                if view.get('monitorFailure') is not None:
+                    if monitor is None:monitor=monitor_safe(view['monitorFailure'])
+                    evidence.update(monitorFailure=monitor,monitorFailureAvailable=True,postEmitMonitorFailureObserved=True)
+                    reject('monitor-failure')
+
+            def postcheck():
+                nonlocal primary
+                # Preserve the first already observed cause even if a callback clears a file or mapping.
+                remember(value)
+                if task is None or before is None:
+                    reject('final-state-unconfirmed');return
+                try:
+                    clock_proof(task,before);evidence['postEmitClockVerified']=True
+                except BaseException:
+                    evidence['postEmitClockVerified']=False
+                    evidence['clockAfterProjectionVerified']=False
+                    reject('clock')
+                try:
+                    status,persisted=persisted_failure(task)
+                    evidence['postEmitPersistedFirstFailureStatus']=status
+                    if status!='absent':
+                        if evidence.get('persistedFirstFailureStatus')!='observed':
+                            evidence.update(persistedFirstFailureStatus=status,persistedFirstFailure=persisted)
+                        if primary is None and persisted is not None:
+                            primary=persisted
+                            evidence.update(firstFailure=primary,firstFailureAvailable=True,firstFailureSource='post-emit-persisted')
+                        reject('persisted-first-failure')
+                    saved=decode(read_fixed(task/'summary.json',16*1024**2))
+                    remember(saved)
+                    if not same_value(saved,value):reject('summary-changed')
+                    if qualified and not (os.environ.get('PIPELINE_OUTCOME')=='success' and final_ok(saved) and target_ok(saved,api)):
+                        reject('proof')
+                    # The proof/readback itself is still work under the original clock.
+                    clock_proof(task,before)
+                except BaseException as error:
+                    if isinstance(error,Unconfirmed) and str(error)=='clock':
+                        evidence['postEmitClockVerified']=False;evidence['clockAfterProjectionVerified']=False
+                        reject('clock')
+                    else:reject('final-state-unconfirmed')
+                evidence['firstFailure'],evidence['monitorFailure']=primary,monitor
+
+            try:
+                text=json.dumps(evidence,allow_nan=False)
+                need(len(text.encode())<=1024**2,'receipt')
+                print(text,flush=True)
+            except BaseException:reject('emit')
+            finally:
+                try:postcheck()
+                except BaseException:reject('final-state-unconfirmed')
+            if not qualified:
+                # One bounded repair record; never retry toward success or overwrite the primary.
+                evidence.update(status='failed',qualification=None,upstreamQualification=None,
+                    upstreamProofVerified=False,targetProofVerified=False,postEmitStateVerified=False,
+                    firstFailure=primary,monitorFailure=monitor)
+                try:
+                    text=json.dumps(evidence,allow_nan=False)
+                    if len(text.encode())>1024**2:
+                        text=json.dumps({'role':'fresh-firefox45','status':'failed','qualification':None,
+                            'finalizationFailureCode':'evidence-size','terminalVerifierExitZeroRequired':True,
+                            'stdoutAloneQualifies':False,'firstFailure':primary,'monitorFailure':monitor},allow_nan=False)
+                    print(text,flush=True)
+                except BaseException:pass
+            # No further I/O or independent clock sample on the success path.
+            return qualified,evidence
+
+
+        public={'role':'fresh-firefox45','status':'failed','qualification':None,'freshFirefox45':None,'checkpointUsed':False,
+            'existingArtifact':None,'newArtifactUploads':None,'diagnosticArtifactPlanned':True,'fullHostXUL':'NOT_TESTED','fullHostQualification':False,
+            'stagePackage':'NOT_TESTED','nativeAuthentication':'NOT_TESTED','productQualification':False,
+            'rawSummaryPublished':False,'rawLogContentPublished':False,'firstFailure':None,'firstFailureAvailable':False,
+            'monitorFailure':None,'monitorFailureAvailable':False,'persistedFirstFailure':None,'persistedFirstFailureStatus':'unconfirmed',
+            'sourcePinsVerified':False,'targetProofVerified':None,'upstreamProofVerified':None,'upstreamQualification':None,'upstream':None,'upstreamStages':[],'upstreamStageLogs':{},'freshStages':[],'freshStageLogs':{},'mozillaCases':[],'targetStages':[],'targetStageLogs':{}}
+        passed=False
+        clock_before=None
+        try:
+            task=Path(os.environ['TASK_ROOT']).resolve();helper=(Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo').resolve()
+            sys.path.insert(0,str(helper))
+            from helper_import_preflight import runner_failure,monitor_projection,stage_projection,number,choice,FAILURE_CODES,ERROR_TYPES
+            from failure_excerpt import PATTERNS,_checkpoint_codes
+            LOG_CLASSES=tuple(row[1] for row in PATTERNS);CHECKPOINT_CODES=_checkpoint_codes()
+            try:
+                api=load_source_proof(helper);public['sourcePinsVerified']=True
+            finally:
+                persisted_status,persisted=persisted_failure(task)
+                public.update(persistedFirstFailure=persisted,persistedFirstFailureStatus=persisted_status,
+                    firstFailure=persisted,firstFailureAvailable=persisted_status=='observed',
+                    firstFailureSource='persisted' if persisted_status=='observed' else 'unconfirmed')
+            try:preflight=decode(read_fixed(task/'monitor-preflight.json',2*1024**2))
+            except BaseException:preflight={}
+            public.update(preflightFirstFailure=failure_safe(mapping(preflight).get('firstFailure')),
+                preflightMonitorFailure=monitor_safe(mapping(preflight).get('monitorFailure')))
+            public['preflightMonitorDiagnostics']=[monitor_safe(row) for row in mapping(preflight).get('monitorDiagnostics',[])[-16:]] if type(mapping(preflight).get('monitorDiagnostics')) is list else []
+            public['upstreamExecution']=api.upstream_api.execution_ledger(None)
+            clock_before=clock_proof(task);public['clockBeforeProjectionVerified']=True
+            value=decode(read_fixed(task/'summary.json',16*1024**2));need(type(value) is dict,'summary')
+            public['upstreamExecution']=api.upstream_api.execution_ledger(value.get('mozillaUpstream'))
+            public.update(summaryFirstFailureAvailable='firstFailure' in value,
+                monitorFailureAvailable='monitorFailure' in value,monitorFailure=monitor_safe(value.get('monitorFailure')),
+                freshFirefox45=boolean(value.get('freshFirefox45')))
+            if 'firstFailure' in value:
+                public['summaryFirstFailure']=failure_safe(value['firstFailure'])
+                if persisted_status!='observed':
+                    public.update(firstFailure=public['summaryFirstFailure'],firstFailureAvailable=True,firstFailureSource='summary')
+            public['monitorDiagnostics']=[monitor_safe(row) for row in value.get('monitorDiagnostics',[])[-16:]] if type(value.get('monitorDiagnostics')) is list else []
+            public['upstreamProofVerified']=upstream_ok(value,api.upstream_api)
+            public['targetProofVerified']=target_ok(value,api)
+            sdk_verified=sdk_ok(value);time_verified=time_budget_ok(value);qa_verified=preflight_ok(value)
+            outcome=os.environ.get('PIPELINE_OUTCOME')=='success'
+            passed=(persisted_status=='absent' and outcome and final_ok(value) and public['targetProofVerified'] is True)
+            public['upstream']=upstream_safe(value,api.upstream_api)
+            public['upstreamQualification']='current-source-upstream-xpcom-manifest-v1' if passed else None
+            mozilla=mapping(value.get('mozilla'));cases=mozilla.get('cases');cases=cases if type(cases) is list else []
+            public['mozillaCases']=[case_safe(cases[i] if i<len(cases) else None,spec) for i,spec in enumerate(CASE_SPECS)]
+            rows=value.get('stages');rows=rows if type(rows) is list else []
+            public['targetStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage') in TARGET_STAGES]
+            public['upstreamStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage') in UPSTREAM_STAGES]
+            public['freshStages']=[stage_safe(row,api) for row in rows if type(row) is dict and row.get('stage') in ('configure','effective-config','fresh45-exports')]
+            public['allStageCount']=len(rows);public['allStagesComplete']=all(api.stage_complete(row) for row in rows) if rows and all(type(row) is dict for row in rows) else None
+            logs=mapping(value.get('targetStageLogs'))
+            public['targetStageLogs']={name:log_safe(logs.get(name)) for name in TARGET_STAGES}
+            public['upstreamStageLogs']={name:log_safe(logs.get(name)) for name in UPSTREAM_STAGES}
+            public['freshStageLogs']={name:log_safe(logs.get(name)) for name in ('configure','effective-config','fresh45-exports')}
+            public.update(status='passed' if passed else 'failed',qualification='fresh-job-current-source-upstream-xpcom-v1' if passed else None,
+                pipelineStepSucceeded=outcome,preflightVerified=qa_verified,sdkSourceVerified=sdk_verified,
+                executionTimeBudgetVerified=time_verified,executionTimeProfile='fresh-firefox45-shared-job-deadline-v1' if time_verified else None,
+                sharedWorkDeadlineMinutes=345 if time_verified else None,nominalCleanupReserveMinutes=15 if time_verified else None,
+                sdkArtifact=SDK_PIN['artifact'] if sdk_verified else None,sdkSourceRun=SDK_PIN['run'] if sdk_verified else None,
+                sdkProducerJob=SDK_PIN['producerJob'] if sdk_verified else None,sdkSourceSHA256=os.environ['SDK_SOURCE_SHA256'] if sdk_verified else None)
+
+        except BaseException as error:
+            passed=False;public.update(status='failed',qualification=None,upstreamQualification=None,upstreamProofVerified=False,targetProofVerified=False)
+            public['evidenceFailureCode']=str(error) if isinstance(error,Unconfirmed) and str(error) in ('binding','receipt','source-pin','summary','clock') else 'evidence-unavailable'
+        finally:
+            if clock_before is not None:
+                try:
+                    clock_proof(task,clock_before);public['clockAfterProjectionVerified']=True
+                except BaseException:
+                    passed=False;public.update(status='failed',qualification=None,upstreamQualification=None,upstreamProofVerified=False,targetProofVerified=False,clockAfterProjectionVerified=False,evidenceFailureCode='clock')
+            passed,terminal_public=emit_final(public,passed,globals().get('task'),clock_before,globals().get('value'),globals().get('api'))
+        try:
+            export=Path(os.environ['QA_DIAGNOSTIC_EXPORT'])
+            need(export.is_absolute() and export.parent==Path(os.environ['RUNNER_TEMP']).resolve(),'binding')
+            payload=(json.dumps({'contract':'fresh45-diagnostic-artifact-v1','diagnosticOnly':True,
+                'productQualification':False,'qualification':None,'verifierExitZeroRequired':True,
+                'projection':terminal_public},allow_nan=False,sort_keys=True)+'\n').encode()
+            need(len(payload)<=2*1024**2,'receipt')
+            fd=os.open(export,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,'wb') as output:
+                output.write(payload);output.flush();os.fsync(output.fileno())
+            need(read_fixed(export,2*1024**2)==payload,'receipt')
+            if clock_before is not None:clock_proof(task,clock_before)
+        except BaseException:
+            passed=False
+            print('{"diagnosticArtifactWriteFailed":true,"productQualification":false}',flush=True)
+        raise SystemExit(0 if passed else 1)
+
+        PYCODE
+    - name: Retain only the sanitized diagnostic projection even after verification failure
+      if: always()
+      timeout-minutes: 2
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: fresh45-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/floorp-qa-public-${{ github.run_id }}-${{ github.run_attempt }}.json
+        if-no-files-found: error
+        retention-days: 14
+        overwrite: false
+        include-hidden-files: false
+
+    - name: Encrypt only fixed diagnostics even after pipeline or verifier failure
+      id: encrypt_diagnostics
+      if: ${{ always() && steps.origin.outcome == 'success' && steps.diagnostic_probe.outcome == 'success' }}
+      timeout-minutes: 3
+      shell: bash
+      run: |
+        set -euo pipefail
+        "$TASK_PYTHON" - <<'DIAGNOSTIC_PINS'
+        import hashlib,json,os,pathlib
+        helper=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'fixture/tools/qa/native-nonpgo'
+        pins=json.loads(os.environ['QA_SOURCE_PINS'])
+        for name in ('diagnostic_archive.py','diagnostic-recipient-20261029.pem',
+                     'firefox_target_observer.py','fresh_job_origin.py','qa_core.py'):
+            path=helper/name
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest()!=pins[name]:
+                raise SystemExit('diagnostic-source-pin')
+        if pins['diagnostic-recipient-20261029.pem']!=os.environ['DIAGNOSTIC_RECIPIENT_SHA256']:
+            raise SystemExit('diagnostic-recipient-pin')
+        DIAGNOSTIC_PINS
+        "$TASK_PYTHON" fixture/tools/qa/native-nonpgo/diagnostic_archive.py --task "$TASK_ROOT" --certificate "$GITHUB_WORKSPACE/fixture/tools/qa/native-nonpgo/diagnostic-recipient-20261029.pem" --certificate-sha256 "$DIAGNOSTIC_RECIPIENT_SHA256" --openssl "$DIAGNOSTIC_OPENSSL" --output "$RUNNER_TEMP/floorp-qa-private-${{ github.run_id }}-${{ github.run_attempt }}.cms"
+    - name: Retain encrypted diagnostic bytes without any plaintext or SDK files
+      if: ${{ always() && steps.encrypt_diagnostics.outcome == 'success' }}
+      timeout-minutes: 2
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: fresh45-encrypted-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/floorp-qa-private-${{ github.run_id }}-${{ github.run_attempt }}.cms
+        if-no-files-found: error
+        retention-days: 14
+        overwrite: false
+        include-hidden-files: false
