@@ -1,0 +1,158 @@
+name: QA image-bound exact SDK 20261030
+'on':
+  push:
+    branches: [b/qa-handoff-20261026]
+    paths: [.github/workflows/qa-sdk-image-bound-20261030.yml]
+permissions:
+  contents: read
+concurrency:
+  group: qa-sdk-image-bound-20261030
+  cancel-in-progress: false
+jobs:
+  image-bound-sdk:
+    if: ${{ github.repository == 'Floorp-Projects/Floorp-Runtime' && github.ref == 'refs/heads/b/qa-handoff-20261026' && github.event_name == 'push' && github.run_attempt == 1 && github.event.created == false && github.event.before == '57a5825a2c72f80b32e4fa783af2a85ee66dd8b2' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+    - name: Require the recorded initial image-bound push
+      timeout-minutes: 1
+      env:
+        PUSH_CREATED: ${{ github.event.created }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        test "$GITHUB_REF" = refs/heads/b/qa-handoff-20261026
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test "$PUSH_CREATED" = false
+        test "$PUSH_BEFORE" = 57a5825a2c72f80b32e4fa783af2a85ee66dd8b2
+    - name: Checkout only image-bound inputs
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: |
+          .github/workflows/scripts/qa_sdk_archive_probe.py
+          .github/workflows/scripts/qa_sdk_exact_profile.py
+          .github/workflows/scripts/qa-sdk-exact-20261030.json
+          .github/workflows/scripts/qa-sdk-exact-legacy-image-20261030.json
+          .github/workflows/scripts/qa_sdk_image_profile.py
+        sparse-checkout-cone-mode: false
+    - name: Require Xcode 26.6 build 17F113 and SDK 26.5
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        xcode=/Applications/Xcode_26.6.app
+        test -d "$xcode"
+        test ! -L "$xcode"
+        developer="$xcode/Contents/Developer"
+        xcode_version=$(DEVELOPER_DIR="$developer" xcodebuild -version)
+        test "$xcode_version" = $'Xcode 26.6\nBuild version 17F113'
+        version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
+        test "$version" = 26.5
+        SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
+        test "$SDK_PATH" = "$developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
+        test -d "$SDK_PATH"
+        echo "SDK_PATH=$SDK_PATH" >> "$GITHUB_ENV"
+    - name: Select the exact image profile and verify every archive identity
+      timeout-minutes: 8
+      shell: bash
+      run: |
+        set -euo pipefail
+        task_root="$RUNNER_TEMP/floorp-sdk-image-bound-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -m 700 "$task_root"
+        TASK_PYTHON=/usr/bin/python3
+        test -x "$TASK_PYTHON"
+        "$TASK_PYTHON" - <<'PROVENANCE'
+        import hashlib,json,os,pathlib,platform,sys
+        assert sys.platform == 'darwin' and platform.machine() == 'arm64'
+        pins={'qa_sdk_archive_probe.py': 'c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900', 'qa_sdk_exact_profile.py': 'eb1adb4cd781a8867193e599e9416051f28c43249c4845d48e9070d1cfa3e270', 'qa-sdk-exact-20261030.json': '184d797d742f64c0beeb65dfe605b881f578a30a0b6b7a017c43cccac5fd2d1b', 'qa-sdk-exact-legacy-image-20261030.json': '660193da5a1dc9b3ae7c52feb234e58881b2dedeea50ea0bdb0648e8d32cbd04', 'qa_sdk_image_profile.py': 'f57057e94c139ff7c408792b202202f3427c543bf8c8f4a831667e749e8aed62'}
+        scripts=pathlib.Path('.github/workflows/scripts')
+        for name,expected in pins.items():
+            path=scripts/name
+            assert path.is_file() and not path.is_symlink()
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == expected
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-image-bound-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        context={key:os.environ.get(key) for key in ('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion')}
+        context.update(contract='sdk-image-bound-producer-v3',pythonVersion=platform.python_version(),
+            machine=platform.machine(),macOSVersion=platform.mac_ver()[0],xcodeVersion='26.6',
+            xcodeBuild='17F113',sdkVersion='26.5',inputSHA256=pins,
+            admission='PENDING_API_RECONCILIATION',loaderAdmitted=False,
+            freshFirefox45Executed=False,productQualification=False)
+        with (root/'producer.json').open('x') as out:out.write(json.dumps(context,sort_keys=True)+'\n')
+        sys.path.insert(0,str(scripts.resolve()))
+        import qa_sdk_image_profile as image
+        selection,_=image.select_profile({key:context[key] for key in (*image.CONTEXT,'ImageVersion')},scripts)
+        with (root/'profile-selection.json').open('x') as out:out.write(json.dumps(selection,sort_keys=True)+'\n')
+        PROVENANCE
+        profile_name=$("$TASK_PYTHON" - "$task_root/profile-selection.json" <<'SELECTED'
+        import json,sys
+        with open(sys.argv[1]) as stream:print(json.load(stream)['profileName'])
+        SELECTED
+        )
+        tar -czf "$task_root/macos_sdk.original.tar.gz" -C "$SDK_PATH" .
+        "$TASK_PYTHON" .github/workflows/scripts/qa_sdk_exact_profile.py \
+          --archive "$task_root/macos_sdk.original.tar.gz" \
+          --normalized-output "$task_root/macos_sdk.tar.gz" \
+          --profile ".github/workflows/scripts/$profile_name" \
+          --output "$task_root/exact-profile-report.json"
+        "$TASK_PYTHON" - "$task_root" <<'BINDING'
+        import json,pathlib,sys
+        root=pathlib.Path(sys.argv[1])
+        selected=json.loads((root/'profile-selection.json').read_text())
+        report=json.loads((root/'exact-profile-report.json').read_text())
+        assert selected['profileSHA256']==report['profileSHA256'] and report['status']=='exact-match'
+        assert report['loaderAdmitted'] is False and report['productQualification'] is False
+        BINDING
+    - name: Preserve hash-only image-bound evidence
+      if: always()
+      timeout-minutes: 2
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: sdk-image-bound-report-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          ${{ runner.temp }}/floorp-sdk-image-bound-${{ github.run_id }}-${{ github.run_attempt }}/exact-profile-report.json
+          ${{ runner.temp }}/floorp-sdk-image-bound-${{ github.run_id }}-${{ github.run_attempt }}/producer.json
+          ${{ runner.temp }}/floorp-sdk-image-bound-${{ github.run_id }}-${{ github.run_attempt }}/profile-selection.json
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Preserve image-bound SDK pending external API reconciliation
+      if: ${{ success() }}
+      timeout-minutes: 3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: macos-sdk-image-bound-v3
+        path: ${{ runner.temp }}/floorp-sdk-image-bound-${{ github.run_id }}-${{ github.run_attempt }}/macos_sdk.tar.gz
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Clean only owned image-bound files
+      if: always()
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        /usr/bin/python3 - <<'CLEANUP'
+        import json,os,pathlib,stat
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-image-bound-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        if root.exists() or root.is_symlink():
+            before=root.lstat()
+            assert stat.S_ISDIR(before.st_mode) and before.st_uid==os.geteuid()
+            paths=list(root.iterdir())
+            assert set(p.name for p in paths)<=set(('macos_sdk.original.tar.gz','macos_sdk.tar.gz','exact-profile-report.json','producer.json','profile-selection.json'))
+            for path in paths:
+                state=path.lstat()
+                assert stat.S_ISREG(state.st_mode) and state.st_uid==os.geteuid() and state.st_nlink==1
+            for path in paths:path.unlink()
+            root.rmdir()
+            result='clean'
+        else:result='not-created'
+        print(json.dumps({'ownedSDKImageBoundCleanup':result,'loaderAdmitted':False}))
+        CLEANUP

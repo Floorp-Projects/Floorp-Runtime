@@ -1,0 +1,144 @@
+name: QA SDK archive forensic diagnostic 20261030
+'on':
+  push:
+    branches:
+    - b/qa-handoff-20261026
+    paths:
+    - .github/workflows/qa-sdk-archive-diagnostic-20261030.yml
+permissions:
+  contents: read
+concurrency:
+  group: qa-sdk-archive-diagnostic-20261030
+  cancel-in-progress: false
+jobs:
+  sdk-archive-diagnostic:
+    if: ${{ github.repository == 'Floorp-Projects/Floorp-Runtime' && github.ref == 'refs/heads/b/qa-handoff-20261026' && github.event_name
+      == 'push' && github.run_attempt == 1 && github.event.created == false && github.event.before == 'e0765995c3d6ad4d122bd9b2eed07734b0a635ef'
+      }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+    - name: Require the recorded initial diagnostic push
+      timeout-minutes: 1
+      env:
+        PUSH_CREATED: ${{ github.event.created }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$GITHUB_REPOSITORY" = Floorp-Projects/Floorp-Runtime
+        test "$GITHUB_REF" = refs/heads/b/qa-handoff-20261026
+        test "$GITHUB_EVENT_NAME" = push
+        test "$GITHUB_RUN_ATTEMPT" = 1
+        test "$PUSH_CREATED" = false
+        test "$PUSH_BEFORE" = e0765995c3d6ad4d122bd9b2eed07734b0a635ef
+    - name: Checkout only the pinned forensic reader
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: .github/workflows/scripts/qa_sdk_archive_probe.py
+        sparse-checkout-cone-mode: false
+    - name: Select the original Xcode 26.6 build 17F113 SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        xcode=/Applications/Xcode_26.6.app
+        test -d "$xcode"
+        test ! -L "$xcode"
+        developer="$xcode/Contents/Developer"
+        xcode_version=$(DEVELOPER_DIR="$developer" xcodebuild -version)
+        test "$xcode_version" = $'Xcode 26.6\nBuild version 17F113'
+        version=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-version)
+        test "$version" = 26.5
+        SDK_PATH=$(DEVELOPER_DIR="$developer" xcrun --sdk macosx --show-sdk-path)
+        test "$SDK_PATH" = "$developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
+        test -d "$SDK_PATH"
+        printf '{"xcodeVersion":"26.6","xcodeBuild":"17F113","sdkVersion":"26.5"}\n'
+        echo "SDK_PATH=$SDK_PATH" >> "$GITHUB_ENV"
+    - name: Measure complete archive content and header diagnostics
+      timeout-minutes: 8
+      shell: bash
+      run: |
+        set -euo pipefail
+        task_root="$RUNNER_TEMP/floorp-sdk-archive-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        mkdir -m 700 "$task_root"
+        echo "SDK_DIAGNOSTIC_ROOT=$task_root" >> "$GITHUB_ENV"
+        TASK_PYTHON=/usr/bin/python3
+        test -x "$TASK_PYTHON"
+        "$TASK_PYTHON" - <<'PROVENANCE'
+        import hashlib,json,os,pathlib,platform,sys
+        assert sys.platform == 'darwin' and platform.machine() == 'arm64'
+        script=pathlib.Path('.github/workflows/scripts/qa_sdk_archive_probe.py')
+        assert hashlib.sha256(script.read_bytes()).hexdigest() == 'c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900'
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-archive-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        context={key:os.environ.get(key) for key in ('GITHUB_REPOSITORY','GITHUB_REF','GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion')}
+        context.update(contract='sdk-archive-producer-v1',pythonVersion=platform.python_version(),
+            machine=platform.machine(),macOSVersion=platform.mac_ver()[0],xcodeVersion='26.6',
+            xcodeBuild='17F113',sdkVersion='26.5',scriptSHA256='c2517ba6d154293b5aa7a5469f291c3b9fe5e8df479724ff6be311887852e900',admission='NOT_ADMITTED',
+            freshFirefox45Executed=False,productQualification=False)
+        with (root/'producer.json').open('x') as out:out.write(json.dumps(context,sort_keys=True)+'\n')
+        PROVENANCE
+        tar -czf "$task_root/macos_sdk.tar.gz" -C "$SDK_PATH" .
+        "$TASK_PYTHON" .github/workflows/scripts/qa_sdk_archive_probe.py \
+          --archive "$task_root/macos_sdk.tar.gz" --output "$task_root/archive-report.json"
+    - name: Preserve hash-only forensic report
+      if: always()
+      timeout-minutes: 2
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: sdk-archive-report-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |-
+          ${{ runner.temp }}/floorp-sdk-archive-${{ github.run_id }}-${{ github.run_attempt }}/archive-report.json
+          ${{ runner.temp }}/floorp-sdk-archive-${{ github.run_id }}-${{ github.run_attempt }}/producer.json
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Retain candidate SDK for offline forensics only
+      timeout-minutes: 3
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: sdk-forensic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/floorp-sdk-archive-${{ github.run_id }}-${{ github.run_attempt }}/macos_sdk.tar.gz
+        retention-days: 7
+        if-no-files-found: error
+        overwrite: false
+        include-hidden-files: false
+    - name: Keep the original raw identity gate
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        /usr/bin/python3 - <<'GATE'
+        import json,os,pathlib
+        report=json.loads((pathlib.Path(os.environ['SDK_DIAGNOSTIC_ROOT'])/'archive-report.json').read_text())
+        assert report['contract']=='sdk-archive-diagnostic-v1' and report['status']=='inspected'
+        assert report['admission']=='NOT_ADMITTED' and report['productQualification'] is False
+        assert report['originalRawMatched'] is True and report['originalTreeMatched'] is True and report['sdkVersionMatched'] is True
+        print('Original raw archive and full SDK tree matched; diagnostic input remains NOT_ADMITTED.')
+        GATE
+    - name: Clean only owned diagnostic files
+      if: always()
+      timeout-minutes: 1
+      shell: bash
+      run: |
+        set -euo pipefail
+        /usr/bin/python3 - <<'CLEANUP'
+        import json,os,pathlib,stat
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/('floorp-sdk-archive-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'])
+        if root.exists() or root.is_symlink():
+            before=root.lstat()
+            assert stat.S_ISDIR(before.st_mode) and before.st_uid==os.geteuid()
+            paths=list(root.iterdir())
+            assert set(p.name for p in paths)<=set(('macos_sdk.tar.gz','archive-report.json','producer.json'))
+            for path in paths:
+                state=path.lstat()
+                assert stat.S_ISREG(state.st_mode) and state.st_uid==os.geteuid() and state.st_nlink==1
+            for path in paths:path.unlink()
+            root.rmdir()
+            result='clean'
+        else:result='not-created'
+        print(json.dumps({'ownedSDKDiagnosticCleanup':result,'sdkAdmitted':False}))
+        CLEANUP
