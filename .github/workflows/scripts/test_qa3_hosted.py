@@ -48,8 +48,7 @@ PHASES = [
     "native-0-assertion-canary",
     "native-1-required",
     "native-1-assertion-canary",
-    "native-2-required",
-    "native-3-required",
+    *[f"native-{index}-required" for index in range(2, 21)],
 ]
 
 
@@ -1867,7 +1866,7 @@ class OriginalConsumerEvidence(unittest.TestCase):
         with mock.patch.object(boundary, "protected", side_effect=lambda p: p):
             rows = boundary.export_after_stop(campaign, False, context())
         self.assertIn("logs/native-3-required.mozlog", {row["path"] for row in rows})
-        self.assertEqual(len(rows), 33)
+        self.assertEqual(len(rows), 101)
         shutil.rmtree(campaign / "export")
         (output / "untrusted-output").write_text("not a permitted native receipt")
         with mock.patch.object(
@@ -2573,6 +2572,7 @@ class HostedMozbaseArchiveShape(unittest.TestCase):
             "testing/mozbase/moz.build",
             "testing/mozbase/setup_development.py",
             "browser/base/content/test/browser-performance/browser.toml",
+            "browser/components/sessionstore/test/browser.toml",
             "browser/components/tabbrowser/test/browser/tabs/browser.toml",
             "xpcom/tests/unit/xpcshell.toml",
         }

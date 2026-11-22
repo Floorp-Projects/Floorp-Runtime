@@ -1,298 +1,667 @@
 {
-  "schemaVersion": 1,
-  "id": "hosted-linux-x64-runtime-l1-expanded-v1",
-  "role": "canonical-debug",
-  "target": "x86_64-pc-linux-gnu",
-  "sourceMaterials": [
-    {
-      "path": "browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
-      "sha256": "1bb1b457fe97d23a3b767fbefe4e9333427a67259255475c11b3ccd888f332dd"
-    },
-    {
-      "path": "browser/base/content/test/browser-performance/browser.toml",
-      "sha256": "f5660f7add0f9a55121c3f5b5f79cf457f6dd76bcf150b8aeb9906ca10b7e639"
-    },
-    {
-      "path": "browser/base/content/test/browser-performance/head.js",
-      "sha256": "1ff3ce994e16eed38a8f10f28cd35056c6afb591b8bf4896c8cd1b89b892c480"
-    },
-    {
-      "path": "xpcom/tests/unit/test_nsIMutableArray.js",
-      "sha256": "14a828e5c0f54aa0561c5995da9e6b3948e99f6f2117a13ef6bb620b9638ff08"
-    },
-    {
-      "path": "xpcom/tests/unit/xpcshell.toml",
-      "sha256": "d832951e54c511b237bed6fa7379689478e49c481a8e81bd00ff2896a59b5643"
-    },
-    {
-      "path": "xpcom/tests/unit/head_xpcom.js",
-      "sha256": "7fbb66d1c184def357c4d7114aedc5d946f0440398891ce796510c25a65f6e95"
-    },
-    {
-      "path": "testing/testsuite-targets.mk",
-      "sha256": "df75c79517255dccbc48b2239837944fa47e663f01989ea32b8dbe5be24632ae"
-    },
-    {
-      "path": "python/mozbuild/mozbuild/action/test_archive.py",
-      "sha256": "fb31d73802a63ee967198f41b45042127e83800524e280a2ee740ef6aac49489"
-    },
-    {
-      "path": "testing/mochitest/runtests.py",
-      "sha256": "ef64091aa96e0a9020fcd2748591202d434f5a0ac3e3b7e009b2cab2cfa665ce"
-    },
-    {
-      "path": "testing/mochitest/mochitest_options.py",
-      "sha256": "23f8afacedbf0165243ab180f1d9e6f3746626aa9f54decc38a3b9f86e6fc4e3"
-    },
-    {
-      "path": "testing/xpcshell/runxpcshelltests.py",
-      "sha256": "10914185bf99c34073bef9fda68a2c2adc16f5b3e576dada2e96c5481fecdd57"
-    },
-    {
-      "path": "testing/xpcshell/xpcshellcommandline.py",
-      "sha256": "15239718d174ebb789662bcb854e3a9f6cd2c85113a089975540defd58a1d1ce"
-    },
-    {
-      "path": "build/buildconfig.py",
-      "sha256": "9d9ff6748ba6529fcc992567053bf2aad7bb9a2802a294cef19cbee2ea778aff"
-    },
-    {
-      "path": ".github/qa/canaries/browser_qa3_assertion.js",
-      "sha256": "ca6be4aba65e4501c3566b396e9f2165b5db609c9f08e3f06f6396991a94f35a"
-    },
-    {
-      "path": ".github/qa/canaries/test_qa3_assertion.js",
-      "sha256": "67951468a7b25d0cdbfc8f722cff0f3ec81eca7280d4496571039943f19cd495"
-    },
-    {
-      "path": "xpcom/geckoprocesstypes_generator/geckoprocesstypes/__init__.py",
-      "sha256": "bbe5bf93cffa23fe0c2677dada5171dcf30c7af6ecf79c84e56a7919d106b210"
-    },
-    {
-      "path": "testing/mozbase/moz.build",
-      "sha256": "3933af2696579503cdff43fb325775fea66658b265cfef81ba4b36db5922384e"
-    },
-    {
-      "path": "testing/mozbase/setup_development.py",
-      "sha256": "68a3571021f640e68638ebc739643dae7401bc51c53c7015aa50274bae18912f"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/browser_pinned_and_hidden_tabs.js",
-      "sha256": "e8f4d091b1b6f99d0851e67f56b0c79c0b0b0bf7fd05b864b7366e3ab05bbf0d"
-    },
-    {
-      "path": "xpcom/tests/unit/test_iniParser.js",
-      "sha256": "b84ddc79e28484c81b3a6a50e4e3a9787f627ab80dd9fbc0ca964d6fee0d50b2"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
-      "sha256": "e91dc6eff4eb87c87db2252a5554f017fbfb39d762815498ab23e301f94757d3"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/head.js",
-      "sha256": "acec32eefad1ba8a91fa6bc826f57a62b1321aed41a941c36db91cb42c4a52a2"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/audio.ogg",
-      "sha256": "b4e9c7a042279e7ed7873aab3e19fae9768a9a378b17e9eff889460836eb44fe"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/dummy_page.html",
-      "sha256": "6af11adcf7fa48aab2632f1b45cae4124905e52e77e881b90b730b931601b6fa"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/file_mediaPlayback.html",
-      "sha256": "d979f978c97ca54e59e35ed3a531f673b89d70d44fdea661f33c737e4543aea4"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/helper_origin_attrs_testing.js",
-      "sha256": "711f5fa658650ec7172ac086b29b71ae4ba4b1ac4a902a63b9681e6c1f36fc8b"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/file_about_srcdoc.html",
-      "sha256": "8690bbfe28b4ef0bf85f18d210165d5e80620afec54c42143fe5c004f27dd7dc"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/browser/tabs/file_reader_mode_article.html",
-      "sha256": "ab2e8a00a5514fa879438161f8dedf7590ee45c63cbe16ce7d360154840559cd"
-    },
-    {
-      "path": "browser/components/tabbrowser/test/TabGroupTestUtils.sys.mjs",
-      "sha256": "e64dc982757bd86321a994947c292b11953d972a3d84dee450db28b5e2a18e45"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser01.ini",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser02.ini",
-      "sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser03.ini",
-      "sha256": "a5338d955b09046ec0b16f3a9625b7955c763aae07dc722e474e6078745f932f"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser04.ini",
-      "sha256": "22933a31d14c159358e136dc969feaac6ee4695630845da5b96833b49e9ae624"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser05.ini",
-      "sha256": "8243c0cb753bf0f8924066c327ad984a5902c36bb406c35b315bcee541a00222"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser06.ini",
-      "sha256": "9975a58ef213adb4d76c79039ce0f3f0aaf1254562a74ba35a8ca647c5549b71"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser07.ini",
-      "sha256": "9c3231118dbcbd6619bf187e076cd0a27b711cf285284a9a17253df408eb0501"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser08.ini",
-      "sha256": "e391f77623174324bcd39f326605c013a9ea34597ecaa4e3cbdad917aa9dfaef"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser09.ini",
-      "sha256": "306392adb0009cad5f4b2aa908802e7d9a49cb9e7b4abd99da60b96f64945759"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser10.ini",
-      "sha256": "12c30423b11e034929a4359dcc67d8f774b09b43023bf97ba850782972be06f3"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser11.ini",
-      "sha256": "a7e1e2d747afa1ebe12432581a01eab9938cf8a84e943d07b128c88e2abc90cd"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser12.ini",
-      "sha256": "3f4ef48be4c20e53a0d8c3c224e7cfd00e9a79b4991415fb0d8c661d1180ac8c"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser13.ini",
-      "sha256": "9e4ce7d5acea4994b938bd5aa5c9ade3990c664810eab98e9454d2537aa1853b"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser14.ini",
-      "sha256": "c782f6013d2d6a4c621077c51b09c127ca4cb936d168465a0ffd4e67f7d2dc49"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser15.ini",
-      "sha256": "00a6d7edf547402dd99bc387d5d94a2df7d615cef0289637494c9ba0c25fa3aa"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser16.ini",
-      "sha256": "393ef1249983ac07fb1588fb8480f3d6d002cc5e3154793f6bc93835188412d7"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser17.ini",
-      "sha256": "e2a7dfe31a759034bdb812aaa3be01b33327ef015cfa87869262a418cee46ffb"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser01-utf8BOM.ini",
-      "sha256": "f1945cd6c19e56b3c1c78943ef5ec18116907a4ca1efc40a57d48ab1db7adfc5"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser02-utf8BOM.ini",
-      "sha256": "b42f2099187886def637d6aa840022266e05cb6c987a9394e708e23cd505eb46"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser03-utf8BOM.ini",
-      "sha256": "dfa943fd41d72e83bb7f3a986ed019d2e77a8c9460597ad25ece4587d97d1bb9"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser04-utf8BOM.ini",
-      "sha256": "cd3bff084ef861af7754da3e0443d4b6106378d72e76fa839a75e0c06f91748a"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser05-utf8BOM.ini",
-      "sha256": "6aca6e337c6052f4ae5e230c743a471d31382d7eb72ec295aefd5a296d8594e1"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser06-utf8BOM.ini",
-      "sha256": "9c8aeeca39eda4bdd0dde5f751e4724a305c57dcb37e1ba8adca335763e55fea"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser07-utf8BOM.ini",
-      "sha256": "1a770a529c6110f1018ff032a2639647635a5868f014135231d5f089a34f49ff"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser08-utf8BOM.ini",
-      "sha256": "f8f2abea1095dfa4aff931d8dae5fc9a1c130247c49f92e8f81d782652191c9a"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser09-utf8BOM.ini",
-      "sha256": "c47a1f5886960a1e4b597f75910826e078d077f1ce1d84d25fff228a62cae7f5"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser10-utf8BOM.ini",
-      "sha256": "f615114ebb5e5e61c40bae8120bbbade1f6b43988d664383ea1471157cf296c4"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser11-utf8BOM.ini",
-      "sha256": "e1a4b505e8c304faf5ba4250344d0bb68d489208e01651101968a9f9434d23dd"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser12-utf8BOM.ini",
-      "sha256": "2aeddedafb0a028096b3e53ca1df6675191e6706d347f88e92bd2439ef45aed8"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser13-utf8BOM.ini",
-      "sha256": "7d0ff3462118a8d2cc9b1cae1b92757f7f3fff72bfd729553e934e5c62b7bf25"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser14-utf8BOM.ini",
-      "sha256": "8bb03348bd2b0afb8f89671c9b44c1a787de03f2fe8aeacf3789505ee817d115"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser15-utf8BOM.ini",
-      "sha256": "b900fb73435005132731b28618ccbb218f5a2a09042c4c1202b05e34cc9f9cab"
-    },
-    {
-      "path": "xpcom/tests/unit/data/iniparser16-utf8BOM.ini",
-      "sha256": "af33008f8c8d73ff4c342aa807dc72cd15d946edc21ba42caa4b7304651daa3f"
-    }
-  ],
-  "selection": [
-    {
-      "suite": "browser-chrome",
-      "id": "browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
-      "manifest": "browser/base/content/test/browser-performance/browser.toml",
-      "archivePath": "mochitest/browser/browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
-      "minimumAssertions": 1,
-      "declaredConditions": {},
-      "requiredNoSkip": true
-    },
-    {
-      "suite": "xpcshell",
-      "id": "xpcom/tests/unit/test_nsIMutableArray.js",
-      "manifest": "xpcom/tests/unit/xpcshell.toml",
-      "archivePath": "xpcshell/tests/xpcom/tests/unit/test_nsIMutableArray.js",
-      "minimumAssertions": 1,
-      "declaredConditions": {},
-      "requiredNoSkip": true
-    },
-    {
-      "suite": "browser-chrome",
-      "id": "browser/components/tabbrowser/test/browser/tabs/browser_pinned_and_hidden_tabs.js",
-      "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
-      "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_pinned_and_hidden_tabs.js",
-      "minimumAssertions": 3,
-      "declaredConditions": {},
-      "requiredNoSkip": true
-    },
-    {
-      "suite": "xpcshell",
-      "id": "xpcom/tests/unit/test_iniParser.js",
-      "manifest": "xpcom/tests/unit/xpcshell.toml",
-      "archivePath": "xpcshell/tests/xpcom/tests/unit/test_iniParser.js",
-      "minimumAssertions": 100,
-      "declaredConditions": {},
-      "requiredNoSkip": true
-    }
-  ],
-  "nativeExecution": "UNVERIFIED",
-  "coldHarnessCLI": "UNVERIFIED",
-  "coldRequirements": "UNVERIFIED",
-  "publicationAuthorized": false
+ "schemaVersion": 1,
+ "id": "hosted-linux-x64-runtime-l1-expanded-v1",
+ "role": "canonical-debug",
+ "target": "x86_64-pc-linux-gnu",
+ "sourceMaterials": [
+  {
+   "path": ".github/qa/canaries/browser_qa3_assertion.js",
+   "sha256": "ca6be4aba65e4501c3566b396e9f2165b5db609c9f08e3f06f6396991a94f35a"
+  },
+  {
+   "path": ".github/qa/canaries/test_qa3_assertion.js",
+   "sha256": "67951468a7b25d0cdbfc8f722cff0f3ec81eca7280d4496571039943f19cd495"
+  },
+  {
+   "path": "browser/base/content/test/browser-performance/browser.toml",
+   "sha256": "f5660f7add0f9a55121c3f5b5f79cf457f6dd76bcf150b8aeb9906ca10b7e639"
+  },
+  {
+   "path": "browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
+   "sha256": "1bb1b457fe97d23a3b767fbefe4e9333427a67259255475c11b3ccd888f332dd"
+  },
+  {
+   "path": "browser/base/content/test/browser-performance/head.js",
+   "sha256": "1ff3ce994e16eed38a8f10f28cd35056c6afb591b8bf4896c8cd1b89b892c480"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser.toml",
+   "sha256": "0a0eea8d38106ba8471bd67d1b5908aa98ee02d8f663d348bc12eca3a75ee59a"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_dynamic_frames.js",
+   "sha256": "4f4753f9191937315dc27ebeac6fcd9a4c71df2b7b9674ef324fcd851a48a6de"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_formdata_format_sample.html",
+   "sha256": "eba226fd106de3b995c8177a76b63361067af5111632640d84e6a0ee27d3b597"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_formdata_sample.html",
+   "sha256": "843d9ea452a53cd56e4b00ebd6c4512ce136b43a59e534ffb22883e3c21d26de"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_formdata_xpath_sample.html",
+   "sha256": "446c9ffea9e1bea5e89cd2d343967b6560898dcef113e78a03f9b502a10c88bf"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_a.html",
+   "sha256": "70f653b68d08eff1dc5625d354a79b16f8479005f6b113e2ced38c150fddab06"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_b.html",
+   "sha256": "f19c45f2e3b95e6efe14814fc02d690d59e929b9632e5bd1aef215618d432ac8"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_c.html",
+   "sha256": "0fa054bade415a8e07e155028a5818b2bc4b4b4cb63a3783a3d971da8a16ac3e"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_c1.html",
+   "sha256": "a730f4223acf1daf595fb8bcd6318d34c517dc4e53bad029ddb1894374d159e1"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_c2.html",
+   "sha256": "7c1814d7e5545d7d2e3a34bc76571e8f9c80ce9c0747ef3812d0b4addb482fb3"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_index.html",
+   "sha256": "555f1982d249d3e8bbbb3b04fdd1f72dead683227f226e9137677916c60b3ca2"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_index2.html",
+   "sha256": "50a2457ffcafb83eabc8a17ed3ba9de5e3b8a71cf1871c3e1091aa33c05bbfef"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frame_history_index_blank.html",
+   "sha256": "ae581cb2b7519151a44713da3318cc33a51ddee88a5c66ffd5e9bd1c31f0ab03"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frametree.js",
+   "sha256": "eb9fa3b260c3ff8bf076eff0a0a8eac3bb908c7f97f17426b490663daf719fef"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frametree_sample.html",
+   "sha256": "c80d886d193662432c6e1603b508bd27d2e21a120708faec3aa2f0ee110b4b21"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frametree_sample_frameset.html",
+   "sha256": "b7e441c4275f8ca3fb38d19a5093b4a272ea5fb31acda0fa6cda0ecbb89ae403"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_frametree_sample_iframes.html",
+   "sha256": "139d81ed5224c5d8c28a4fddd5118269589fc7c4b7c0e5adb7d4c3fbcb678920"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_navigation_api_restore.js",
+   "sha256": "73a93ea88cb3aa790c73ee78d252871915be705a1bc60d4e613f1c8130f4a207"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_policy_container_sample.html",
+   "sha256": "871ec266ad83dee7adb7dfa85a3c74b1edb733913f89fecc60cd7484b88dcc6d"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_policy_container_sample_frame.html",
+   "sha256": "d95d2a6489e9749587fc1ffbf3e5366c79525be4a30610f1c4246731910beb6c"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_purge_shistory.js",
+   "sha256": "0fddb26637f6a19f7a64a113ddea8cbc192514827d779d0a5c9b118ef2788a8c"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_restore_srcdoc.js",
+   "sha256": "e10b2eaa51d6ba333327e680d7e149e4b0687c391eb2fae015f8eed03420f5bf"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_scrollPositions_readerModeArticle.html",
+   "sha256": "0cce299faafbe0d229c4430d7867890bdc266ae326709d9a6b810b652e55cecc"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_scrollPositions_sample.html",
+   "sha256": "654f2d5a6f839c27ea2dd6a76a93c76d48b7905022a7ad45dc963c176151bcda"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_scrollPositions_sample2.html",
+   "sha256": "654f2d5a6f839c27ea2dd6a76a93c76d48b7905022a7ad45dc963c176151bcda"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_scrollPositions_sample_frameset.html",
+   "sha256": "a1e7fbe4e45e2f0421f1fde649b715f5e7d1d8248d71316b565c7285869bbc4c"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_sessionHistory_slow.sjs",
+   "sha256": "938d364f597711ef0d11b1ab5f687cf35126d62f8790114c24c42a10239d746c"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_sessionStorage.html",
+   "sha256": "fc2bd1fb805503276cfada371f307cf1f7751b15ae80a7a3dacc2270dd226eed"
+  },
+  {
+   "path": "browser/components/sessionstore/test/browser_speculative_connect.html",
+   "sha256": "b8ef32bb9b6d746515c6d37b9a403964a344bc2383b491c8118169fe285ddd19"
+  },
+  {
+   "path": "browser/components/sessionstore/test/coopHeaderCommon.sjs",
+   "sha256": "5c9419afb5fb1c7d80922ca9a0c116eb7ce280ff95368b4cf253b6bfb7082c75"
+  },
+  {
+   "path": "browser/components/sessionstore/test/coop_coep.html",
+   "sha256": "5d46c41feaa86726b9a89acc8b795662c64204d8ea28b2003f5feab96cf28043"
+  },
+  {
+   "path": "browser/components/sessionstore/test/coop_coep.html^headers^",
+   "sha256": "723a493a3656f2af2fa5ca1de0ca5c23efa9d6d7c44a568736ae3458b1124bf7"
+  },
+  {
+   "path": "browser/components/sessionstore/test/empty.html",
+   "sha256": "cbc55b662f7c94bbde3b726abfc93d268f2b53709c8ba2fc8d821ce5498c89b9"
+  },
+  {
+   "path": "browser/components/sessionstore/test/empty_frame.html",
+   "sha256": "5a4be58977d98c89a0cc31386289499cbb65be3c7ce244fe61a38942115c1427"
+  },
+  {
+   "path": "browser/components/sessionstore/test/entry1.html",
+   "sha256": "cbc55b662f7c94bbde3b726abfc93d268f2b53709c8ba2fc8d821ce5498c89b9"
+  },
+  {
+   "path": "browser/components/sessionstore/test/entry2.html",
+   "sha256": "cbc55b662f7c94bbde3b726abfc93d268f2b53709c8ba2fc8d821ce5498c89b9"
+  },
+  {
+   "path": "browser/components/sessionstore/test/entry3.html",
+   "sha256": "cbc55b662f7c94bbde3b726abfc93d268f2b53709c8ba2fc8d821ce5498c89b9"
+  },
+  {
+   "path": "browser/components/sessionstore/test/head.js",
+   "sha256": "64b7c1a40a7939efd58544a09fb9a90ab33b528e82c360f4e0fdfa1b6676ef73"
+  },
+  {
+   "path": "browser/components/sessionstore/test/restore_redirect_http.html",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "browser/components/sessionstore/test/restore_redirect_http.html^headers^",
+   "sha256": "52c04e54354dd61f8d3e2559d8acfa3450ccd10f7843fcc362333958e01d9905"
+  },
+  {
+   "path": "browser/components/sessionstore/test/restore_redirect_js.html",
+   "sha256": "57dbc65f14f9ff83fbf4c8143c08575eff4069d11553692324f6590613c29960"
+  },
+  {
+   "path": "browser/components/sessionstore/test/restore_redirect_target.html",
+   "sha256": "7c7c344fd0057c865cd01f4e0b0a5c3974c42fe95ace1d2d18ac7d92df600f76"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/TabGroupTestUtils.sys.mjs",
+   "sha256": "e64dc982757bd86321a994947c292b11953d972a3d84dee450db28b5e2a18e45"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/audio.ogg",
+   "sha256": "b4e9c7a042279e7ed7873aab3e19fae9768a9a378b17e9eff889460836eb44fe"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "sha256": "e91dc6eff4eb87c87db2252a5554f017fbfb39d762815498ab23e301f94757d3"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_blank_tab_label.js",
+   "sha256": "7c720aa8353de1b8f970c76380ed7d9afb0531f91848b3f6e1a7655fe853154e"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_close_tab_by_dblclick.js",
+   "sha256": "ed61efd07df7b7a544123e33ff805851ac5387f3e80735ac5c8d06d4a4cf4295"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_long_data_url_label_truncation.js",
+   "sha256": "914cd470b4ee2f356ec0b78c9fabe6acf35be68767643a11b534e4a6a1d2d31d"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Ctrl.js",
+   "sha256": "b9e26e74235ba2dd2820e7c66b0864b27f0bd26d635db43d4198860556518837"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Shift_and_Ctrl.js",
+   "sha256": "28e4756c797127c1868b9dac80e6ecefd54b73e2221f38e3f851b1fb9d436a3d"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_openURI_background.js",
+   "sha256": "b7c6e54fb9a4e982dc0a4174ebcb982e3ea37dfad03dadac2423e461567e7c94"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_pinned_and_hidden_tabs.js",
+   "sha256": "e8f4d091b1b6f99d0851e67f56b0c79c0b0b0bf7fd05b864b7366e3ab05bbf0d"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_positional_attributes.js",
+   "sha256": "4eb7bfc5adfd9f6525f3efbb978e5a83174cae4a80fca1f09bc49e81be63ddbd"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_level.js",
+   "sha256": "a49612d344bc1158df0fde7e21019ee0867700006d9899c161121616ac4a3099"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_posinset_setsize.js",
+   "sha256": "105ad7861c1c71b1a41d7aaba2122ce55cb0f2c906731c10c5b7fbcbefcd4430"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_tab_label_character_cap.js",
+   "sha256": "44eea49b26eb5f740abc91a27b86ca5efdf1cf548038a1776c20d09a1a1f37a5"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_tab_label_reader_mode.js",
+   "sha256": "7cae2a7f8aadd84f450050f394c1d79909504c97bdf7607eeaba3832b144d726"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/browser_tabswitch_updatecommands.js",
+   "sha256": "500493cfed1f227792ce0413b7025c861a4ccfd65bb63f246869ea26a7c0d30c"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/dummy_page.html",
+   "sha256": "6af11adcf7fa48aab2632f1b45cae4124905e52e77e881b90b730b931601b6fa"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/file_about_srcdoc.html",
+   "sha256": "8690bbfe28b4ef0bf85f18d210165d5e80620afec54c42143fe5c004f27dd7dc"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/file_mediaPlayback.html",
+   "sha256": "d979f978c97ca54e59e35ed3a531f673b89d70d44fdea661f33c737e4543aea4"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/file_reader_mode_article.html",
+   "sha256": "ab2e8a00a5514fa879438161f8dedf7590ee45c63cbe16ce7d360154840559cd"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/head.js",
+   "sha256": "acec32eefad1ba8a91fa6bc826f57a62b1321aed41a941c36db91cb42c4a52a2"
+  },
+  {
+   "path": "browser/components/tabbrowser/test/browser/tabs/helper_origin_attrs_testing.js",
+   "sha256": "711f5fa658650ec7172ac086b29b71ae4ba4b1ac4a902a63b9681e6c1f36fc8b"
+  },
+  {
+   "path": "build/buildconfig.py",
+   "sha256": "9d9ff6748ba6529fcc992567053bf2aad7bb9a2802a294cef19cbee2ea778aff"
+  },
+  {
+   "path": "python/mozbuild/mozbuild/action/test_archive.py",
+   "sha256": "fb31d73802a63ee967198f41b45042127e83800524e280a2ee740ef6aac49489"
+  },
+  {
+   "path": "testing/mochitest/mochitest_options.py",
+   "sha256": "23f8afacedbf0165243ab180f1d9e6f3746626aa9f54decc38a3b9f86e6fc4e3"
+  },
+  {
+   "path": "testing/mochitest/runtests.py",
+   "sha256": "ef64091aa96e0a9020fcd2748591202d434f5a0ac3e3b7e009b2cab2cfa665ce"
+  },
+  {
+   "path": "testing/mozbase/moz.build",
+   "sha256": "3933af2696579503cdff43fb325775fea66658b265cfef81ba4b36db5922384e"
+  },
+  {
+   "path": "testing/mozbase/setup_development.py",
+   "sha256": "68a3571021f640e68638ebc739643dae7401bc51c53c7015aa50274bae18912f"
+  },
+  {
+   "path": "testing/testsuite-targets.mk",
+   "sha256": "df75c79517255dccbc48b2239837944fa47e663f01989ea32b8dbe5be24632ae"
+  },
+  {
+   "path": "testing/xpcshell/runxpcshelltests.py",
+   "sha256": "10914185bf99c34073bef9fda68a2c2adc16f5b3e576dada2e96c5481fecdd57"
+  },
+  {
+   "path": "testing/xpcshell/xpcshellcommandline.py",
+   "sha256": "15239718d174ebb789662bcb854e3a9f6cd2c85113a089975540defd58a1d1ce"
+  },
+  {
+   "path": "xpcom/geckoprocesstypes_generator/geckoprocesstypes/__init__.py",
+   "sha256": "bbe5bf93cffa23fe0c2677dada5171dcf30c7af6ecf79c84e56a7919d106b210"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser01-utf8BOM.ini",
+   "sha256": "f1945cd6c19e56b3c1c78943ef5ec18116907a4ca1efc40a57d48ab1db7adfc5"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser01.ini",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser02-utf8BOM.ini",
+   "sha256": "b42f2099187886def637d6aa840022266e05cb6c987a9394e708e23cd505eb46"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser02.ini",
+   "sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser03-utf8BOM.ini",
+   "sha256": "dfa943fd41d72e83bb7f3a986ed019d2e77a8c9460597ad25ece4587d97d1bb9"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser03.ini",
+   "sha256": "a5338d955b09046ec0b16f3a9625b7955c763aae07dc722e474e6078745f932f"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser04-utf8BOM.ini",
+   "sha256": "cd3bff084ef861af7754da3e0443d4b6106378d72e76fa839a75e0c06f91748a"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser04.ini",
+   "sha256": "22933a31d14c159358e136dc969feaac6ee4695630845da5b96833b49e9ae624"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser05-utf8BOM.ini",
+   "sha256": "6aca6e337c6052f4ae5e230c743a471d31382d7eb72ec295aefd5a296d8594e1"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser05.ini",
+   "sha256": "8243c0cb753bf0f8924066c327ad984a5902c36bb406c35b315bcee541a00222"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser06-utf8BOM.ini",
+   "sha256": "9c8aeeca39eda4bdd0dde5f751e4724a305c57dcb37e1ba8adca335763e55fea"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser06.ini",
+   "sha256": "9975a58ef213adb4d76c79039ce0f3f0aaf1254562a74ba35a8ca647c5549b71"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser07-utf8BOM.ini",
+   "sha256": "1a770a529c6110f1018ff032a2639647635a5868f014135231d5f089a34f49ff"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser07.ini",
+   "sha256": "9c3231118dbcbd6619bf187e076cd0a27b711cf285284a9a17253df408eb0501"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser08-utf8BOM.ini",
+   "sha256": "f8f2abea1095dfa4aff931d8dae5fc9a1c130247c49f92e8f81d782652191c9a"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser08.ini",
+   "sha256": "e391f77623174324bcd39f326605c013a9ea34597ecaa4e3cbdad917aa9dfaef"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser09-utf8BOM.ini",
+   "sha256": "c47a1f5886960a1e4b597f75910826e078d077f1ce1d84d25fff228a62cae7f5"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser09.ini",
+   "sha256": "306392adb0009cad5f4b2aa908802e7d9a49cb9e7b4abd99da60b96f64945759"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser10-utf8BOM.ini",
+   "sha256": "f615114ebb5e5e61c40bae8120bbbade1f6b43988d664383ea1471157cf296c4"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser10.ini",
+   "sha256": "12c30423b11e034929a4359dcc67d8f774b09b43023bf97ba850782972be06f3"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser11-utf8BOM.ini",
+   "sha256": "e1a4b505e8c304faf5ba4250344d0bb68d489208e01651101968a9f9434d23dd"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser11.ini",
+   "sha256": "a7e1e2d747afa1ebe12432581a01eab9938cf8a84e943d07b128c88e2abc90cd"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser12-utf8BOM.ini",
+   "sha256": "2aeddedafb0a028096b3e53ca1df6675191e6706d347f88e92bd2439ef45aed8"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser12.ini",
+   "sha256": "3f4ef48be4c20e53a0d8c3c224e7cfd00e9a79b4991415fb0d8c661d1180ac8c"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser13-utf8BOM.ini",
+   "sha256": "7d0ff3462118a8d2cc9b1cae1b92757f7f3fff72bfd729553e934e5c62b7bf25"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser13.ini",
+   "sha256": "9e4ce7d5acea4994b938bd5aa5c9ade3990c664810eab98e9454d2537aa1853b"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser14-utf8BOM.ini",
+   "sha256": "8bb03348bd2b0afb8f89671c9b44c1a787de03f2fe8aeacf3789505ee817d115"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser14.ini",
+   "sha256": "c782f6013d2d6a4c621077c51b09c127ca4cb936d168465a0ffd4e67f7d2dc49"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser15-utf8BOM.ini",
+   "sha256": "b900fb73435005132731b28618ccbb218f5a2a09042c4c1202b05e34cc9f9cab"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser15.ini",
+   "sha256": "00a6d7edf547402dd99bc387d5d94a2df7d615cef0289637494c9ba0c25fa3aa"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser16-utf8BOM.ini",
+   "sha256": "af33008f8c8d73ff4c342aa807dc72cd15d946edc21ba42caa4b7304651daa3f"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser16.ini",
+   "sha256": "393ef1249983ac07fb1588fb8480f3d6d002cc5e3154793f6bc93835188412d7"
+  },
+  {
+   "path": "xpcom/tests/unit/data/iniparser17.ini",
+   "sha256": "e2a7dfe31a759034bdb812aaa3be01b33327ef015cfa87869262a418cee46ffb"
+  },
+  {
+   "path": "xpcom/tests/unit/head_xpcom.js",
+   "sha256": "7fbb66d1c184def357c4d7114aedc5d946f0440398891ce796510c25a65f6e95"
+  },
+  {
+   "path": "xpcom/tests/unit/test_iniParser.js",
+   "sha256": "b84ddc79e28484c81b3a6a50e4e3a9787f627ab80dd9fbc0ca964d6fee0d50b2"
+  },
+  {
+   "path": "xpcom/tests/unit/test_nsIMutableArray.js",
+   "sha256": "14a828e5c0f54aa0561c5995da9e6b3948e99f6f2117a13ef6bb620b9638ff08"
+  },
+  {
+   "path": "xpcom/tests/unit/xpcshell.toml",
+   "sha256": "d832951e54c511b237bed6fa7379689478e49c481a8e81bd00ff2896a59b5643"
+  }
+ ],
+ "selection": [
+  {
+   "suite": "browser-chrome",
+   "id": "browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
+   "manifest": "browser/base/content/test/browser-performance/browser.toml",
+   "archivePath": "mochitest/browser/browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
+   "minimumAssertions": 1,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "xpcshell",
+   "id": "xpcom/tests/unit/test_nsIMutableArray.js",
+   "manifest": "xpcom/tests/unit/xpcshell.toml",
+   "archivePath": "xpcshell/tests/xpcom/tests/unit/test_nsIMutableArray.js",
+   "minimumAssertions": 1,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_pinned_and_hidden_tabs.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_pinned_and_hidden_tabs.js",
+   "minimumAssertions": 3,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "xpcshell",
+   "id": "xpcom/tests/unit/test_iniParser.js",
+   "manifest": "xpcom/tests/unit/xpcshell.toml",
+   "archivePath": "xpcshell/tests/xpcom/tests/unit/test_iniParser.js",
+   "minimumAssertions": 100,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/sessionstore/test/browser_navigation_api_restore.js",
+   "manifest": "browser/components/sessionstore/test/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_navigation_api_restore.js",
+   "minimumAssertions": 60,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/sessionstore/test/browser_dynamic_frames.js",
+   "manifest": "browser/components/sessionstore/test/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_dynamic_frames.js",
+   "minimumAssertions": 24,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/sessionstore/test/browser_frametree.js",
+   "manifest": "browser/components/sessionstore/test/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_frametree.js",
+   "minimumAssertions": 26,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/sessionstore/test/browser_restore_srcdoc.js",
+   "manifest": "browser/components/sessionstore/test/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_restore_srcdoc.js",
+   "minimumAssertions": 14,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/sessionstore/test/browser_purge_shistory.js",
+   "manifest": "browser/components/sessionstore/test/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_purge_shistory.js",
+   "minimumAssertions": 17,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_blank_tab_label.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_blank_tab_label.js",
+   "minimumAssertions": 15,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_close_tab_by_dblclick.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_close_tab_by_dblclick.js",
+   "minimumAssertions": 16,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Ctrl.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Ctrl.js",
+   "minimumAssertions": 35,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Shift_and_Ctrl.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Shift_and_Ctrl.js",
+   "minimumAssertions": 50,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_openURI_background.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_openURI_background.js",
+   "minimumAssertions": 18,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_tabswitch_updatecommands.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tabswitch_updatecommands.js",
+   "minimumAssertions": 14,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_label_character_cap.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_label_character_cap.js",
+   "minimumAssertions": 16,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_long_data_url_label_truncation.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_long_data_url_label_truncation.js",
+   "minimumAssertions": 15,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_posinset_setsize.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_posinset_setsize.js",
+   "minimumAssertions": 20,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_positional_attributes.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_positional_attributes.js",
+   "minimumAssertions": 22,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_level.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_level.js",
+   "minimumAssertions": 18,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  },
+  {
+   "suite": "browser-chrome",
+   "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_label_reader_mode.js",
+   "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
+   "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_label_reader_mode.js",
+   "minimumAssertions": 16,
+   "declaredConditions": {},
+   "requiredNoSkip": true
+  }
+ ],
+ "nativeExecution": "UNVERIFIED",
+ "coldHarnessCLI": "UNVERIFIED",
+ "coldRequirements": "UNVERIFIED",
+ "publicationAuthorized": false
 }

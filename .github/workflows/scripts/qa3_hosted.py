@@ -118,19 +118,32 @@ def context_from_environment(build_id):
     sha = hash_value(os.environ["GITHUB_SHA"], 40)
     require(
         os.environ.get("GITHUB_REPOSITORY") == REPOSITORY
-        and os.environ.get("GITHUB_EVENT_NAME") == "push"
-        and os.environ.get("GITHUB_REF") == "refs/heads/" + BRANCH
         and os.environ.get("GITHUB_RUN_ATTEMPT") == "1"
         and os.environ.get("GITHUB_WORKFLOW_SHA") == sha
         and os.environ.get("GITHUB_WORKFLOW_REF")
-        == REPOSITORY + "/" + WORKFLOW + "@refs/heads/" + BRANCH,
+        == REPOSITORY + "/" + WORKFLOW + "@" + os.environ["GITHUB_REF"],
         "foreign hosted workflow, source, branch or attempt",
     )
     event = read_json(Path(os.environ["GITHUB_EVENT_PATH"]))
-    require(
-        event.get("created") is True and event.get("deleted") is False,
-        "proof is limited to first branch creation",
-    )
+    event_name = os.environ.get("GITHUB_EVENT_NAME")
+    if event_name == "push":
+        require(
+            os.environ.get("GITHUB_REF") == "refs/heads/" + BRANCH
+            and event.get("created") is True
+            and event.get("deleted") is False,
+            "proof is limited to first branch creation",
+        )
+    else:
+        require(
+            event_name == "pull_request"
+            and re.fullmatch(
+                r"refs/pull/[1-9][0-9]*/(merge|head)",
+                os.environ.get("GITHUB_REF", ""),
+            )
+            and event.get("action")
+            in {"opened", "synchronize", "reopened", "ready_for_review"},
+            "foreign hosted event or pull_request action",
+        )
     run = os.environ["GITHUB_RUN_ID"]
     require(re.fullmatch(r"[1-9][0-9]*", run), "invalid run")
     return {
@@ -1348,9 +1361,14 @@ def acquire(args):
         payload.get("id") == context["run"]
         and payload.get("head_sha") == context["runtimeRecipe"]
         and payload.get("run_attempt") == 1
-        and payload.get("event") == "push"
+        and payload.get("event") == os.environ["GITHUB_EVENT_NAME"]
         and payload.get("path") == WORKFLOW
-        and payload.get("head_branch") == BRANCH,
+        and payload.get("head_branch")
+        == (
+            os.environ["GITHUB_HEAD_REF"]
+            if os.environ["GITHUB_EVENT_NAME"] == "pull_request"
+            else BRANCH
+        ),
         "REST run differs from original same-workflow producer",
     )
     require(
