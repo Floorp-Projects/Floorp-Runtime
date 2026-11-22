@@ -31,7 +31,7 @@ PGO builds and final product artifacts are not qualified by that run.
 
 ## Common source and variant contracts
 
-`source-policy.json` pins all 27 common patches and the three Debug diagnostic
+`source-policy.json` pins all 28 common patches and the three Debug diagnostic
 patches in UTF-8 path order. Policy preflight checks complete membership, order,
 bytes and expected Runtime HEAD. It records the upstream canonical Git
 repository and full revision separately from Runtime R. It does not prove that

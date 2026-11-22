@@ -35,6 +35,10 @@
       "sha256": "e0fc458b8d8025a87f80692f53db3089b5825006b59a049bfd4023f9683daf2f"
     },
     {
+      "path": ".github/patches/upstream/fdh-windows-private-profile-token.patch",
+      "sha256": "121cd0eb12896e6365043369c58c37d53dcde3f129bbfa745e87639c5309a0f0"
+    },
+    {
       "path": ".github/patches/upstream/localizeFfiLib.patch",
       "sha256": "fb4e8297fedc9be79c63028163e934fb9bf67dcc1fcae6e1f5435a255461b701"
     },
