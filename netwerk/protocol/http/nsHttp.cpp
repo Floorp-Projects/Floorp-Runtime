@@ -13,6 +13,7 @@
 #include "CacheControlParser.h"
 #include "HttpLog.h"
 #include "PLDHashTable.h"
+#include "mozilla/CheckedInt.h"
 #include "mozilla/DataMutex.h"
 #include "mozilla/OriginAttributes.h"
 #include "mozilla/Preferences.h"
@@ -35,9 +36,12 @@ namespace net {
 
 extern const char kProxyType_SOCKS[];
 
-// https://datatracker.ietf.org/doc/html/draft-ietf-webtrans-http3/#section-4.3
+// https://datatracker.ietf.org/doc/html/draft-ietf-webtrans-http3-15#section-4.4
 constexpr uint64_t kWebTransportErrorCodeStart = 0x52e4a40fa8db;
-constexpr uint64_t kWebTransportErrorCodeEnd = 0x52e4a40fa9e2;
+// Covers the full unsigned long (0..2^32-1) streamErrorCode range: start +
+// 0xffffffff + floor(0xffffffff / 0x1e), per draft-ietf-webtrans-http3
+// section 4.4's error-code mapping.
+constexpr uint64_t kWebTransportErrorCodeEnd = 0x52e5ac983162;
 
 // find out how many atoms we have
 #define HTTP_ATOM(_name, _value) Unused_##_name,
@@ -555,10 +559,14 @@ void localEnsureBuffer(UniquePtr<T[]>& buf, uint32_t newSize, uint32_t preserve,
   // what we need and then round the result up to a 4KB (page)
   // boundary.
 
-  objSize = (newSize + 2048 + 4095) & ~4095;
+  CheckedInt<uint32_t> size = CheckedInt<uint32_t>(newSize) + 2048 + 4095;
+  if (!size.isValid()) {
+    NS_ABORT_OOM(newSize);
+  }
+  objSize = size.value() & ~4095;
 
   static_assert(sizeof(T) == 1, "sizeof(T) must be 1");
-  auto tmp = MakeUnique<T[]>(objSize);
+  auto tmp = std::make_unique<T[]>(objSize);
   if (preserve) {
     memcpy(tmp.get(), buf.get(), preserve);
   }
@@ -1078,25 +1086,22 @@ uint8_t GetWebTransportErrorFromNSResult(nsresult aResult) {
                               (uint32_t)NS_ERROR_WEBTRANSPORT_CODE_BASE);
 }
 
-uint64_t WebTransportErrorToHttp3Error(uint8_t aErrorCode) {
-  return kWebTransportErrorCodeStart + aErrorCode + aErrorCode / 0x1e;
+uint64_t WebTransportErrorToHttp3Error(uint32_t aErrorCode) {
+  return kWebTransportErrorCodeStart + aErrorCode +
+         static_cast<uint64_t>(aErrorCode) / 0x1e;
 }
 
-uint8_t Http3ErrorToWebTransportError(uint64_t aErrorCode) {
-  // Ensure the code is within the valid range.
+Maybe<uint32_t> Http3ErrorToWebTransportError(uint64_t aErrorCode) {
+  // Outside the range reserved for WT_APPLICATION_ERROR, or one of the
+  // reserved (GREASE) codepoints inside it: not an application error code.
   if (aErrorCode < kWebTransportErrorCodeStart ||
-      aErrorCode > kWebTransportErrorCodeEnd) {
-    return 0;
+      aErrorCode > kWebTransportErrorCodeEnd ||
+      (aErrorCode - 0x21) % 0x1f == 0) {
+    return Nothing();
   }
 
   uint64_t shifted = aErrorCode - kWebTransportErrorCodeStart;
-  uint64_t result = shifted - shifted / 0x1f;
-
-  if (result <= std::numeric_limits<uint8_t>::max()) {
-    return (uint8_t)result;
-  }
-
-  return 0;
+  return Some(static_cast<uint32_t>(shifted - shifted / 0x1f));
 }
 
 ConnectionCloseReason ToCloseReason(nsresult aErrorCode) {

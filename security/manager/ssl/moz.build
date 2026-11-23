@@ -46,7 +46,7 @@ XPCOM_MANIFESTS += [
     "components.conf",
 ]
 
-EXTRA_JS_MODULES.psm += [
+MOZ_SRC_FILES += [
     "ClientAuthDialogService.sys.mjs",
     "DER.sys.mjs",
     "QWACs.sys.mjs",
@@ -82,14 +82,8 @@ EXPORTS.mozilla += [
 
 EXPORTS.mozilla.psm += [
     "EnabledSignatureSchemes.h",
-    "IPCClientCertsChild.h",
-    "IPCClientCertsParent.h",
     "PSMIPCUtils.h",
-    "SelectTLSClientAuthCertChild.h",
-    "SelectTLSClientAuthCertParent.h",
     "TransportSecurityInfo.h",
-    "VerifySSLServerCertChild.h",
-    "VerifySSLServerCertParent.h",
 ]
 
 UNIFIED_SOURCES += [
@@ -102,8 +96,6 @@ UNIFIED_SOURCES += [
     "DataStorageManager.cpp",
     "EnterpriseRoots.cpp",
     "FIPSUtils.cpp",
-    "IPCClientCertsChild.cpp",
-    "IPCClientCertsParent.cpp",
     "md4.c",
     "nsCertOverrideService.cpp",
     "nsCertTree.cpp",
@@ -143,9 +135,43 @@ UNIFIED_SOURCES += [
     "SSLServerCertVerification.cpp",
     "TLSClientAuthCertSelection.cpp",
     "TransportSecurityInfo.cpp",
-    "VerifySSLServerCertChild.cpp",
-    "VerifySSLServerCertParent.cpp",
     "X509CertValidity.cpp",
+]
+
+SOURCE_HEADERS += [
+    "AppSignatureVerification.h",
+    "AppTrustDomain.h",
+    "ContentSignatureVerifier.h",
+    "DataStorageManager.h",
+    "FIPSUtils.h",
+    "md4.h",
+    "nsCertOverrideService.h",
+    "nsCertTree.h",
+    "nsNSSCertHelper.h",
+    "nsNSSCertificateDB.h",
+    "nsNSSCertTrust.h",
+    "nsNSSIOLayer.h",
+    "nsNSSModule.h",
+    "nsNSSVersion.h",
+    "nsNTLMAuthModule.h",
+    "nsPKCS12Blob.h",
+    "nsSiteSecurityService.h",
+    "NSSKeyStore.h",
+    "NSSSocketControl.h",
+    "OSKeyStore.h",
+    "OSReauthenticator.h",
+    "PDFTrustDomain.h",
+    "PKCS11Module.h",
+    "PKCS11ModuleDB.h",
+    "PKCS11Slot.h",
+    "PKCS11Token.h",
+    "PublicKeyPinningService.h",
+    "QWACTrustDomain.h",
+    "SecretDecoderRing.h",
+    "SiteIntegrityService.h",
+    "StaticHPKPins.h",
+    "TLSClientAuthCertSelection.h",
+    "X509CertValidity.h",
 ]
 
 if CONFIG["OS_ARCH"] == "Darwin":
@@ -176,6 +202,9 @@ if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
     UNIFIED_SOURCES += [
         "LibSecret.cpp",
     ]
+    SOURCE_HEADERS += [
+        "LibSecret.h",
+    ]
     CFLAGS += CONFIG["GLIB_CFLAGS"]
     CXXFLAGS += CONFIG["GLIB_CFLAGS"]
     CFLAGS += CONFIG["MOZ_GTK3_CFLAGS"]
@@ -186,6 +215,9 @@ if CONFIG["TARGET_KERNEL"] == "Darwin":
         "KeychainSecret.cpp",
         "OSReauthenticatorDarwin.mm",
     ]
+    SOURCE_HEADERS += [
+        "KeychainSecret.h",
+    ]
     OS_LIBS += [
         "-framework CoreFoundation",
         "-framework LocalAuthentication",
@@ -193,13 +225,10 @@ if CONFIG["TARGET_KERNEL"] == "Darwin":
     ]
 
 IPDL_SOURCES += [
-    "PIPCClientCerts.ipdl",
-    "PSelectTLSClientAuthCert.ipdl",
     "PSMIPCTypes.ipdlh",
-    "PVerifySSLServerCert.ipdl",
 ]
 
-# Required by OSClientCerts, IPCClientCerts and CredentialManagerSecret.
+# Required by OSClientCerts and CredentialManagerSecret.
 if CONFIG["OS_ARCH"] == "WINNT":
     OS_LIBS += [
         "advapi32",
@@ -216,6 +245,9 @@ if CONFIG["OS_ARCH"] == "WINNT":
 
     UNIFIED_SOURCES += [
         "CredentialManagerSecret.cpp",
+    ]
+    SOURCE_HEADERS += [
+        "CredentialManagerSecret.h",
     ]
 
 if CONFIG["NIGHTLY_BUILD"] and not CONFIG["MOZ_NO_SMART_CARDS"]:

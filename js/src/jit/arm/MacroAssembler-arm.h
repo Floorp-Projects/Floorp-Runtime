@@ -357,13 +357,6 @@ class MacroAssemblerARM : public Assembler {
   void ma_umull(Register src1, Register src2, Register destHigh,
                 Register destLow);
 
-  // Fast mod, uses scratch registers, and thus needs to be in the assembler
-  // implicitly assumes that we can overwrite dest at the beginning of the
-  // sequence.
-  void ma_mod_mask(Register src, Register dest, Register hold, Register tmp,
-                   AutoRegisterScope& scratch, AutoRegisterScope& scratch2,
-                   int32_t shift);
-
   // Mod - depends on integer divide instructions being supported.
   void ma_smod(Register num, Register div, Register dest,
                AutoRegisterScope& scratch);
@@ -1246,12 +1239,12 @@ class MacroAssemblerARMCompat : public MacroAssemblerARM {
                                 Register scratch);
 
   FaultingCodeRange store8(Register src, const Address& address);
-  void store8(Imm32 imm, const Address& address);
+  FaultingCodeRange store8(Imm32 imm, const Address& address);
   FaultingCodeRange store8(Register src, const BaseIndex& address);
   void store8(Imm32 imm, const BaseIndex& address);
 
   FaultingCodeRange store16(Register src, const Address& address);
-  void store16(Imm32 imm, const Address& address);
+  FaultingCodeRange store16(Imm32 imm, const Address& address);
   FaultingCodeRange store16(Register src, const BaseIndex& address);
   void store16(Imm32 imm, const BaseIndex& address);
 

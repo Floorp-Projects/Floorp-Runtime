@@ -14,7 +14,7 @@
     )
 )]
 
-use std::ops::RangeInclusive;
+use std::{num::NonZeroUsize, ops::RangeInclusive};
 
 use neqo_common::{Buffer, Decoder, Encoder, MAX_VARINT, qtrace};
 use strum::FromRepr;
@@ -22,8 +22,12 @@ use strum::FromRepr;
 use crate::{
     AppError, ConnectionId, Error, Res, TransportError, ecn, packet,
     stateless_reset::Token as Srt,
-    stream_id::{StreamId, StreamType},
+    stream_id::{MAX_STREAMS_LIMIT, StreamId, StreamType},
 };
+
+/// The length of the data carried by `PATH_CHALLENGE` and `PATH_RESPONSE` frames, see
+/// [RFC 9000, Section 19.17](https://www.rfc-editor.org/rfc/rfc9000.html#section-19.17).
+pub const PATH_CHALLENGE_LEN: usize = 8;
 
 #[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
@@ -230,10 +234,10 @@ pub enum Frame<'a> {
         sequence_number: u64,
     },
     PathChallenge {
-        data: [u8; 8],
+        data: [u8; PATH_CHALLENGE_LEN],
     },
     PathResponse {
-        data: [u8; 8],
+        data: [u8; PATH_CHALLENGE_LEN],
     },
     ConnectionClose {
         error_code: CloseError,
@@ -257,7 +261,11 @@ pub enum Frame<'a> {
     },
     Datagram {
         data: &'a [u8],
-        fill: bool,
+        /// Encoded size of the length field, `None` if the frame has none.
+        /// Needed to check the whole frame against our `max_datagram_frame_size`
+        /// (RFC 9221, Section 3); can't be derived from `data.len()`, as the
+        /// varint may be non-minimal.
+        len_field_len: Option<NonZeroUsize>,
     },
 }
 
@@ -298,9 +306,9 @@ impl<'a> Frame<'a> {
             },
             Self::HandshakeDone => FrameType::HandshakeDone,
             Self::AckFrequency { .. } => FrameType::AckFrequency,
-            Self::Datagram { fill, .. } => match fill {
-                false => FrameType::Datagram,
-                true => FrameType::DatagramWithLen,
+            Self::Datagram { len_field_len, .. } => match len_field_len {
+                Some(_) => FrameType::DatagramWithLen,
+                None => FrameType::Datagram,
             },
         }
     }
@@ -616,7 +624,7 @@ impl<'a> Frame<'a> {
             }),
             FrameType::MaxStreamsBiDi | FrameType::MaxStreamsUniDi => {
                 let m = dv(dec)?;
-                if m > (1 << 60) {
+                if m > MAX_STREAMS_LIMIT {
                     return Err(Error::StreamLimit);
                 }
                 Ok(Self::MaxStreams {
@@ -633,7 +641,7 @@ impl<'a> Frame<'a> {
             }),
             FrameType::StreamsBlockedBiDi | FrameType::StreamsBlockedUniDi => {
                 let m = dv(dec)?;
-                if m > (1 << 60) {
+                if m > MAX_STREAMS_LIMIT {
                     return Err(Error::StreamLimit);
                 }
                 Ok(Self::StreamsBlocked {
@@ -664,14 +672,14 @@ impl<'a> Frame<'a> {
                 sequence_number: dv(dec)?,
             }),
             FrameType::PathChallenge => {
-                let data = d(dec.decode(8))?;
-                let mut datav: [u8; 8] = [0; 8];
+                let data = d(dec.decode(PATH_CHALLENGE_LEN))?;
+                let mut datav = [0; PATH_CHALLENGE_LEN];
                 datav.copy_from_slice(data);
                 Ok(Self::PathChallenge { data: datav })
             }
             FrameType::PathResponse => {
-                let data = d(dec.decode(8))?;
-                let mut datav: [u8; 8] = [0; 8];
+                let data = d(dec.decode(PATH_CHALLENGE_LEN))?;
+                let mut datav = [0; PATH_CHALLENGE_LEN];
                 datav.copy_from_slice(data);
                 Ok(Self::PathResponse { data: datav })
             }
@@ -709,16 +717,22 @@ impl<'a> Frame<'a> {
                     ignore_order,
                 })
             }
-            FrameType::Datagram | FrameType::DatagramWithLen => {
-                let fill = t == FrameType::Datagram;
-                let data = if fill {
-                    qtrace!("DATAGRAM frame, extends to the end of the packet");
-                    dec.decode_remainder()
-                } else {
-                    qtrace!("DATAGRAM frame, with length");
-                    d(dec.decode_vvec())?
-                };
-                Ok(Self::Datagram { data, fill })
+            FrameType::Datagram => {
+                qtrace!("DATAGRAM frame, extends to the end of the packet");
+                Ok(Self::Datagram {
+                    data: dec.decode_remainder(),
+                    len_field_len: None,
+                })
+            }
+            FrameType::DatagramWithLen => {
+                qtrace!("DATAGRAM frame, with length");
+                let len_start = dec.offset();
+                let data = d(dec.decode_vvec())?;
+                let len_field_len = dec.offset() - len_start - data.len();
+                Ok(Self::Datagram {
+                    data,
+                    len_field_len: NonZeroUsize::new(len_field_len),
+                })
             }
         }
     }
@@ -764,12 +778,14 @@ impl<B: Buffer> FrameEncoder for Encoder<B> {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use neqo_common::{Decoder, Encoder, MAX_VARINT};
 
     use crate::{
-        CloseError, ConnectionId, Error, StreamId, StreamType, Token as Srt,
+        CloseError, ConnectionId, Error, MAX_STREAMS_LIMIT, StreamId, StreamType, Token as Srt,
         ecn::Count,
-        frame::{AckRange, Frame, FrameType},
+        frame::{AckRange, Frame, FrameType, PATH_CHALLENGE_LEN},
         packet,
     };
 
@@ -1099,14 +1115,18 @@ mod tests {
 
     #[test]
     fn path_challenge() {
-        let f = Frame::PathChallenge { data: [9; 8] };
+        let f = Frame::PathChallenge {
+            data: [9; PATH_CHALLENGE_LEN],
+        };
 
         just_dec(&f, "1a0909090909090909");
     }
 
     #[test]
     fn path_response() {
-        let f = Frame::PathResponse { data: [9; 8] };
+        let f = Frame::PathResponse {
+            data: [9; PATH_CHALLENGE_LEN],
+        };
 
         just_dec(&f, "1b0909090909090909");
     }
@@ -1203,7 +1223,7 @@ mod tests {
         // Without the length bit.
         let f = Frame::Datagram {
             data: &[1, 2, 3],
-            fill: true,
+            len_field_len: None,
         };
 
         just_dec(&f, "30010203");
@@ -1211,7 +1231,7 @@ mod tests {
         // With the length bit.
         let f = Frame::Datagram {
             data: &[1, 2, 3],
-            fill: false,
+            len_field_len: NonZeroUsize::new(1),
         };
         just_dec(&f, "3103010203");
     }
@@ -1233,7 +1253,7 @@ mod tests {
     fn invalid_frame_type_len() {
         let f = Frame::Datagram {
             data: &[1, 2, 3],
-            fill: true,
+            len_field_len: None,
         };
 
         just_dec(&f, "4030010203");
@@ -1293,7 +1313,7 @@ mod tests {
         assert_eq!(
             Frame::Datagram {
                 data: &[1, 2, 3],
-                fill: false
+                len_field_len: NonZeroUsize::new(1),
             }
             .dump(),
             "Datagram { len: 3 }"
@@ -1387,11 +1407,17 @@ mod tests {
             "RetireConnectionId { sequence_number: 1 }"
         );
         assert_eq!(
-            Frame::PathChallenge { data: [1; 8] }.dump(),
+            Frame::PathChallenge {
+                data: [1; PATH_CHALLENGE_LEN]
+            }
+            .dump(),
             "PathChallenge { data: [1, 1, 1, 1, 1, 1, 1, 1] }"
         );
         assert_eq!(
-            Frame::PathResponse { data: [2; 8] }.dump(),
+            Frame::PathResponse {
+                data: [2; PATH_CHALLENGE_LEN]
+            }
+            .dump(),
             "PathResponse { data: [2, 2, 2, 2, 2, 2, 2, 2] }"
         );
         assert_eq!(
@@ -1463,7 +1489,9 @@ mod tests {
     /// 1-RTT packets (RFC 9000, Table 3).
     #[test]
     fn is_allowed_path_response_and_handshake_done() {
-        let path_response = Frame::PathResponse { data: [0; 8] };
+        let path_response = Frame::PathResponse {
+            data: [0; PATH_CHALLENGE_LEN],
+        };
         assert!(path_response.is_allowed(packet::Type::Short));
         assert!(!path_response.is_allowed(packet::Type::ZeroRtt));
 
@@ -1471,7 +1499,9 @@ mod tests {
         assert!(!Frame::HandshakeDone.is_allowed(packet::Type::ZeroRtt));
 
         // PATH_CHALLENGE, by contrast, is permitted in 0-RTT packets.
-        let path_challenge = Frame::PathChallenge { data: [0; 8] };
+        let path_challenge = Frame::PathChallenge {
+            data: [0; PATH_CHALLENGE_LEN],
+        };
         assert!(path_challenge.is_allowed(packet::Type::ZeroRtt));
     }
 
@@ -1561,7 +1591,7 @@ mod tests {
     fn decode_max_streams_exceeds_limit() {
         let mut enc = Encoder::default();
         enc.encode_byte(0x12); // MaxStreamsBiDi
-        enc.encode_varint((1u64 << 60) + 1);
+        enc.encode_varint(MAX_STREAMS_LIMIT + 1);
         assert_eq!(
             Frame::decode(&mut enc.as_decoder()).unwrap_err(),
             Error::StreamLimit
@@ -1573,7 +1603,7 @@ mod tests {
     fn decode_streams_blocked_exceeds_limit() {
         let mut enc = Encoder::default();
         enc.encode_byte(0x16); // StreamsBlockedBiDi
-        enc.encode_varint((1u64 << 60) + 1);
+        enc.encode_varint(MAX_STREAMS_LIMIT + 1);
         assert_eq!(
             Frame::decode(&mut enc.as_decoder()).unwrap_err(),
             Error::StreamLimit

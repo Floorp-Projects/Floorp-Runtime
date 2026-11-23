@@ -10,6 +10,7 @@ import posixpath
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from argparse import Namespace
@@ -30,6 +31,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 
 class RemoteProcessMonitor:
     processStatus = []
+    _launchLock = threading.Lock()
 
     def __init__(self, package, device, log, remoteLogFile):
         self.package = package
@@ -55,27 +57,28 @@ class RemoteProcessMonitor:
         self.device.pkill(self.process_name, sig=9, attempts=1)
 
     def launch_service(self, extra_args, env, selectedProcess, test_name=None):
-        if not self.device.process_exist(self.package):
-            # Make sure the main app is running, this should help making the
-            # tests get foreground priority scheduling.
-            self.device.launch_activity(
-                self.package,
-                intent="org.mozilla.geckoview.test_runner.XPCSHELL_TEST_MAIN",
-                activity_name="TestRunnerActivity",
-            )
-            # Newer Androids require that background services originate from
-            # active apps, so wait here until the test runner is the top
-            # activity.
-            retries = 20
-            top = self.device.get_top_activity(timeout=60)
-            while top != self.package and retries > 0:
-                self.log.info(
-                    "%s | Checking that %s is the top activity."
-                    % (test_name, self.package)
+        with self._launchLock:
+            if not self.device.process_exist(self.package):
+                # Make sure the main app is running, this should help making the
+                # tests get foreground priority scheduling.
+                self.device.launch_activity(
+                    self.package,
+                    intent="org.mozilla.geckoview.test_runner.XPCSHELL_TEST_MAIN",
+                    activity_name="TestRunnerActivity",
                 )
+                # Newer Androids require that background services originate from
+                # active apps, so wait here until the test runner is the top
+                # activity.
+                retries = 20
                 top = self.device.get_top_activity(timeout=60)
-                time.sleep(1)
-                retries -= 1
+                while top != self.package and retries > 0:
+                    self.log.info(
+                        "%s | Checking that %s is the top activity."
+                        % (test_name, self.package)
+                    )
+                    top = self.device.get_top_activity(timeout=60)
+                    time.sleep(1)
+                    retries -= 1
 
         self.process_name = self.package + (":xpcshell%d" % selectedProcess)
 
@@ -346,7 +349,11 @@ class RemoteXPCShellTestThread(xpcshell.XPCShellTestThread):
         with mozfile.TemporaryDirectory() as dumpDir:
             self.device.pull(self.remoteMinidumpDir, dumpDir)
             crashed = mozcrash.log_crashes(
-                self.log, dumpDir, symbols_path, test=test_name
+                self.log,
+                dumpDir,
+                symbols_path,
+                test=test_name,
+                quiet=self.crashAsPass or self.retry,
             )
         return crashed
 
@@ -706,20 +713,44 @@ class XPCShellRemote(xpcshell.XPCShellTests):
         return node_env
 
     def trySetupNode(self):
-        super().trySetupNode()
-        # make node host ports visible to device
-        if "MOZHTTP2_PORT" in self.env:
-            port = "tcp:{}".format(self.env["MOZHTTP2_PORT"])
-            self.device.create_socket_connection(
-                ADBDevice.SOCKET_DIRECTION_REVERSE, port, port
-            )
-            self.log.info("reversed MOZHTTP2_PORT connection for port " + port)
-        if "MOZNODE_EXEC_PORT" in self.env:
-            port = "tcp:{}".format(self.env["MOZNODE_EXEC_PORT"])
-            self.device.create_socket_connection(
-                ADBDevice.SOCKET_DIRECTION_REVERSE, port, port
-            )
-            self.log.info("reversed MOZNODE_EXEC_PORT connection for port " + port)
+        NODE_PORT_KEYS = ["MOZHTTP2_PORT", "MOZNODE_EXEC_PORT"]
+        MAX_ATTEMPTS = 3
+        portsPreset = any(key in self.env for key in NODE_PORT_KEYS)
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            super().trySetupNode()
+            # make node host ports visible to device
+            reversedPorts = []
+            try:
+                for key in NODE_PORT_KEYS:
+                    if key in self.env:
+                        port = f"tcp:{self.env[key]}"
+                        self.device.create_socket_connection(
+                            ADBDevice.SOCKET_DIRECTION_REVERSE, port, port
+                        )
+                        reversedPorts.append(port)
+                        self.log.info(f"reversed {key} connection for port {port}")
+                return
+            except mozdevice.ADBProcessError as e:
+                # The node ports are free on the host but can be in use on the
+                # device. If we picked them, start node again on new ports.
+                if (
+                    portsPreset
+                    or self.mozHttp2Server is None
+                    or attempt == MAX_ATTEMPTS
+                    or "Address already in use" not in str(e)
+                ):
+                    raise
+                self.log.info(f"node port in use on the device, retrying: {e}")
+            for port in reversedPorts:
+                self.device.remove_socket_connections(
+                    ADBDevice.SOCKET_DIRECTION_REVERSE, port
+                )
+            super().shutdownNode()
+            # The base trySetupNode stored the ports node picked in self.env,
+            # and node listens on the ports in self.env if they are set, so
+            # remove them to have node pick new ones.
+            for key in NODE_PORT_KEYS:
+                self.env.pop(key, None)
 
     def shutdownNode(self):
         super().shutdownNode()

@@ -11,7 +11,7 @@ import {
   navigateToLink,
   escapeHtmlEntities,
 } from "chrome://browser/content/firefoxview/helpers.mjs";
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://browser/content/sidebar/sidebar-bookmark-list.mjs";
 
 let XPCOMUtils;
@@ -1167,6 +1167,11 @@ export class SidebarBookmarks extends SidebarPage {
   #searchBookmarks(node, query) {
     const results = [];
     for (const child of node.children ?? []) {
+      // Smart bookmark (place:) results duplicate real bookmarks or include
+      // history entries, so don't search inside them.
+      if (child.isPlaceContainer) {
+        continue;
+      }
       if (child.children) {
         results.push(...this.#searchBookmarks(child, query));
       } else if (
@@ -1520,19 +1525,13 @@ export class SidebarBookmarks extends SidebarPage {
     return html`
       ${this.stylesheet()}
       <div class="sidebar-panel">
-        <sidebar-panel-header
-          data-l10n-id="sidebar-menu-bookmarks-header"
-          data-l10n-attrs="heading"
-          view="viewBookmarksSidebar"
-        >
-          <div class="options-container">
-            <moz-input-search
-              data-l10n-id="firefoxview-search-text-box-bookmarks"
-              data-l10n-attrs="placeholder"
-              @MozInputSearch:search=${this.onSearchQuery}
-            ></moz-input-search>
-          </div>
-        </sidebar-panel-header>
+        <div class="options-container">
+          <moz-input-search
+            data-l10n-id="firefoxview-search-text-box-bookmarks"
+            data-l10n-attrs="placeholder"
+            @MozInputSearch:search=${this.onSearchQuery}
+          ></moz-input-search>
+        </div>
         <div class="sidebar-panel-scrollable-content" tabindex="-1">
           ${when(
             this.searchQuery,

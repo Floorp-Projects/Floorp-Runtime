@@ -375,6 +375,71 @@ add_task(function test_computeInterestVectorClickModel() {
   Assert.equal(result[SPECIAL_FEATURE_CLICK], 2, "Should include raw click");
 });
 
+add_task(
+  function test_transformLocationTopicsToInterestVectorUsesModelFeatureNames() {
+    const model = FeatureModel.fromJSON(jsonModelData);
+    Assert.deepEqual(
+      model.transformLocationTopicsToInterestVector({
+        parenting: 1,
+        news_reader: 2,
+      }),
+      { news_reader: 2, parenting: 1, clicks: 2 },
+      "Location values use the model feature names"
+    );
+  }
+);
+
+add_task(function test_locationTimeZoneRequiresCoarseValue() {
+  const model = FeatureModel.fromJSON({
+    ...jsonModelData,
+    interest_vector: {
+      ...jsonModelData.interest_vector,
+      timeZoneOffset: {
+        features: {},
+        thresholds: [15, 18.1, 19.1],
+        diff_p: 1,
+        diff_q: 0,
+      },
+    },
+  });
+  for (const value of [undefined, null, NaN, Infinity, -1, 1.5, 4]) {
+    Assert.equal(
+      model.transformLocationTopicsToInterestVector(
+        { timeZoneOffset: 2 },
+        { timeZoneOffset: value }
+      ),
+      null,
+      `Invalid coarse timezone ${value} cannot produce a location vector`
+    );
+  }
+  for (const value of [0, 3]) {
+    Assert.equal(
+      model.transformLocationTopicsToInterestVector(
+        { timeZoneOffset: 2 },
+        { timeZoneOffset: value }
+      ).timeZoneOffset,
+      value,
+      "Preserves measured timezone, including zero, without thresholding again"
+    );
+  }
+});
+
+add_task(function test_computeInterestVectorClickScale() {
+  const params = { dataForIntervals: SQL_RESULT_DATA, indexSchema: SCHEMA };
+  const unscaled =
+    FeatureModel.fromJSON(jsonModelData).computeInterestVector(params);
+  const scaled = FeatureModel.fromJSON({
+    ...jsonModelData,
+    clickScale: true,
+  }).computeInterestVector(params);
+  Assert.greater(unscaled.parenting, 0, "Unscaled vector has a value");
+  Assert.equal(
+    scaled.parenting,
+    unscaled.parenting / unscaled[SPECIAL_FEATURE_CLICK],
+    "Vector is divided by the number of clicks"
+  );
+});
+
 add_task(function test_computeThresholds() {
   const modelData = { ...jsonModelData, rescale: true };
   const model = FeatureModel.fromJSON(modelData);
@@ -465,6 +530,37 @@ add_task(function test_computeMultipleVectors() {
     result.inferredInterests.parenting,
     0,
     "Original inferred interest is returned"
+  );
+});
+
+add_task(function test_computeMultipleVectorsPostProcessing() {
+  // Unscaled parenting is 1.5, so these thresholds only bucket it as 0 once
+  // it is rescaled to 1.
+  const model = FeatureModel.fromJSON({
+    ...jsonModelData,
+    rescale: true,
+    interest_vector: {
+      ...jsonModelData.interest_vector,
+      parenting: {
+        ...jsonModelData.interest_vector.parenting,
+        thresholds: [1.2, 2],
+      },
+    },
+  });
+  const result = model.computeInterestVectors({
+    dataForIntervals: SQL_RESULT_DATA,
+    indexSchema: SCHEMA,
+    applyPostProcessing: true,
+  });
+  Assert.equal(
+    result.inferredInterests.parenting,
+    1.0,
+    "Inferred interests are rescaled"
+  );
+  Assert.equal(
+    result.coarseInferredInterests.parenting,
+    0,
+    "Coarse interests are thresholded after rescaling"
   );
 });
 

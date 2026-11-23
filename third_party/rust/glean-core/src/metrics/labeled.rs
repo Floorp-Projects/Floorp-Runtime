@@ -17,8 +17,10 @@ use rusqlite::params;
 #[cfg(feature = "sqlite")]
 use crate::common_metric_data::LabelCheck;
 use crate::common_metric_data::{CommonMetricData, MetricLabel};
+use crate::database::EMPTY_LABEL;
 use crate::error_recording::{test_get_num_recorded_errors, ErrorType};
 use crate::histogram::HistogramType;
+use crate::metrics::dual_labeled_counter::RECORD_SEPARATOR;
 use crate::metrics::{
     BooleanMetric, CounterMetric, CustomDistributionMetric, MemoryDistributionMetric, MemoryUnit,
     MetricType, QuantityMetric, StringMetric, TestGetValue, TimeUnit, TimingDistributionMetric,
@@ -435,6 +437,18 @@ pub fn validate_dynamic_label_sqlite(
             MAX_LABEL_LENGTH
         );
         LabelCheck::Error(String::from(OTHER_LABEL), 1)
+    } else if label.contains(RECORD_SEPARATOR) {
+        log::warn!(
+            "Metric {:?}: Label cannot contain the ASCII record separator character (0x1E)",
+            base_identifier
+        );
+        LabelCheck::Error(String::from(OTHER_LABEL), 1)
+    } else if label.contains(EMPTY_LABEL) {
+        log::warn!(
+            "Metric {:?}: label can't contain DEL (`\\x7F`)",
+            base_identifier,
+        );
+        LabelCheck::Error(String::from(OTHER_LABEL), 1)
     } else {
         LabelCheck::Label(label.to_string())
     }
@@ -489,6 +503,19 @@ pub fn validate_dynamic_label_rkv(
                 label.len(),
                 MAX_LABEL_LENGTH
             );
+            record_error(glean, meta, ErrorType::InvalidLabel, msg, None);
+        }
+        true
+    } else if label.contains(RECORD_SEPARATOR) {
+        if record {
+            let msg =
+                String::from("Label cannot contain the ASCII record separator character (0x1E)");
+            record_error(glean, meta, ErrorType::InvalidLabel, msg, None);
+        }
+        true
+    } else if label.contains(EMPTY_LABEL) {
+        if record {
+            let msg = String::from("label can't contain DEL (`\\x7F`)");
             record_error(glean, meta, ErrorType::InvalidLabel, msg, None);
         }
         true

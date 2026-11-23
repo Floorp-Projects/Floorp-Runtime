@@ -463,7 +463,7 @@ void CookieServiceChild::AddCookieFromDocument(
         principal->GetIsOriginPotentiallyTrustworthy();
 
     for (uint32_t i = 0; i < cookies->Length(); ++i) {
-      RefPtr<Cookie> existingCookie = cookies->ElementAt(i);
+      Cookie* existingCookie = cookies->ElementAt(i);
       if (existingCookie->KeyHash() == aCookie.KeyHash() &&
           existingCookie->Name().Equals(aCookie.Name()) &&
           existingCookie->Host().Equals(aCookie.Host()) &&
@@ -496,13 +496,13 @@ void CookieServiceChild::AddCookieFromDocument(
 
     // If there is no WindowGlobalChild fall back to PCookieService SetCookies.
     if (NS_WARN_IF(!windowGlobalChild)) {
-      SendSetCookies(aBaseDomain, aOriginAttributes, aDocumentURI, aThirdParty,
+      SendSetCookies(aOriginAttributes, aDocumentURI, aThirdParty,
                      cookiesToSend);
       return;
     }
 
-    windowGlobalChild->SendSetCookies(aBaseDomain, aOriginAttributes,
-                                      aDocumentURI, aThirdParty, cookiesToSend);
+    windowGlobalChild->SendSetCookies(aOriginAttributes, aDocumentURI,
+                                      aThirdParty, cookiesToSend);
   }
 }
 

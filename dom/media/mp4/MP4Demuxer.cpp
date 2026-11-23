@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "AOMDecoder.h"
 #include "AnnexB.h"
@@ -304,7 +305,7 @@ void MP4Demuxer::NotifyDataRemoved() {
 UniquePtr<EncryptionInfo> MP4Demuxer::GetCrypto() {
   UniquePtr<EncryptionInfo> crypto;
   if (!mCryptoInitData.IsEmpty()) {
-    crypto.reset(new EncryptionInfo{});
+    crypto = std::make_unique<EncryptionInfo>();
     crypto->AddInitData(u"cenc"_ns, mCryptoInitData);
   }
   return crypto;
@@ -319,7 +320,7 @@ MP4TrackDemuxer::MP4TrackDemuxer(MediaResource* aResource,
       mInfo(std::move(aInfo)),
       mIndex(new MP4SampleIndex(aIndices, mStream, mInfo->mTrackId,
                                 mInfo->IsAudio(), aTimeScale)),
-      mIterator(MakeUnique<SampleIterator>(mIndex)),
+      mIterator(std::make_unique<SampleIterator>(mIndex)),
       mNeedReIndex(true) {
   EnsureUpToDateIndex();  // Force update of index
 

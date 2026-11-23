@@ -15,6 +15,7 @@
 #include "mozilla/dom/ContentList.h"
 #include "mozilla/dom/DocGroup.h"
 #include "mozilla/dom/KeyframeEffect.h"
+#include "nsCCUncollectableMarker.h"
 #include "nsContentUtils.h"
 #include "nsError.h"
 #include "nsIScriptGlobalObject.h"
@@ -145,7 +146,8 @@ void nsMutationReceiver::Disconnect(bool aRemoveFromObserver) {
 
 void nsMutationReceiver::AttributeWillChange(Element* aElement,
                                              int32_t aNameSpaceID,
-                                             nsAtom* aAttribute, AttrModType) {
+                                             nsAtom* aAttribute,
+                                             AttrModType aModType) {
   if (nsAutoMutationBatch::IsBatching() ||
       !ObservesAttr(RegisterTarget(), aElement, aNameSpaceID, aAttribute)) {
     return;
@@ -166,7 +168,10 @@ void nsMutationReceiver::AttributeWillChange(Element* aElement,
     }
   }
 
-  if (AttributeOldValue() && m->mPrevValue.IsVoid()) {
+  MOZ_ASSERT_IF(aModType == AttrModType::Addition,
+                !aElement->HasAttr(aNameSpaceID, aAttribute));
+  if (AttributeOldValue() && m->mPrevValue.IsVoid() &&
+      aModType != AttrModType::Addition) {
     if (!aElement->GetAttr(aNameSpaceID, aAttribute, m->mPrevValue)) {
       m->mPrevValue.SetIsVoid(true);
     }
@@ -303,7 +308,7 @@ void nsMutationReceiver::ContentWillBeRemoved(nsIContent* aChild,
                   aChild,
                   [&isNewEntry] {
                     isNewEntry = true;
-                    return MakeUnique<nsCOMArray<nsMutationReceiver>>();
+                    return std::make_unique<nsCOMArray<nsMutationReceiver>>();
                   })
               .get();
       if (!isNewEntry) {
@@ -909,8 +914,25 @@ nsDOMMutationRecord* nsDOMMutationObserver::CurrentRecord(nsAtom* aType) {
 }
 
 nsDOMMutationObserver::~nsDOMMutationObserver() {
+  NodeOwnedObjectList<nsDOMMutationObserver>::Remove(this);
   for (int32_t i = 0; i < mReceivers.Count(); ++i) {
     mReceivers[i]->RemoveClones();
+  }
+}
+
+bool nsDOMMutationObserver::HasOwnerInCCGenerationDocument() const {
+  for (int32_t i = 0; i < mReceivers.Count(); ++i) {
+    const nsINode* target = mReceivers[i]->Target();
+    if (target && nsCCUncollectableMarker::IsInCCGenerationDocument(*target)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void nsDOMMutationObserver::MarkForCC() {
+  if (mCallback) {
+    mCallback->MarkForCC();
   }
 }
 

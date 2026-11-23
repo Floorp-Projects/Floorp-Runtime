@@ -174,8 +174,8 @@ class EventListenerManagerBase {
 
 class EventListenerManager final
     : public EventListenerManagerBase,
-      // The managers owned by nodes are kept in a list, see
-      // nsContentUtils::AddNodeListenerManager.
+      // The managers owned by nodes, except documents, are kept in
+      // NodeOwnedObjectList<EventListenerManager>.
       public DoublyLinkedListElement<EventListenerManager> {
   ~EventListenerManager();
 
@@ -413,18 +413,16 @@ class EventListenerManager final
                                  const EventListenerFlags& aFlags);
 
   /**
-   * Sets the current "inline" event listener for aName to be a
-   * function compiled from aFunc if !aDeferCompilation.  If
-   * aDeferCompilation, then we assume that we can get the string from
-   * mTarget later and compile lazily.
+   * Sets the current "inline" event listener for aName to a handler that is
+   * compiled from aFunc the first time it is needed.
    *
-   * aElement, if not null, is the element the string is associated with.
+   * aElement is the element whose event handler content attribute aFunc is
+   * the value of.
    */
   // XXXbz does that play correctly with nodes being adopted across
   // documents?  Need to double-check the spec here.
   nsresult SetEventHandler(nsAtom* aName, const nsAString& aFunc,
-                           bool aDeferCompilation, bool aPermitUntrustedEvents,
-                           dom::Element* aElement);
+                           bool aPermitUntrustedEvents, dom::Element* aElement);
   /**
    * Remove the current "inline" event listener for aName.
    */
@@ -563,6 +561,7 @@ class EventListenerManager final
 
   uint32_t ListenerCount() const;
 
+  bool HasOwnerInCCGenerationDocument() const;
   void MarkForCC();
 
   void TraceListeners(JSTracer* aTrc);
@@ -634,14 +633,11 @@ class EventListenerManager final
   void ProcessApzAwareEventListenerAdd(nsAtom* aEvent);
 
   /**
-   * Compile the "inline" event listener for aListener.  The
-   * body of the listener can be provided in aBody; if this is null we
-   * will look for it on mTarget.  If aBody is provided, aElement should be
-   * as well; otherwise it will also be inferred from mTarget.
+   * Compile the "inline" event listener for aListener.  The body of the
+   * listener is the pending source of its JSEventHandler if it has one, and is
+   * read from the attribute on mTarget otherwise.
    */
-  nsresult CompileEventHandlerInternal(Listener* aListener, nsAtom* aTypeAtom,
-                                       const nsAString* aBody,
-                                       dom::Element* aElement);
+  nsresult CompileEventHandlerInternal(Listener* aListener, nsAtom* aTypeAtom);
 
   /**
    * Find the Listener for the "inline" event listener for aTypeAtom.

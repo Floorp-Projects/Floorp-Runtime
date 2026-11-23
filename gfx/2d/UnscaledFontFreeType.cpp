@@ -20,6 +20,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#ifdef MOZ_WIDGET_ANDROID
+#  include <linux/magic.h>
+#  include <sys/vfs.h>
+#endif
+
 namespace mozilla::gfx {
 
 bool UnscaledFontFreeType::GetFontFileData(FontFileDataOutput aDataCallback,
@@ -93,8 +98,9 @@ RefPtr<SharedFTFace> UnscaledFontFreeType::InitFace() {
 }
 
 void UnscaledFontFreeType::GetVariationSettingsFromFace(
-    std::vector<wr::FontVariation>* aVariations, FT_Face aFace) {
-  if (!aFace || !(aFace->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
+    std::vector<wr::FontVariation>* aVariations, SharedFTFace* aFace) {
+  FT_Face face = aFace ? aFace->GetFace() : nullptr;
+  if (!face || !(face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
     return;
   }
 
@@ -122,11 +128,14 @@ void UnscaledFontFreeType::GetVariationSettingsFromFace(
   }
 #endif
 
+  // Even a read-only query must lock the face. FreeType can temporarily
+  // replace and free face->glyph while rendering color glyphs.
+  AutoLockSharedFTFace lock(aFace);
   FT_MM_Var* mmVar = nullptr;
-  if ((*getVar)(aFace, &mmVar) == FT_Err_Ok) {
+  if ((*getVar)(face, &mmVar) == FT_Err_Ok) {
     aVariations->reserve(mmVar->num_axis);
     StackArray<FT_Fixed, 32> coords(mmVar->num_axis);
-    if ((*getCoords)(aFace, mmVar->num_axis, coords.data()) == FT_Err_Ok) {
+    if ((*getCoords)(face, mmVar->num_axis, coords.data()) == FT_Err_Ok) {
       bool changed = false;
       for (uint32_t i = 0; i < mmVar->num_axis; i++) {
         if (coords[i] != mmVar->axis[i].def) {
@@ -140,7 +149,7 @@ void UnscaledFontFreeType::GetVariationSettingsFromFace(
       }
     }
     if (doneVar) {
-      (*doneVar)(aFace->glyph->library, mmVar);
+      (*doneVar)(face->glyph->library, mmVar);
     } else {
       free(mmVar);
     }
@@ -181,6 +190,50 @@ void UnscaledFontFreeType::ApplyVariationsToFace(
 }
 
 #ifdef MOZ_WIDGET_ANDROID
+
+#  ifndef TMPFS_MAGIC
+#    define TMPFS_MAGIC 0x01021994
+#  endif
+
+#  ifndef PROC_SUPER_MAGIC
+#    define PROC_SUPER_MAGIC 0x9fa0
+#  endif
+
+#  ifndef SYSFS_MAGIC
+#    define SYSFS_MAGIC 0x62656572
+#  endif
+
+bool UnscaledFontFreeType::ValidateFontDescriptor(const uint8_t* aName,
+                                                  size_t aNameLength,
+                                                  std::string& aResultName,
+                                                  uint32_t& aIndex) {
+  if (aNameLength == 0) {
+    gfxWarning() << "FreeType font descriptor is truncated.";
+    return false;
+  }
+  std::string path((const char*)aName, aNameLength);
+
+  struct stat st{};
+  if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode) && st.st_nlink > 0) {
+    struct statfs sfs{};
+    if (statfs(path.c_str(), &sfs) == 0) {
+      switch ((unsigned long)sfs.f_type) {
+        case TMPFS_MAGIC:
+        case PROC_SUPER_MAGIC:
+        case SYSFS_MAGIC:
+          // Disallow
+          break;
+        default:
+          // Allow other types
+          aResultName = std::move(path);
+          return true;
+      }
+    }
+  }
+
+  gfxWarning() << "Failed identifying font descriptor.";
+  return false;
+}
 
 already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFont(
     Float aGlyphSize, const uint8_t* aInstanceData,
@@ -227,14 +280,11 @@ already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFontFromWRFont(
 
 already_AddRefed<UnscaledFont> UnscaledFontFreeType::CreateFromFontDescriptor(
     const uint8_t* aData, uint32_t aDataLength, uint32_t aIndex) {
-  if (aDataLength == 0) {
-    gfxWarning() << "FreeType font descriptor is truncated.";
+  std::string path;
+  if (!ValidateFontDescriptor(aData, aDataLength, path, aIndex)) {
     return nullptr;
   }
-  const char* path = reinterpret_cast<const char*>(aData);
-  RefPtr unscaledFont =
-      MakeRefPtr<UnscaledFontFreeType>(std::string(path, aDataLength), aIndex);
-  return unscaledFont.forget();
+  return MakeAndAddRef<UnscaledFontFreeType>(std::move(path), aIndex);
 }
 
 #endif  // MOZ_WIDGET_ANDROID

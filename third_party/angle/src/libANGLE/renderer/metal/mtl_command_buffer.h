@@ -59,7 +59,7 @@ class AtomicSerial : angle::NonCopyable
 class AtomicCommandBufferError : angle::NonCopyable
 {
   public:
-    void store(MTLCommandBufferError value) { mValue.store(value, std::memory_order_release); }
+    void store(MTLCommandBufferError value);
     MTLCommandBufferError pop()
     {
         return mValue.exchange(MTLCommandBufferErrorNone, std::memory_order_acq_rel);
@@ -562,6 +562,7 @@ class RenderCommandEncoder final : public CommandEncoder
                                                                      uint32_t baseInstance);
 
     RenderCommandEncoder &setVisibilityResultMode(MTLVisibilityResultMode mode, size_t offset);
+    MTLVisibilityResultMode getVisibilityResultMode() const;
 
     RenderCommandEncoder &useResource(const BufferRef &resource,
                                       MTLResourceUsage usage,

@@ -116,6 +116,8 @@ const JEXL_PROVIDER_CACHE = new Set();
 // To observe the app locale change notification.
 const TOPIC_INTL_LOCALE_CHANGED = "intl:app-locales-changed";
 const TOPIC_EXPERIMENT_ENROLLMENT_CHANGED = "nimbus:enrollments-updated";
+// Notified after messages have been reloaded from at least one provider.
+const TOPIC_MESSAGES_LOADED = "asrouter:messages-loaded";
 // To observe the pref that controls if ASRouter should use the remote Fluent files for l10n.
 const USE_REMOTE_L10N_PREF =
   "browser.newtabpage.activity-stream.asrouter.useRemoteL10n";
@@ -803,6 +805,7 @@ export class _ASRouter {
       multiProfileMessageBlocklist: [],
       messageImpressions: {},
       screenImpressions: {},
+      previousSessionEnd: 0,
       messages: [],
       groups: [],
       errors: [],
@@ -832,8 +835,7 @@ export class _ASRouter {
     if (lazy.TARGETING_PREFERENCES.includes(prefName)) {
       let invalidMessages = [];
       // Notify all tabs of messages that have become invalid after pref change
-      const context = this._getMessagesContext();
-      const targetingContext = new lazy.TargetingContext(context);
+      const targetingContext = new lazy.TargetingContext();
 
       for (const msg of this.state.messages.filter(this.isUnblockedMessage)) {
         if (!msg.targeting) {
@@ -1117,6 +1119,7 @@ export class _ASRouter {
 
       await this.setState(newState);
       await this.cleanupImpressions();
+      Services.obs.notifyObservers(null, TOPIC_MESSAGES_LOADED);
     }
 
     await this._fireMessagesLoadedTrigger();
@@ -1348,17 +1351,16 @@ export class _ASRouter {
   }
 
   updateTargetingParameters() {
-    return this.getTargetingParameters(
-      lazy.ASRouterTargeting.Environment,
-      this._getMessagesContext()
-    ).then(targetingParameters => ({
-      ...this.state,
-      providerPrefs: lazy.ASRouterPreferences.providers,
-      userPrefs: lazy.ASRouterPreferences.getAllUserPreferences(),
-      targetingParameters,
-      errors: this.errors,
-      devtoolsEnabled: lazy.ASRouterPreferences.devtoolsEnabled,
-    }));
+    return this.getTargetingParameters(lazy.ASRouterTargeting.Environment).then(
+      targetingParameters => ({
+        ...this.state,
+        providerPrefs: lazy.ASRouterPreferences.providers,
+        userPrefs: lazy.ASRouterPreferences.getAllUserPreferences(),
+        targetingParameters,
+        errors: this.errors,
+        devtoolsEnabled: lazy.ASRouterPreferences.devtoolsEnabled,
+      })
+    );
   }
 
   getMessageById(id) {
@@ -1397,9 +1399,9 @@ export class _ASRouter {
 
   /**
    * Used by ASRouter Admin returns all ASRouterTargeting.Environment
-   * and ASRouter._getMessagesContext parameters and values
+   * parameters and values
    */
-  async getTargetingParameters(environment, localContext) {
+  async getTargetingParameters(environment, localContext = {}) {
     // Resolve objects that may contain promises.
     async function resolve(object) {
       if (typeof object === "object" && object !== null) {
@@ -1455,24 +1457,6 @@ export class _ASRouter {
         event_context: {},
       },
     });
-  }
-
-  // Return an object containing targeting parameters used to select messages
-  _getMessagesContext() {
-    const { messageImpressions, previousSessionEnd, screenImpressions } =
-      this.state;
-
-    return {
-      get messageImpressions() {
-        return messageImpressions;
-      },
-      get previousSessionEnd() {
-        return previousSessionEnd;
-      },
-      get screenImpressions() {
-        return screenImpressions;
-      },
-    };
   }
 
   async evaluateExpression({ expression, context }) {
@@ -1672,6 +1656,34 @@ export class _ASRouter {
     return allowed.has(action.type);
   }
 
+  /**
+   * Returns a copy of an "action_only" message action with `promptOnly: true`
+   * set on every pinning action, including those nested in a MULTI_ACTION.
+   * With no message UI, the OS prompt is the only place the user can consent
+   * to pinning, so pinning must not fall back to APIs that pin silently.
+   *
+   * @param {object} action - The special message action.
+   * @returns {object}
+   */
+  _withPromptOnlyPinActions(action) {
+    const PIN_ACTIONS = ["PIN_FIREFOX_TO_TASKBAR", "PIN_AND_DEFAULT"];
+    if (PIN_ACTIONS.includes(action.type)) {
+      return { ...action, data: { ...action.data, promptOnly: true } };
+    }
+    if (action.type === "MULTI_ACTION") {
+      return {
+        ...action,
+        data: {
+          ...action.data,
+          actions: action.data.actions.map(nested =>
+            this._withPromptOnlyPinActions(nested)
+          ),
+        },
+      };
+    }
+    return action;
+  }
+
   routeCFRMessage(originalMessage, browser, trigger, force = false) {
     if (!originalMessage) {
       return { message: {} };
@@ -1717,7 +1729,10 @@ export class _ASRouter {
         });
         // Add local impression record, used for enforcing frequency caps.
         this.dispatchCFRAction({ type: "IMPRESSION", data: message });
-        lazy.SpecialMessageActions.handleAction(action, browser);
+        lazy.SpecialMessageActions.handleAction(
+          this._withPromptOnlyPinActions(action),
+          browser
+        );
         break;
       }
       case "infobar":
@@ -2208,8 +2223,6 @@ export class _ASRouter {
       return returnAll ? messages : null;
     }
 
-    const context = this._getMessagesContext();
-
     // Find a message that matches the targeting context as well as the trigger context (if one is provided)
     // If no trigger is provided, we should find a message WITHOUT a trigger property defined.
     return lazy.ASRouterTargeting.findMatchingMessage({
@@ -2219,7 +2232,6 @@ export class _ASRouter {
         param: triggerParam,
         context: triggerContext,
       },
-      context,
       onError: this._handleTargetingError,
       ordered,
       shouldCache,

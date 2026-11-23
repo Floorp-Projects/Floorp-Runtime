@@ -24,6 +24,13 @@ class MOZ_STACK_CLASS gfxVarsCollectUpdates;
 #  define GFX_VARS_LIST_ANDROID(_)                               \
     _(PlatformMediaCodecsSupported, MediaCodecsSupported,        \
       MediaCodecsSupported())                                    \
+    _(PlatformMediaCodecs10BitSupported, MediaCodecsSupported,   \
+      MediaCodecsSupported())                                    \
+    _(PlatformH264HwDecodeMaxSize, IntSize, IntSize())           \
+    _(PlatformHEVCHwDecodeMaxSize, IntSize, IntSize())           \
+    _(PlatformVP8HwDecodeMaxSize, IntSize, IntSize())            \
+    _(PlatformVP9HwDecodeMaxSize, IntSize, IntSize())            \
+    _(PlatformAV1HwDecodeMaxSize, IntSize, IntSize())            \
     _(PlatformUnmappedSwDecodeMimeTypes, nsCString, nsCString()) \
     _(PlatformUnmappedHwDecodeMimeTypes, nsCString, nsCString()) \
     _(WidevineSupport, DrmSchemeSupport, DrmSchemeSupport::Unknown)
@@ -70,6 +77,7 @@ class MOZ_STACK_CLASS gfxVarsCollectUpdates;
   _(WebRenderBatchingLookback, int32_t, 10)                        \
   _(WebRenderBlobTileSize, int32_t, 256)                           \
   _(WebRenderBatchedUploadThreshold, int32_t, 512 * 512)           \
+  _(WebRenderPathAaSamples, int32_t, 8)                            \
   _(WebRenderSlowCpuFrameThreshold, float, 10.0)                   \
   _(UseSoftwareWebRender, bool, false)                             \
   _(AllowSoftwareWebRenderD3D11, bool, false)                      \
@@ -90,7 +98,6 @@ class MOZ_STACK_CLASS gfxVarsCollectUpdates;
   _(UseDoubleBufferingWithCompositor, bool, false)                 \
   _(UseGLSwizzle, bool, true)                                      \
   _(ForceSubpixelAAWherePossible, bool, false)                     \
-  _(FxREmbedded, bool, false)                                      \
   _(UseAHardwareBufferSharedSurfaceWebglOop, bool, false)          \
   _(UseEGL, bool, false)                                           \
   _(DrmRenderDevice, nsCString, nsCString())                       \
@@ -137,7 +144,7 @@ class MOZ_STACK_CLASS gfxVarsCollectUpdates;
   _(AdapterVendorID, nsCString, nsCString())                       \
   _(AdapterDeviceID, nsCString, nsCString())                       \
   _(AdapterDriverVersion, nsCString, nsCString())                  \
-  _(UseAImageReaderVideoGpuProcessAndroid, bool, false)            \
+  _(ForceAImageReaderAndroid, bool, false)                         \
   _(AllowMetalAngleWebGL, bool, false)                             \
   _(CanUseVulkanHardwareVideoDecoding, bool, false)                \
   GFX_VARS_LIST_ANDROID(_)                                         \

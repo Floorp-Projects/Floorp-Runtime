@@ -436,7 +436,7 @@ MP4SampleIndex::MP4SampleIndex(const IndiceWrapper& aIndices,
     : mSource(aSource), mIsAudio(aIsAudio) {
   if (!aIndices.Length()) {
     mMoofParser =
-        MakeUnique<MoofParser>(aSource, AsVariant(aTrackId), aIsAudio);
+        std::make_unique<MoofParser>(aSource, AsVariant(aTrackId), aIsAudio);
   } else {
     if (!mIndex.SetCapacity(aIndices.Length(), fallible)) {
       // OOM.
@@ -456,6 +456,7 @@ MP4SampleIndex::MP4SampleIndex(const IndiceWrapper& aIndices,
       }
       if (indice.start_offset > uint64_t(INT64_MAX) ||
           indice.end_offset > uint64_t(INT64_MAX)) {
+        mDataOffset.Clear();
         return;
       }
       if (indice.sync || mIsAudio) {

@@ -18,6 +18,8 @@
 #include "mozilla/dom/ElementInlines.h"
 #include "mozilla/dom/HTMLIFrameElement.h"
 #include "mozilla/dom/HTMLImageElement.h"
+#include "mozilla/dom/HTMLMediaElement.h"
+#include "nsCCUncollectableMarker.h"
 #include "nsContainerFrame.h"
 #include "nsContentUtils.h"
 #include "nsIFrame.h"
@@ -82,7 +84,25 @@ DOMIntersectionObserver::DOMIntersectionObserver(
     already_AddRefed<nsPIDOMWindowInner> aOwner, dom::IntersectionCallback& aCb)
     : mOwner(aOwner),
       mDocument(mOwner->GetExtantDoc()),
-      mCallback(RefPtr<dom::IntersectionCallback>(&aCb)) {}
+      mCallback(RefPtr<dom::IntersectionCallback>(&aCb)) {
+  NodeOwnedObjectList<DOMIntersectionObserver>::Add(this);
+}
+
+bool DOMIntersectionObserver::HasOwnerInCCGenerationDocument() const {
+  for (const Element* target : mObservationTargets) {
+    if (nsCCUncollectableMarker::IsInCCGenerationDocument(*target)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void DOMIntersectionObserver::MarkForCC() {
+  if (dom::IntersectionCallback* callback =
+          mCallback.as<RefPtr<dom::IntersectionCallback>>()) {
+    callback->MarkForCC();
+  }
+}
 
 already_AddRefed<DOMIntersectionObserver> DOMIntersectionObserver::Constructor(
     const GlobalObject& aGlobal, dom::IntersectionCallback& aCb,
@@ -194,9 +214,12 @@ static void LazyLoadCallback(
         image->StopLazyLoading(HTMLImageElement::StartLoad::Yes);
       } else if (auto* iframe = HTMLIFrameElement::FromNode(target)) {
         iframe->StopLazyLoading(HTMLIFrameElement::TriggerLoad::Yes);
+      } else if (auto* media = HTMLMediaElement::FromNode(target)) {
+        media->StopLazyLoading(HTMLMediaElement::StartLoad::Yes);
       } else {
         MOZ_ASSERT_UNREACHABLE(
-            "Only <img> and <iframe> should be observed by lazy load observer");
+            "Only <img>, <iframe>, <video>, and <audio> should be observed by "
+            "lazy load observer");
       }
     }
   }
@@ -527,6 +550,11 @@ static Maybe<nsRect> ComputeTheIntersection(
         }
         target = containerFrame;
       }
+    }
+    // Preserve the popup's own clip, but skip ancestor clips since popups
+    // can extend outside their embedding document's viewport.
+    if (containerFrame->IsMenuPopupFrame()) {
+      break;
     }
     // 3.5 If container is the root element of a browsing context, update
     // container to be the browsing context’s document; otherwise, update

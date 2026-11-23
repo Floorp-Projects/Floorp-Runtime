@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.appservices.fxaclient.FxaException
+import mozilla.appservices.sync15.EngineChoicesModel
 import mozilla.appservices.sync15.SyncTelemetryPing
 import mozilla.appservices.syncmanager.ServiceStatus
 import mozilla.appservices.syncmanager.SyncAuthInfo
@@ -571,12 +572,6 @@ internal class WorkManagerSyncWorker(
                 SyncEngine.Bookmarks -> it.value.lazyStore.value.registerWithSyncManager()
                 SyncEngine.CreditCards -> {
                     it.value.lazyStore.value.registerWithSyncManager()
-
-                    checkNotNull(it.value.keyProvider) {
-                        "CreditCards store must be configured with a KeyProvider"
-                    }
-
-                    engineKeyProviders[it.key] = it.value.keyProvider!!.value
                 }
                 SyncEngine.Addresses -> {
                     it.value.lazyStore.value.registerWithSyncManager()
@@ -656,7 +651,7 @@ internal class WorkManagerSyncWorker(
                 reason = reason.toRustSyncReason(),
                 engines = enginesToSync,
                 authInfo = syncAuthInfo,
-                enabledChanges = enabledChanges,
+                engineChoicesModel = EngineChoicesModel.Account(enabledChanges = enabledChanges),
                 persistedState = currentSyncState,
                 deviceSettings = deviceSettings,
                 localEncryptionKeys = localEncryptionKeys,

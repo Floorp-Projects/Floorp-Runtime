@@ -36,7 +36,7 @@ using namespace mozilla::gfx;
 using namespace mozilla::layers;
 
 nsCanvasFrame* NS_NewCanvasFrame(PresShell* aPresShell, ComputedStyle* aStyle) {
-  return new (aPresShell) nsCanvasFrame(aStyle, aPresShell->GetPresContext());
+  return new nsCanvasFrame(aStyle, aPresShell->GetPresContext());
 }
 
 nsIPopupContainer* nsIPopupContainer::GetPopupContainer(PresShell* aPresShell) {
@@ -70,11 +70,11 @@ nsresult nsCanvasFrame::CreateAnonymousContent(
     NS_ENSURE_SUCCESS(rv, rv);
 
     mTooltipContent->SetAttr(kNameSpaceID_None, nsGkAtoms::_default, u"true"_ns,
-                             false);
+                             false, IsKnownNewAttr::Yes);
     // Set the page attribute so XULTooltipElement::PostHandleEvent will find
     // the text for the tooltip from the currently hovered element.
     mTooltipContent->SetAttr(kNameSpaceID_None, nsGkAtoms::page, u"true"_ns,
-                             false);
+                             false, IsKnownNewAttr::Yes);
 
     mTooltipContent->SetProperty(nsGkAtoms::docLevelNativeAnonymousContent,
                                  reinterpret_cast<void*>(true));
@@ -272,7 +272,7 @@ void nsCanvasFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
 
   // Note this list is important so that our blend container only captures our
   // own items.
-  nsDisplayList list(aBuilder);
+  nsDisplayList list;
 
   // Put a scrolled background color item in place, at the bottom of the list.
   //
@@ -315,7 +315,7 @@ void nsCanvasFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
     nsRect bgRect = GetRectRelativeToSelf() + aBuilder->ToReferenceFrame(this);
 
     const ActiveScrolledRoot* thisItemASR = asr;
-    nsDisplayList thisItemList(aBuilder);
+    nsDisplayList thisItemList;
     nsDisplayBackgroundImage::InitData bgData =
         nsDisplayBackgroundImage::GetInitData(aBuilder, this, i, bgRect, bg);
 
@@ -424,8 +424,7 @@ void nsCanvasFrame::Reflow(nsPresContext* aPresContext,
 
   auto* prevCanvasFrame = static_cast<nsCanvasFrame*>(GetPrevInFlow());
   if (prevCanvasFrame) {
-    AutoFrameListPtr overflow(aPresContext,
-                              prevCanvasFrame->StealOverflowFrames());
+    AutoFrameListPtr overflow(prevCanvasFrame->StealOverflowFrames());
     if (overflow) {
       NS_ASSERTION(overflow->OnlyChild(),
                    "must have doc root as canvas frame's only child");

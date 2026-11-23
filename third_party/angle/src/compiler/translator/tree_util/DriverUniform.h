@@ -50,13 +50,17 @@ constexpr ImmutableString kDriverUniformsVarName    = ImmutableString("ANGLEUnif
 class DriverUniform
 {
   public:
-    DriverUniform(DriverUniformMode mode)
-        : mMode(mode), mDriverUniforms(nullptr), mEmulatedDepthRangeType(nullptr)
+    DriverUniform(DriverUniformMode mode, ShShaderOutput outputType)
+        : mMode(mode),
+          mDriverUniforms(nullptr),
+          mEmulatedDepthRangeType(nullptr),
+          mOutputType(outputType)
     {}
     virtual ~DriverUniform() = default;
 
-    bool addComputeDriverUniformsToShader(TIntermBlock *root, TSymbolTable *symbolTable);
-    bool addGraphicsDriverUniformsToShader(TIntermBlock *root, TSymbolTable *symbolTable);
+    void addComputeDriverUniformsToShader(TIntermBlock *root, TSymbolTable *symbolTable);
+    void addGraphicsDriverUniformsToShader(TIntermBlock *root, TSymbolTable *symbolTable);
+    void findDeclarationAddedByIR(TIntermBlock *root);
 
     TIntermTyped *getAcbBufferOffsets() const;
     TIntermTyped *getDepthRange() const;
@@ -73,6 +77,7 @@ class DriverUniform
     TIntermTyped *getTransformDepth() const;
     TIntermTyped *getAlphaToCoverage() const;
     TIntermTyped *getLayeredFramebuffer() const;
+    TIntermTyped *getTransformXY() const;
 
     virtual TIntermTyped *getViewport() const { return nullptr; }
     virtual TIntermTyped *getXfbBufferOffsets() const { return nullptr; }
@@ -87,13 +92,16 @@ class DriverUniform
 
     const DriverUniformMode mMode;
     const TVariable *mDriverUniforms;
-    TType *mEmulatedDepthRangeType;
+    const TType *mEmulatedDepthRangeType;
+    const ShShaderOutput mOutputType;
 };
 
 class DriverUniformExtended : public DriverUniform
 {
   public:
-    DriverUniformExtended(DriverUniformMode mode) : DriverUniform(mode) {}
+    DriverUniformExtended(DriverUniformMode mode, ShShaderOutput outputType)
+        : DriverUniform(mode, outputType)
+    {}
     ~DriverUniformExtended() override {}
 
     TIntermTyped *getXfbBufferOffsets() const override;

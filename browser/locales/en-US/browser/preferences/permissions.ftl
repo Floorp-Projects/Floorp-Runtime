@@ -159,6 +159,12 @@ permissions-site-notification-desc = The following websites have requested to se
 permissions-site-notification-disable-label =
     .label = Block new requests asking to allow notifications
 permissions-site-notification-disable-desc = This will prevent any websites not listed above from requesting permission to send notifications. Blocking notifications may break some website features.
+# Shown only where notifications can be delivered while the browser is closed.
+permissions-site-notification-closed-delivery-label =
+    .label = Allow website notifications when { -brand-short-name } is closed
+# Notes that the operating system's own notification settings can still block
+# notifications delivered while the browser is closed.
+permissions-site-notification-closed-delivery-desc = Your OS notification settings also apply.
 
 ## Site Permissions - Location
 
@@ -179,6 +185,15 @@ permissions-site-xr-desc = The following websites have requested to access your 
 permissions-site-xr-disable-label =
     .label = Block new requests asking to access your virtual reality devices
 permissions-site-xr-disable-desc = This will prevent any websites not listed above from requesting permission to access your virtual reality devices. Blocking access to your virtual reality devices may break some website features.
+
+## Site Permissions - App Links
+## App links are links that a website can ask to open for you, like email
+## (mailto:) links. Sites in this list are blocked from asking.
+
+permissions-site-app-links-window =
+    .title = Settings - Blocked Sites for App Links
+    .style = { permissions-window2.style }
+permissions-site-app-links-desc = These sites are blocked from asking to open app links, like email (mailto:). Remove a site to allow it to ask again.
 
 ## Site Permissions - Camera
 

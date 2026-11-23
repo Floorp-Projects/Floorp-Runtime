@@ -9,6 +9,7 @@ UNIFIED_SOURCES = [
     "FileSystemParentTestHelpers.cpp",
     "TestFileSystemHashSource.cpp",
     "TestFileSystemOriginInitialization.cpp",
+    "TestFileSystemOrphanCleanup.cpp",
     "TestFileSystemUsageTracking.cpp",
 ]
 
@@ -19,4 +20,9 @@ FINAL_LIBRARY = "xul-gtest"
 LOCAL_INCLUDES += [
     "/dom/fs/parent",
     "/dom/fs/test/gtest",
+]
+
+SOURCE_HEADERS += [
+    "FileSystemParentTest.h",
+    "FileSystemParentTestHelpers.h",
 ]

@@ -538,9 +538,9 @@ NS_IMETHODIMP HTMLEditor::SetDocumentCharacterSet(
           [&aCharacterSet](HTMLEditor&, Element& aMetaElement,
                            const EditorDOMPoint&) {
             MOZ_ASSERT(!aMetaElement.IsInComposedDoc());
-            DebugOnly<nsresult> rvIgnored =
-                aMetaElement.SetAttr(kNameSpaceID_None, nsGkAtoms::httpEquiv,
-                                     u"Content-Type"_ns, false);
+            DebugOnly<nsresult> rvIgnored = aMetaElement.SetAttr(
+                kNameSpaceID_None, nsGkAtoms::httpEquiv, u"Content-Type"_ns,
+                false, IsKnownNewAttr::Yes);
             NS_WARNING_ASSERTION(
                 NS_SUCCEEDED(rvIgnored),
                 "Element::SetAttr(nsGkAtoms::httpEquiv, \"Content-Type\", "
@@ -549,7 +549,7 @@ NS_IMETHODIMP HTMLEditor::SetDocumentCharacterSet(
                 aMetaElement.SetAttr(kNameSpaceID_None, nsGkAtoms::content,
                                      u"text/html;charset="_ns +
                                          NS_ConvertASCIItoUTF16(aCharacterSet),
-                                     false);
+                                     false, IsKnownNewAttr::Yes);
             NS_WARNING_ASSERTION(
                 NS_SUCCEEDED(rvIgnored),
                 nsPrintfCString(
@@ -1815,12 +1815,22 @@ Result<EditActionResult, nsresult> HTMLEditor::HandleTabKeyPressInTable(
     return Err(NS_ERROR_FAILURE);
   }
   // ...so that we can ask for first cell in that row...
-  cell = GetTableCellElementAt(*tblElement, row, 0);
+  const RefPtr<Element> firstEditableRow = [&]() -> Element* {
+    uint32_t colIndex = 0;
+    while (Element* cellInTheRow = GetMaybeGeneratedTableCellElementAt(
+               *tblElement, row, colIndex++)) {
+      if (HTMLEditUtils::IsSimplyEditableNode(*cellInTheRow)) {
+        MOZ_ASSERT(!cellInTheRow->IsInNativeAnonymousSubtree());
+        return cellInTheRow;
+      }
+    }
+    return nullptr;
+  }();
   // ...and then set selection there.  (Note that normally you should use
   // CollapseSelectionToDeepestNonTableFirstChild(), but we know cell is an
   // empty new cell, so this works fine)
-  if (cell) {
-    nsresult rv = CollapseSelectionToStartOf(*cell);
+  if (firstEditableRow) {
+    nsresult rv = CollapseSelectionToStartOf(*firstEditableRow);
     if (NS_FAILED(rv)) {
       NS_WARNING("EditorBase::CollapseSelectionToStartOf() failed");
       return Err(NS_ERROR_EDITOR_DESTROYED);
@@ -4138,7 +4148,7 @@ HTMLEditor::InsertOrReplaceTextWithTransaction(
   MOZ_ASSERT_IF(aData.ReplaceLength(), aPointToInsert.IsInTextNode());
 
   Result<InsertTextResult, nsresult> insertTextResultOrError =
-      !aData.ReplaceLength()
+      !aData.ReplaceLength() || NS_WARN_IF(!aPointToInsert.IsInTextNode())
           ? InsertTextWithTransaction(aData.mNormalizedString, aPointToInsert,
                                       InsertTextTo::SpecifiedPoint, aPurpose)
           : ReplaceTextWithTransaction(
@@ -4439,23 +4449,6 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
   MOZ_ASSERT(aNextOrAfterModifiedPoint.IsInContentNode());
   MOZ_ASSERT(aNextOrAfterModifiedPoint.IsSetAndValid());
 
-  // If the point is in a mailcite in plaintext mail composer (it is a <span>
-  // styled as block), we should not treat its padding <br> as unnecessary
-  // because it's required by the serializer to give next content of the
-  // mailcite has its own line.
-  if (IsPlaintextMailComposer()) {
-    const Element* const blockElement =
-        HTMLEditUtils::GetInclusiveAncestorElement(
-            *aNextOrAfterModifiedPoint.ContainerAs<nsIContent>(),
-            HTMLEditUtils::ClosestEditableBlockElement,
-            BlockInlineCheck::UseComputedDisplayStyle);
-    if (blockElement && HTMLEditUtils::IsMailCiteElement(*blockElement) &&
-        HTMLEditUtils::IsInlineContent(*blockElement,
-                                       BlockInlineCheck::UseHTMLDefaultStyle)) {
-      return NS_OK;
-    }
-  }
-
   const bool isWhiteSpacePreformatted = EditorUtils::IsWhiteSpacePreformatted(
       *aNextOrAfterModifiedPoint.ContainerAs<nsIContent>());
   const DebugOnly<bool> isNewLinePreformatted =
@@ -4464,26 +4457,22 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
 
   const WSScanResult nextThing =
       HTMLEditUtils::ScanInclusiveNextThingWithIgnoringUnnecessaryLineBreak(
-          aNextOrAfterModifiedPoint, aPaddingForEmptyBlock, aEditingHost);
+          aNextOrAfterModifiedPoint,
+          aPaddingForEmptyBlock == PaddingForEmptyBlock::Unnecessary
+              ? TreatAsUnnecessaryLineBreak{LineBreakFor::PaddingForEmptyBlock}
+              : TreatAsUnnecessaryLineBreak{},
+          aEditingHost);
   const Maybe<EditorLineBreak>& unnecessaryLineBreak =
       nextThing.MaybeIgnoredLineBreak();
   if (unnecessaryLineBreak.isNothing() ||
       !unnecessaryLineBreak->IsInclusiveDescendantOf(aEditingHost) ||
-      !unnecessaryLineBreak->IsDeletableFromComposedDoc()) [[likely]] {
+      !unnecessaryLineBreak->IsDeletableFromComposedDoc() ||
+      (IsPlaintextMailComposer() &&
+       nextThing.IgnoredLineBreakIsRequiredInPlaintextMailComposer()))
+      [[likely]] {
     return NS_OK;
   }
   if (unnecessaryLineBreak->IsHTMLBRElement()) {
-    // If the found unnecessary <br> is a preceding one of a mailcite which is a
-    // <span> styled as block, we need to preserve the <br> element for the
-    // serializer to cause a line break before the mailcite.
-    if (IsPlaintextMailComposer()) {
-      if (nextThing.ReachedOtherBlockElement() &&
-          HTMLEditUtils::IsMailCiteElement(*nextThing.ElementPtr()) &&
-          HTMLEditUtils::IsInlineContent(
-              *nextThing.ElementPtr(), BlockInlineCheck::UseHTMLDefaultStyle)) {
-        return NS_OK;
-      }
-    }
     // If the invisible break is a placeholder of ancestor inline elements, we
     // should not delete it to allow users to insert text with the format
     // specified by them.
@@ -4688,9 +4677,9 @@ HTMLEditor::ReplaceContainerWithTransactionInternal(
     MOZ_ASSERT(&aAttribute == nsGkAtoms::_empty);
     CloneAttributesWithTransaction(*newContainer, aOldContainer);
   } else if (&aAttribute != nsGkAtoms::_empty) {
-    nsresult rv = newContainer->SetAttr(kNameSpaceID_None,
-                                        const_cast<nsAtom*>(&aAttribute),
-                                        aAttributeValue, true);
+    nsresult rv = newContainer->SetAttr(
+        kNameSpaceID_None, const_cast<nsAtom*>(&aAttribute), aAttributeValue,
+        true, IsKnownNewAttr::Yes);
     if (NS_FAILED(rv)) {
       NS_WARNING("Element::SetAttr() failed");
       return Err(NS_ERROR_FAILURE);
@@ -5376,7 +5365,7 @@ Result<SplitNodeResult, nsresult> HTMLEditor::DoSplitNode(
   AutoTArray<SavedRange, 10> savedRanges;
   for (SelectionType selectionType : kPresentSelectionTypes) {
     SavedRange savingRange;
-    savingRange.mSelection = GetSelection(selectionType);
+    savingRange.mSelection = GetExistingSelection(selectionType);
     if (NS_WARN_IF(!savingRange.mSelection &&
                    selectionType == SelectionType::eNormal)) {
       return Err(NS_ERROR_FAILURE);
@@ -5730,7 +5719,7 @@ nsresult HTMLEditor::DoJoinNodes(nsIContent& aContentToKeep,
     EditorRawDOMPoint atNodeToKeep(&aContentToKeep);
     for (SelectionType selectionType : kPresentSelectionTypes) {
       SavedRange savingRange;
-      savingRange.mSelection = GetSelection(selectionType);
+      savingRange.mSelection = GetExistingSelection(selectionType);
       if (selectionType == SelectionType::eNormal) {
         if (NS_WARN_IF(!savingRange.mSelection)) {
           return NS_ERROR_FAILURE;
@@ -7336,7 +7325,7 @@ Element* HTMLEditor::ComputeEditingHostInternal(
     return body && body->IsEditable() ? body : nullptr;
   }
 
-  if (NS_WARN_IF(!content)) {
+  if (!content) {
     return nullptr;
   }
 

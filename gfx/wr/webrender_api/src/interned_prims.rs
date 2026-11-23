@@ -14,17 +14,18 @@
 
 use crate::serde::{Serialize, Deserialize};
 use crate::{
-    AlphaType, BoxShadowClipMode, ColorDepth, ColorRange, ColorU, ExtendMode, ImageKey,
-    ImageRendering, LineOrientation, LineStyle, PropertyBinding, YuvColorSpace, YuvFormat,
+    AlphaMode, AlphaType, BoxShadowClipMode, ColorDepth, ColorRange, ColorU, ExtendMode,
+    FontInstanceKey, GlyphOptions, GlyphShadowMode, ImageKey, ImageRendering, LineOrientation,
+    LineStyle, PropertyBinding, RasterSpace, YuvColorSpace, YuvFormat,
 };
 use crate::key_types::{
-    BorderRadiusAu, ConicGradientParams, GradientStopKey, NinePatchDescriptor,
+    BorderRadiusAu, ConicGradientParams, GlyphInstanceAu, GradientStopKey, NinePatchDescriptor,
     NormalBorderAu, PrimKeyCommonData, RadialGradientParams, SizeKey, StretchSizeKey,
     SubRectKey, VectorKey,
 };
 use crate::units::{LayoutSideOffsetsAu, TileOffset};
 use app_units::Au;
-use malloc_size_of::MallocSizeOf;
+use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 
 /// Generic interning key for the `PrimKey<T>`-based primitives: the common
 /// per-prim key data plus the interned value `T`. (Bespoke keys such as the
@@ -50,6 +51,45 @@ pub struct RectanglePrim {
 
 pub type RectangleKey = PrimKey<RectanglePrim>;
 
+/// Builder-side interning key for a run of glyphs.
+///
+/// This is what `DisplayListBuilder::push_text` interns, so it can only hold
+/// what the content process can see: the font is an unresolved
+/// `FontInstanceKey` rather than a `glyph_rasterizer::FontInstance`, which the
+/// scene builder resolves on the other side. Everything else that distinguishes
+/// one run's rasterization from another's is here, so two runs sharing a key
+/// really can share one interned entry.
+///
+/// Distinct from `webrender`'s `prim_store::text_run::TextRun`, which is the
+/// receiver's resolved view of the same run.
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct TextRunKey {
+    /// Primitive flags and anti-aliasing edges, like every other key.
+    pub common: PrimKeyCommonData,
+    pub font_key: FontInstanceKey,
+    pub color: ColorU,
+    pub glyph_options: Option<GlyphOptions>,
+    /// Pen positions relative to the run's pre-normalization bounds origin,
+    /// quantized to app units. Relative so the key is unaffected by where the
+    /// run sits, and quantized so sub-app-unit noise cannot split the key.
+    pub glyphs: Vec<GlyphInstanceAu>,
+    /// Whether this run is a shadow copy, and if so whether it is blurred.
+    /// Shadow glyphs sample colour bitmaps as alpha, so a shadow and its
+    /// original are not interchangeable even with identical glyphs.
+    pub shadow: GlyphShadowMode,
+    /// Raster space resolved from the enclosing stacking contexts at push time
+    /// (a blurred shadow overrides it to `Local(1.0)`). Part of the key because
+    /// it decides how the glyphs get rasterized.
+    pub requested_raster_space: RasterSpace,
+}
+
+impl MallocSizeOf for TextRunKey {
+    fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
+        // Only the glyph vector is heap allocated; everything else is inline.
+        self.glyphs.size_of(ops)
+    }
+}
+
 #[derive(Debug, Clone, MallocSizeOf, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BoxShadow {
     pub color: ColorU,
@@ -61,7 +101,7 @@ pub struct BoxShadow {
     /// local space.
     pub box_offset: VectorKey,
     /// Signed spread radius. Positive for Outset, negative for Inset
-    /// (matches the convention in `add_box_shadow`).
+    /// (matches the convention in `DisplayListBuilder::push_box_shadow`).
     pub spread_amount: Au,
 }
 
@@ -140,6 +180,7 @@ pub struct BackdropRender {
 #[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, Hash, Serialize, Deserialize)]
 pub struct LinearGradient {
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     pub start_point: VectorKey,
     pub end_point: VectorKey,
     /// Per-axis tile size encoded as a fraction of the prim's size. See the
@@ -154,6 +195,7 @@ pub struct LinearGradient {
 #[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, Hash, Serialize, Deserialize)]
 pub struct RadialGradient {
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     pub center: VectorKey,
     pub params: RadialGradientParams,
     /// Per-axis tile size encoded as a fraction of the prim's size. See the
@@ -167,6 +209,7 @@ pub struct RadialGradient {
 #[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ConicGradient {
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     pub center: VectorKey,
     pub params: ConicGradientParams,
     /// Per-axis tile size encoded as a fraction of the prim's size. See the
@@ -187,6 +230,7 @@ pub struct ConicGradient {
 pub struct LinearGradientKey {
     pub common: PrimKeyCommonData,
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     pub start_point: VectorKey,
     pub end_point: VectorKey,
     /// Per-axis tile size encoded as a fraction of `common.prim_size`. The
@@ -203,6 +247,7 @@ impl LinearGradientKey {
         LinearGradientKey {
             common,
             extend_mode: linear_grad.extend_mode,
+            alpha_mode: linear_grad.alpha_mode,
             start_point: linear_grad.start_point,
             end_point: linear_grad.end_point,
             stretch_ratio: linear_grad.stretch_ratio,
@@ -218,6 +263,7 @@ impl LinearGradientKey {
 pub struct RadialGradientKey {
     pub common: PrimKeyCommonData,
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     pub center: VectorKey,
     pub params: RadialGradientParams,
     /// Per-axis tile size encoded as a fraction of `common.prim_size`. The
@@ -233,6 +279,7 @@ impl RadialGradientKey {
         RadialGradientKey {
             common,
             extend_mode: radial_grad.extend_mode,
+            alpha_mode: radial_grad.alpha_mode,
             center: radial_grad.center,
             params: radial_grad.params,
             stretch_ratio: radial_grad.stretch_ratio,
@@ -247,6 +294,7 @@ impl RadialGradientKey {
 pub struct ConicGradientKey {
     pub common: PrimKeyCommonData,
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     pub center: VectorKey,
     pub params: ConicGradientParams,
     /// Per-axis tile size encoded as a fraction of `common.prim_size`. The
@@ -262,6 +310,7 @@ impl ConicGradientKey {
         ConicGradientKey {
             common,
             extend_mode: conic_grad.extend_mode,
+            alpha_mode: conic_grad.alpha_mode,
             center: conic_grad.center,
             params: conic_grad.params,
             stretch_ratio: conic_grad.stretch_ratio,

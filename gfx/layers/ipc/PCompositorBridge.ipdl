@@ -182,7 +182,7 @@ parent:
   // work around a windows presentation bug (See Bug 1232042)
   async ForcePresent(RenderReasons aReasons);
 
-  sync StartFrameTimeRecording(int32_t bufferSize)
+  sync StartFrameTimeRecording(uint32_t bufferSize)
     returns (uint32_t startIndex);
 
   sync StopFrameTimeRecording(uint32_t startIndex)
@@ -207,9 +207,6 @@ parent:
 
   async EndRecording()
     returns (FrameRecording? recording);
-
-  // To set up sharing the composited output to Firefox Reality on Desktop
-  async RequestFxrOutput();
 
   async DynamicToolbarOffsetChanged(int32_t aOffset);
 };

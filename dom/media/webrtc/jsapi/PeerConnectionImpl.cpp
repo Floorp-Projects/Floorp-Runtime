@@ -82,11 +82,13 @@
 #include "mozilla/PublicSSL.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/dom/BrowserChild.h"
+#include "mozilla/dom/ConnectionAllowlists.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/Event.h"
 #include "mozilla/dom/Location.h"
 #include "mozilla/dom/PeerConnectionImplBinding.h"
 #include "mozilla/dom/PluginCrashedEvent.h"
+#include "mozilla/dom/PolicyContainer.h"
 #include "mozilla/dom/Promise.h"
 #include "mozilla/dom/RTCCertificate.h"
 #include "mozilla/dom/RTCDataChannelBinding.h"
@@ -177,9 +179,10 @@ class JSErrorResult : public binding_danger::TErrorResult<
 
 class WrappableJSErrorResult {
  public:
-  WrappableJSErrorResult() : mRv(MakeUnique<JSErrorResult>()), isCopy(false) {}
+  WrappableJSErrorResult()
+      : mRv(std::make_unique<JSErrorResult>()), isCopy(false) {}
   WrappableJSErrorResult(const WrappableJSErrorResult& other)
-      : mRv(MakeUnique<JSErrorResult>()), isCopy(true) {}
+      : mRv(std::make_unique<JSErrorResult>()), isCopy(true) {}
   ~WrappableJSErrorResult() {
     if (isCopy) {
       MOZ_ASSERT(NS_IsMainThread());
@@ -382,7 +385,7 @@ PeerConnectionImpl::PeerConnectionImpl(const GlobalObject* aGlobal)
       mSTSThread(nullptr),
       mForceIceTcp(false),
       mTransportHandler(nullptr),
-      mUuidGen(MakeUnique<PCUuidGenerator>()),
+      mUuidGen(std::make_unique<PCUuidGenerator>()),
       mIceRestartCount(0),
       mIceRollbackCount(0),
       mTrickle(true)  // TODO(ekr@rtfm.com): Use pref
@@ -491,6 +494,12 @@ nsresult PeerConnectionImpl::Initialize(PeerConnectionObserver& aObserver,
   mWindow = aWindow;
   NS_ENSURE_STATE(mWindow);
 
+  if (dom::ConnectionAllowlists* allowlists =
+          PolicyContainer::GetConnectionAllowlists(
+              aWindow->GetPolicyContainer())) {
+    mBlockedByConnectionAllowlists = allowlists->ShouldBlockWebRTC(mWindow);
+  }
+
   // Now rummage through the objects to get a usable origin
   nsCOMPtr<nsIScriptGlobalObject> sgo = do_QueryInterface(mWindow);
   NS_ENSURE_STATE(sgo);
@@ -534,8 +543,8 @@ nsresult PeerConnectionImpl::Initialize(PeerConnectionObserver& aObserver,
   mTransportHandler = std::move(transportHandler);
   mTransportHandler->CreateIceCtx("PC:" + GetName());
 
-  mJsepSession =
-      MakeUnique<JsepSessionImpl>(mName, MakeUnique<PCUuidGenerator>());
+  mJsepSession = std::make_unique<JsepSessionImpl>(
+      mName, std::make_unique<PCUuidGenerator>());
   mJsepSession->SetRtxIsAllowed(mRtxIsAllowed);
 
   res = mJsepSession->Init();
@@ -565,7 +574,7 @@ nsresult PeerConnectionImpl::Initialize(PeerConnectionObserver& aObserver,
                                   header.direction);
   }
 
-  if (XRE_IsContentProcess()) {
+  if (XRE_IsContentProcess() && !mBlockedByConnectionAllowlists) {
     mStunAddrsRequest =
         net::StunAddrsRequestChild::Create(new StunAddrsHandler(this));
   }
@@ -706,7 +715,7 @@ nsresult PeerConnectionImpl::GetDatachannelParameters(
 
   Maybe<const JsepTransceiver> datachannelTransceiver =
       mJsepSession->FindTransceiver([](const JsepTransceiver& aTransceiver) {
-        return aTransceiver.GetMediaType() == SdpMediaSection::kApplication;
+        return aTransceiver.GetMediaTypeInfo().IsDataChannel();
       });
 
   if (!datachannelTransceiver ||
@@ -798,7 +807,7 @@ already_AddRefed<RTCRtpTransceiver> PeerConnectionImpl::AddTransceiver(
     return nullptr;
   }
 
-  JsepTransceiver jsepTransceiver(*type, *mUuidGen);
+  JsepTransceiver jsepTransceiver({.type = *type}, *mUuidGen);
   jsepTransceiver.SetRtxIsAllowed(mRtxIsAllowed);
 
   // Do this last, since it is not possible to roll back.
@@ -956,7 +965,7 @@ bool PeerConnectionImpl::CheckNegotiationNeeded() {
   if (mDataConnection) {
     Maybe<const JsepTransceiver> dcTransceiver =
         mJsepSession->FindTransceiver([](const JsepTransceiver& aTransceiver) {
-          return aTransceiver.GetMediaType() == SdpMediaSection::kApplication;
+          return aTransceiver.GetMediaTypeInfo().IsDataChannel();
         });
     if (!dcTransceiver || !dcTransceiver->IsNegotiated()) {
       return true;
@@ -1071,15 +1080,15 @@ PeerConnectionImpl::CreateDataChannel(
 
   Maybe<JsepTransceiver> dcTransceiver =
       mJsepSession->FindTransceiver([](const JsepTransceiver& aTransceiver) {
-        return aTransceiver.GetMediaType() == SdpMediaSection::kApplication;
+        return aTransceiver.GetMediaTypeInfo().IsDataChannel();
       });
 
   if (dcTransceiver) {
     dcTransceiver->RestartDatachannelTransceiver();
     mJsepSession->SetTransceiver(*dcTransceiver);
   } else {
-    mJsepSession->AddTransceiver(
-        JsepTransceiver(SdpMediaSection::MediaType::kApplication, *mUuidGen));
+    mJsepSession->AddTransceiver(JsepTransceiver(
+        {.type = SdpMediaSection::MediaType::kApplication}, *mUuidGen));
   }
 
   RefPtr<RTCDataChannel> retval;
@@ -1265,8 +1274,7 @@ void PeerConnectionImpl::SyncFromJsep() {
   mJsepSession->ForEachTransceiver(
       [this, self = RefPtr<PeerConnectionImpl>(this)](
           const JsepTransceiver& jsepTransceiver) {
-        if (jsepTransceiver.GetMediaType() ==
-            SdpMediaSection::MediaType::kApplication) {
+        if (!jsepTransceiver.GetMediaTypeInfo().IsRtp()) {
           return;
         }
 
@@ -2611,8 +2619,14 @@ void PeerConnectionImpl::SetConfiguration(
 
 nsresult PeerConnectionImpl::SetConfiguration(
     const RTCConfiguration& aConfiguration) {
-  nsresult rv = mTransportHandler->SetIceConfig(
-      aConfiguration.mIceServers, aConfiguration.mIceTransportPolicy);
+  // All ICE servers are administratively prohibited, but they should still be
+  // visible in getConfiguration().
+  nsresult rv =
+      mBlockedByConnectionAllowlists
+          ? mTransportHandler->SetIceConfig(nsTArray<dom::RTCIceServer>(),
+                                            aConfiguration.mIceTransportPolicy)
+          : mTransportHandler->SetIceConfig(aConfiguration.mIceServers,
+                                            aConfiguration.mIceTransportPolicy);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return rv;
   }
@@ -3459,9 +3473,9 @@ void PeerConnectionImpl::IceConnectionStateChange(
   } else if (oldPair && aSelectedPair.isSome()) {
     // Compare against the internal (un-redacted) candidate strings.
     noChange = oldPair->Local()->CandidateInternal().EqualsASCII(
-                   aSelectedPair->local().get()) &&
+                   aSelectedPair->local.get()) &&
                oldPair->Remote()->CandidateInternal().EqualsASCII(
-                   aSelectedPair->remote().get());
+                   aSelectedPair->remote.get());
   }
 
   if (!noChange) {
@@ -3473,10 +3487,10 @@ void PeerConnectionImpl::IceConnectionStateChange(
     if (aSelectedPair.isSome()) {
       nsCOMPtr<nsIGlobalObject> global = do_QueryInterface(mWindow);
       RefPtr<RTCIceCandidate> local = RTCIceCandidate::FromAttribute(
-          global, aSelectedPair->local(),
+          global, aSelectedPair->local,
           /*aHidePrflx=*/GetPrefObfuscateHostAddresses());
       RefPtr<RTCIceCandidate> remote = RTCIceCandidate::FromAttribute(
-          global, aSelectedPair->remote(), /*aHidePrflx=*/true);
+          global, aSelectedPair->remote, /*aHidePrflx=*/true);
       newCandidatePair = new RTCIceCandidatePair(global, local, remote);
     }
 
@@ -3827,7 +3841,7 @@ RefPtr<dom::RTCStatsPromise> PeerConnectionImpl::GetDataChannelStats(
         ->Then(GetMainThreadSerialEventTarget(), __func__,
                [](DataChannelConnection::StatsPromise::ResolveOrRejectValue&&
                       aResult) {
-                 auto report = MakeUnique<dom::RTCStatsCollection>();
+                 auto report = std::make_unique<dom::RTCStatsCollection>();
                  if (aResult.IsResolve()) {
                    if (!report->mDataChannelStats.AppendElements(
                            aResult.ResolveValue(), fallible)) {
@@ -3984,8 +3998,7 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
     return mFinalStatsQuery->Then(
         GetMainThreadSerialEventTarget(), __func__,
         [this, self = RefPtr<PeerConnectionImpl>(this)]() {
-          UniquePtr<dom::RTCStatsReportInternal> finalStats =
-              MakeUnique<dom::RTCStatsReportInternal>();
+          auto finalStats = std::make_unique<dom::RTCStatsReportInternal>();
           // Might not be set if this encountered some error.
           if (mFinalStats) {
             *finalStats = *mFinalStats;
@@ -4053,7 +4066,7 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
     promises.AppendElement(GetDataChannelStats(now));
   }
 
-  auto pcStatsCollection = MakeUnique<dom::RTCStatsCollection>();
+  auto pcStatsCollection = std::make_unique<dom::RTCStatsCollection>();
   RTCPeerConnectionStats pcStats;
   pcStats.mTimestamp.Construct(now);
   pcStats.mType.Construct(RTCStatsType::Peer_connection);
@@ -4069,7 +4082,7 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
 
   // This is what we're going to return; all the stuff in |promises| will be
   // accumulated here.
-  auto report = MakeUnique<dom::RTCStatsReportInternal>();
+  auto report = std::make_unique<dom::RTCStatsReportInternal>();
   report->mPcid = NS_ConvertASCIItoUTF16(mName.c_str());
   if (mWindow && mWindow->GetBrowsingContext()) {
     report->mBrowserId = mWindow->GetBrowsingContext()->BrowserId();
@@ -4350,11 +4363,12 @@ void PeerConnectionImpl::UpdateRTCDtlsTransports() {
           mTransportIdToRTCDtlsTransport.GetOrInsertNew(key, GetParentObject());
     }
 
-    if (jsepTransceiver.GetMediaType() == SdpMediaSection::kApplication) {
+    const auto mediaTypeInfo = jsepTransceiver.GetMediaTypeInfo();
+    if (mediaTypeInfo.IsDataChannel()) {
       if (mSctpTransport) {
         mSctpTransport->SetTransport(dtlsTransport.get());
       }
-    } else {
+    } else if (mediaTypeInfo.IsRtp()) {
       RefPtr<dom::RTCRtpTransceiver> domTransceiver =
           GetTransceiver(jsepTransceiver.GetUuid());
       if (domTransceiver) {
@@ -4624,6 +4638,13 @@ void PeerConnectionImpl::AddIceCandidate(const std::string& aCandidate,
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(!aTransportId.empty());
 
+  // All remote candidates are administratively prohibited. They still end up
+  // in the remote description, but ICE never learns about them. We still pass
+  // along end-of-candidates.
+  if (mBlockedByConnectionAllowlists && !aCandidate.empty()) {
+    return;
+  }
+
   bool obfuscate_host_addresses = Preferences::GetBool(
       "media.peerconnection.ice.obfuscate_host_addresses", false);
 
@@ -4779,6 +4800,11 @@ nsresult PeerConnectionImpl::SetTargetForDefaultLocalAddressLookup() {
 
 void PeerConnectionImpl::EnsureIceGathering(bool aDefaultRouteOnly,
                                             bool aObfuscateHostAddresses) {
+  // All local addresses are administratively prohibited.
+  if (mBlockedByConnectionAllowlists) {
+    return;
+  }
+
   if (!mTargetForDefaultLocalAddressLookupIsSet) {
     nsresult rv = SetTargetForDefaultLocalAddressLookup();
     if (NS_FAILED(rv)) {

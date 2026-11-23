@@ -26,8 +26,7 @@ nsColorControlFrame::nsColorControlFrame(ComputedStyle* aStyle,
 
 nsIFrame* NS_NewColorControlFrame(PresShell* aPresShell,
                                   ComputedStyle* aStyle) {
-  return new (aPresShell)
-      nsColorControlFrame(aStyle, aPresShell->GetPresContext());
+  return new nsColorControlFrame(aStyle, aPresShell->GetPresContext());
 }
 
 NS_IMPL_FRAMEARENA_HELPERS(nsColorControlFrame)
@@ -88,7 +87,7 @@ void nsColorControlFrame::UpdateColor() {
   // Set the color CSS property of the swatch element to this color.
   mColorContent->SetAttr(kNameSpaceID_None, nsGkAtoms::style,
                          u"color:"_ns + color,
-                         /* aNotify */ true);
+                         /* aNotify */ true, dom::IsKnownNewAttr::No);
 }
 
 nsresult nsColorControlFrame::AttributeChanged(int32_t aNameSpaceID,

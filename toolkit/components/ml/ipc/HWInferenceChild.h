@@ -20,13 +20,17 @@ class HWInferenceChild final : public PHWInferenceChild {
 
   HWInferenceChild() = default;
 
+#ifdef MOZ_WEBSPEECH
   mozilla::ipc::IPCResult RecvNewContentSpeechRecognition(
       Endpoint<hwinference::PSpeechRecognitionParent>&& aEndpoint,
       const dom::ContentParentId& aContentId);
+#endif
 
   mozilla::ipc::IPCResult RecvNewTextGeneration(
       Endpoint<hwinference::PTextGenerationChild>&& aEndpoint,
       const ipc::FileDescriptor& aModel, const TextGenerationOptions& aOptions);
+
+  mozilla::ipc::IPCResult RecvListDevices(ListDevicesResolver&& aResolver);
 
   RefPtr<IsModelAvailablePromise> SendIsModelAvailable(const nsCString& aTask,
                                                        const nsCString& aId);

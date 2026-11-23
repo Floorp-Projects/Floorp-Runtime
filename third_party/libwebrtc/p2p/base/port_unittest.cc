@@ -688,9 +688,9 @@ class PortTest : public ::testing::Test {
     // Shorten the timeout period.
     const TimeDelta kTcpReconnectTimeout = kDefaultTimeout;
     static_cast<TCPConnection*>(ch1.conn())
-        ->set_reconnection_timeout(kTcpReconnectTimeout.ms());
+        ->SetReconnectionTimeoutForTesting(kTcpReconnectTimeout);
     static_cast<TCPConnection*>(ch2.conn())
-        ->set_reconnection_timeout(kTcpReconnectTimeout.ms());
+        ->SetReconnectionTimeoutForTesting(kTcpReconnectTimeout);
 
     EXPECT_FALSE(ch1.connection_ready_to_send());
     EXPECT_FALSE(ch2.connection_ready_to_send());
@@ -1664,6 +1664,40 @@ TEST_F(PortTest, TestIceRoleConflict) {
       IsRtcOk());
   EXPECT_EQ(STUN_BINDING_RESPONSE, lport->last_stun_msg()->type());
   EXPECT_TRUE(role_conflict());
+}
+
+// Verifies that a port without an ICE role, i.e. one that has not been taken
+// over by an ICE agent, drops incoming STUN binding requests from unknown
+// addresses. Handling such a request used to hit a DCHECK in
+// MaybeIceRoleConflict.
+TEST_F(PortTest, BindingRequestDroppedWithoutIceRole) {
+  auto lport = CreateUdpPort(kLocalAddr1);
+  lport->SetIceRole(ICEROLE_CONTROLLED);
+  auto rport = CreateUdpPort(kLocalAddr2);
+  int unknown_address_count = 0;
+  rport->SubscribeUnknownAddress(
+      this, [&](PortInterface*, const SocketAddress&, ProtocolType, IceMessage*,
+                const std::string&, bool) { ++unknown_address_count; });
+  lport->PrepareAddress();
+  rport->PrepareAddress();
+  time_controller_.AdvanceTime(TimeDelta::Zero());
+  ASSERT_FALSE(lport->Candidates().empty());
+  ASSERT_FALSE(rport->Candidates().empty());
+
+  Connection* lconn =
+      lport->CreateConnection(rport->Candidates()[0], Port::ORIGIN_MESSAGE);
+  ASSERT_NE(lconn, nullptr);
+  lconn->Ping();
+  time_controller_.AdvanceTime(TimeDelta::Millis(100));
+  EXPECT_EQ(unknown_address_count, 0);
+
+  // Once the port has an ICE role, the binding request is signaled.
+  rport->SetIceRole(ICEROLE_CONTROLLING);
+  lconn->Ping();
+  EXPECT_THAT(
+      WaitUntil([&] { return unknown_address_count; }, Eq(1),
+                {.timeout = kDefaultTimeout, .clock = &time_controller_}),
+      IsRtcOk());
 }
 
 TEST_F(PortTest, TestTcpNoDelay) {

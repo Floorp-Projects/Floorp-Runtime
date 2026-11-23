@@ -1443,8 +1443,12 @@ newtab:
       and weather_impression.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_sensitivity:
       - interaction
     notification_emails:
@@ -1460,6 +1464,21 @@ newtab:
         description: >
           Size of widget (e.g., small, medium, large).
         type: string
+      widget_location: &widget_location
+        description: >
+          Where on the page the widget renders. One of home_space (pinned to
+          the Home space), widget_space (the Widgets space, where users pin
+          widgets to Home), widget_container (the widgets section in any other
+          layout), sidebar (the page's inline-end sidebar, e.g. small Weather)
+          or story_card (the first card of a story section).
+        type: string
+      widget_variant: &widget_variant
+        description: >
+          Optional, widget-defined state the widget was showing. Privacy sends
+          etp_off, no_trackers_blocked, count_only for the small card,
+          newtab-privacy-blank for the state with no message, or the ID of the
+          message shown.
+        type: string
     send_in_pings:
       - newtab
 
@@ -1472,8 +1491,12 @@ newtab:
       weather_open_provider_url and weather_change_display.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_sensitivity:
       - interaction
     notification_emails:
@@ -1491,11 +1514,15 @@ newtab:
         description: >
           Specific action taken by different widgets (e.g., list_copy, list_create,
           timer_set, timer_play, timer_pause, change_location, detect_location).
+          add_to_home and remove_from_home pin a widget to the Home space or
+          move it back to the Widgets space, without turning it on or off.
         type: string
       action_value:
         description: >
           Optional value associated with action (string representation).
         type: string
+      widget_location: *widget_location
+      widget_variant: *widget_variant
     send_in_pings:
       - newtab
 
@@ -1507,10 +1534,13 @@ newtab:
       and weather_enabled.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_sensitivity:
       - technical
+      - interaction
     notification_emails:
       - mcrawford@mozilla.com
     expires: never
@@ -1523,6 +1553,7 @@ newtab:
         description: >
           Whether widget is now enabled (true) or disabled (false).
         type: boolean
+      widget_variant: *widget_variant
     send_in_pings:
       - newtab
 
@@ -1533,10 +1564,13 @@ newtab:
       This metric replaces weather_load_error.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2010597
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2079330
     data_sensitivity:
       - technical
+      - interaction
     notification_emails:
       - mcrawford@mozilla.com
     expires: never
@@ -1548,6 +1582,7 @@ newtab:
         description: >
           Type of error encountered (e.g., load_error, network_error, timeout).
         type: string
+      widget_variant: *widget_variant
     send_in_pings:
       - newtab
 
@@ -1557,8 +1592,10 @@ newtab:
       Recorded when user interacts with widget container controls.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2012821
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2012821
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
     data_sensitivity:
       - interaction
     notification_emails:
@@ -1570,7 +1607,9 @@ newtab:
       action_type:
         description: >
           Type of container action. (hide_all, change_size_all,
-          change_row_visibility, feedback)
+          change_row_visibility, feedback, remove_all_from_home).
+          remove_all_from_home moves every widget on the Home space back to the
+          Widgets space without turning any off.
         type: string
       action_value:
         description: >
@@ -1597,6 +1636,28 @@ newtab:
     send_in_pings:
       - newtab
 
+  widgets_home_list:
+    type: string_list
+    description: >
+      The list of widget telemetry names pinned to the Home space that it
+      currently shows. Recorded at startup and whenever the user pins or
+      unpins a widget or a widget is enabled or disabled. Only set in layouts
+      where users pin widgets to Home, so an empty list means nothing is
+      pinned there.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085959
+    data_sensitivity:
+      - interaction
+    notification_emails:
+      - mcrawford@mozilla.com
+      - jbrown@mozilla.com
+    expires: never
+    lifetime: application
+    send_in_pings:
+      - newtab
+
   page_layout_variant:
     type: string
     description: >
@@ -1605,6 +1666,7 @@ newtab:
       side-by-side-content-lead, side-by-side-widgets-lead,
       side-by-side-content-lead-five, side-by-side-widgets-lead-five,
       spaces-buttons-top, spaces-buttons-bottom, spaces-thematic-v1,
+      spaces-preview-kit, spaces-preview-illustrated, spaces-preview-cards,
       auto-minimize-widgets or widgets-ad-large. The -five variants reach five
       card columns counting the widgets column, the others four. The spaces
       variants split the band into separately-navigable panels; the buttons-
@@ -1652,9 +1714,7 @@ newtab:
       space:
         description: >
           The space navigated to. One of stories, widgets or activity in the
-          spaces-buttons-top, spaces-buttons-bottom and spaces-floating-arrows
-          variants, or a thematic space id configured via Nimbus in
-          spaces-thematic-v1.
+          V1 spaces variants, or a thematic space id configured via Nimbus.
         type: string
       previous_space:
         description: >
@@ -1664,8 +1724,10 @@ newtab:
         description: >
           Which control was used: tab (the segmented control), keyboard (arrow
           keys on the segmented control), swipe (horizontal wheel, shift plus
-          wheel, or a touch drag) or arrow (the edge arrows in
-          spaces-floating-arrows).
+          wheel, or a touch drag), arrow (the edge arrows in
+          spaces-floating-arrows), preview_tab (a tab, in the spaces-preview
+          variants or a thematic config with the preview on) or peek (the
+          neighbouring space's preview in spaces-peek).
         type: string
     send_in_pings:
       - newtab
@@ -1822,6 +1884,7 @@ newtab:
       belongs to no single newtab visit.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2062393
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2075757
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2062393
     data_sensitivity:
@@ -1982,14 +2045,16 @@ topsites:
   click:
     type: event
     description: >
-      Recorded when a topsite tile is clicked.
-      Only happens on click. Not on middle-click. Not on "Open in new Tab"-like
-      options in the context menu.
+      Recorded when a topsite tile is clicked. Also recorded when a tile is
+      opened in a new tab or window from Firefox's right-click menu or by
+      middle-click, and when a tile is opened in a new window or private
+      window from the tile's own "..." menu.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1766887
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1786670
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1817105
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1820707
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2060322
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1766887
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1786670#c3
@@ -2016,6 +2081,13 @@ topsites:
       visible_topsites: *visible_topsites
       smart_scores: *smart_scores
       smart_weights: *smart_weights
+      event_source: *event_source
+      background: &background
+        description: >
+          Whether the link opened in a tab the user was not switched to. Only
+          set when the link was opened from Firefox's right-click menu or by
+          middle-click.
+        type: boolean
     send_in_pings:
       - newtab
 
@@ -2469,15 +2541,16 @@ pocket:
   click:
     type: event
     description: >
-      Recorded when a pocket tile is clicked.
-      Only happens on click. Not on middle-click. Not on "Open in new Tab"-like
-      options in the context menu.
+      Recorded when a pocket tile is clicked. Also recorded when a story is
+      opened in a new tab or window from Firefox's right-click menu or by
+      middle-click.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1786612
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1817105
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1854245
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1862670
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1937200
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2060322
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1786612
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1817105#c11
@@ -2515,6 +2588,7 @@ pocket:
       layout_name: *layout_name
       event_source: *event_source
       card_column: *card_column
+      background: *background
       content_redacted:
         description: >
           Are content details sent separately in the newtab_content ping
@@ -2837,6 +2911,24 @@ newtab_content:
       - newtab
     lifetime: application
 
+  surface_id_rejected:
+    type: event
+    description: >
+      Recorded when the surface id sent by the merino api is not one that could
+      have been derived from the locale and region in the request, and is
+      ignored. The rejected value is intentionally not recorded.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2083732
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2083732
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - mconley@mozilla.com
+    expires: never
+    send_in_pings:
+      - newtab
+
   followed_sections:
     type: string_list
     description: >
@@ -2929,10 +3021,13 @@ newtab_content:
       options in the context menu.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1956331
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2075757
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1956331
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2075757
     data_sensitivity:
       - interaction
+      - web_activity
     notification_emails:
       - mcrawford@mozilla.cocm
     expires: never
@@ -2971,6 +3066,32 @@ newtab_content:
       variant_id: *variant_id
       source_section_id: *source_section_id
       layout_name: *layout_name
+      dwell_time:
+        description: >
+          Active dwell time on the opened story, in milliseconds, multiplied by
+          1 + Laplace(b) noise, rounded, and limited to between 0 and 60000. A
+          value of 60000 means 60 seconds or more. The scale b is 0.05 unless
+          set otherwise through Nimbus. Recorded for organic story clicks only.
+
+          A story the user was still reading when the ping was submitted
+          reports the time read so far, and is not distinguished from one the
+          user had left.
+
+          Absent when the dwell time feature is off, when the story was never
+          looked at (opened in a background tab and closed, or not yet switched
+          to when the ping was submitted), when it was opened in a private
+          window, and when the click could not be matched to a page that
+          loaded, which covers failed loads and opens that never produce a
+          content browser.
+
+          A click dropped by the daily or weekly organic cap takes its dwell
+          time with it, so the dwell time is missing non-uniformly for users
+          who click a lot.
+
+          When the click's story was replaced by a random one from the feed,
+          the dwell time is still the time spent on the story actually opened,
+          reported against the replacement's corpus_item_id.
+        type: quantity
     send_in_pings:
       - newtab-content
 

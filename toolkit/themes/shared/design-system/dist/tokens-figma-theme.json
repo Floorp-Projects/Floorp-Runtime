@@ -155,7 +155,7 @@
   "text/color/deemphasized": {
     "light": "color-mix(in srgb, currentColor 69%, transparent)",
     "dark": "color-mix(in srgb, currentColor 69%, transparent)",
-    "forcedColors": "inherit"
+    "forcedColors": "currentColor"
   },
   "text/color/disabled": {
     "light": "color-mix(in srgb, currentColor 40%, transparent)",
@@ -585,23 +585,23 @@
     "forcedColors": "{HCM Theme$GrayText}"
   },
   "button/text/color/ghost": {
-    "light": "inherit",
-    "dark": "inherit",
+    "light": "currentColor",
+    "dark": "currentColor",
     "forcedColors": "{Theme$button/text/color}"
   },
   "button/text/color/ghost/active": {
-    "light": "inherit",
-    "dark": "inherit",
+    "light": "currentColor",
+    "dark": "currentColor",
     "forcedColors": "{Theme$button/text/color/active}"
   },
   "button/text/color/ghost/disabled": {
-    "light": "inherit",
-    "dark": "inherit",
-    "forcedColors": "inherit"
+    "light": "currentColor",
+    "dark": "currentColor",
+    "forcedColors": "{Theme$button/text/color/disabled}"
   },
   "button/text/color/ghost/hover": {
-    "light": "inherit",
-    "dark": "inherit",
+    "light": "currentColor",
+    "dark": "currentColor",
     "forcedColors": "{Theme$button/text/color/hover}"
   },
   "button/text/color/ghost/selected": {
@@ -652,7 +652,7 @@
   "button/text/color/menu/disabled": {
     "light": "{Theme$button/text/color/ghost/disabled}",
     "dark": "{Theme$button/text/color/ghost/disabled}",
-    "forcedColors": "{Theme$button/text/color/ghost/disabled}"
+    "forcedColors": "{Theme$button/text/color/disabled}"
   },
   "button/text/color/menu/hover": {
     "light": "{Theme$button/text/color/ghost/hover}",
@@ -789,6 +789,21 @@
     "dark": "{Theme$button/text/color/active}",
     "forcedColors": "{Theme$button/text/color/active}"
   },
+  "dialog/background/color": {
+    "light": "{Theme$popup/background/color}",
+    "dark": "{Theme$popup/background/color}",
+    "forcedColors": "{Theme$popup/background/color}"
+  },
+  "dialog/border/color": {
+    "light": "{Theme$popup/border/color}",
+    "dark": "{Theme$popup/border/color}",
+    "forcedColors": "{Theme$popup/border/color}"
+  },
+  "dialog/box/shadow": {
+    "light": "{Theme$popup/box/shadow}",
+    "dark": "{Theme$popup/box/shadow}",
+    "forcedColors": "{Theme$popup/box/shadow}"
+  },
   "icon/color": {
     "light": "{Colors$color/gray/70}",
     "dark": "{Colors$color/gray/0}",
@@ -895,9 +910,9 @@
     "forcedColors": "Menu"
   },
   "panel/border/color": {
-    "light": "rgb(240, 240, 244)",
-    "dark": "rgb(82, 82, 94)",
-    "forcedColors": "transparent"
+    "light": "{Theme$popup/border/color}",
+    "dark": "{Theme$popup/border/color}",
+    "forcedColors": "{Theme$popup/border/color}"
   },
   "panel/footer/background/color": {
     "light": "color-mix(in srgb, currentColor 12%, transparent)",
@@ -1015,8 +1030,8 @@
     "forcedColors": "transparent"
   },
   "toolbarbutton/icon/fill": {
-    "light": "{Colors$color/gray/70}",
-    "dark": "{Colors$color/gray/0}",
+    "light": "color-mix(in srgb, currentColor 69%, transparent)",
+    "dark": "currentColor",
     "forcedColors": "{Theme$button/text/color}"
   },
   "toolbarbutton/icon/fill/hover": {
@@ -1028,6 +1043,11 @@
     "light": "{Theme$toolbarbutton/icon/fill}",
     "dark": "{Theme$toolbarbutton/icon/fill}",
     "forcedColors": "{Theme$button/text/color/ghost/active}"
+  },
+  "toolbarbutton/icon/fill/disabled": {
+    "light": "{Theme$toolbarbutton/icon/fill}",
+    "dark": "{Theme$toolbarbutton/icon/fill}",
+    "forcedColors": "{Theme$button/text/color/disabled}"
   },
   "toolbarbutton/icon/fill/attention": {
     "light": "{Colors$color/blue/60}",
@@ -1042,7 +1062,7 @@
   "toolbarbutton/opacity/disabled": {
     "light": "{Theme$button/opacity/disabled}",
     "dark": "{Theme$button/opacity/disabled}",
-    "forcedColors": 0.3
+    "forcedColors": "{Theme$button/opacity/disabled}"
   },
   "toolbarbutton/background/color": {
     "light": "transparent",
@@ -1088,6 +1108,11 @@
     "light": "{Theme$toolbarbutton/outline/color/active}",
     "dark": "{Theme$toolbarbutton/outline/color/active}",
     "forcedColors": "{HCM Theme$SelectedItem}"
+  },
+  "toolbarbutton/outline/color/disabled": {
+    "light": "{Theme$toolbarbutton/outline/color}",
+    "dark": "{Theme$toolbarbutton/outline/color}",
+    "forcedColors": "{Theme$button/border/color/disabled}"
   },
   "toolbarseparator/color": {
     "light": "{Theme$text/color/deemphasized}",

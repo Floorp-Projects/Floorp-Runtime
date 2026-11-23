@@ -9,20 +9,18 @@
  */
 
 import { UrlbarShared } from "chrome://browser/content/urlbar/UrlbarShared.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
-const lazy = {};
-ChromeUtils.defineESModuleGetters(lazy, {
+/**
+ * @import { SearchMode } from "chrome://browser/content/urlbar/UrlbarInputBase.mjs"
+ */
+
+const lazy = XPCOMUtils.declareLazy({
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   UrlbarPrefs: "moz-src:///browser/components/urlbar/UrlbarPrefs.sys.mjs",
   UrlUtils: "resource://gre/modules/UrlUtils.sys.mjs",
-});
-
-ChromeUtils.defineLazyGetter(lazy, "logger", () =>
-  UrlbarShared.getLogger({ prefix: "Tokenizer" })
-);
-
-ChromeUtils.defineLazyGetter(lazy, "gFluentStrings", function () {
-  return new Localization(["browser/browser.ftl"]);
+  logger: () => UrlbarShared.getLogger({ prefix: "Tokenizer" }),
+  gFluentStrings: () => new Localization(["browser/browser.ftl"]),
 });
 
 /**
@@ -94,7 +92,7 @@ export var UrlbarTokenizer = {
    *
    * @param {object} context
    * @param {string} context.searchString
-   * @param {string} [context.searchMode]
+   * @param {SearchMode} [context.searchMode]
    * @param {string} context.trimmedSearchString
    * @returns {UrlbarSearchStringTokenData[]}
    *  The tokens associated with the query.
@@ -124,6 +122,48 @@ export var UrlbarTokenizer = {
       token.type <= UrlbarShared.TOKEN_TYPE.RESTRICT_URL
     );
   },
+
+  /**
+   * Returns the host and path of a token that looks like an http(s) origin or
+   * URL, like "example.com" or "https://example.com/foo".
+   *
+   * @param {UrlbarSearchStringTokenData} token
+   * @returns {{host: string, path: string}|null}
+   *   `host` is the lower case hostname, without any leading "www." or trailing
+   *   dot, and `path` the unparsed text from the first "/" after the host, or an
+   *   empty string. Null if the token is not an http(s) origin or URL, or has
+   *   user info.
+   */
+  getOriginInfo(token) {
+    if (
+      token.type != UrlbarShared.TOKEN_TYPE.POSSIBLE_ORIGIN &&
+      token.type !=
+        UrlbarShared.TOKEN_TYPE.POSSIBLE_ORIGIN_BUT_SEARCH_ALLOWED &&
+      token.type != UrlbarShared.TOKEN_TYPE.POSSIBLE_URL
+    ) {
+      return null;
+    }
+    let prefix = lazy.UrlUtils.REGEXP_PREFIX.exec(token.value)?.[0] ?? "";
+    let url = URL.parse(prefix ? token.value : `http://${token.value}`);
+    if (
+      !url ||
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      !url.hostname
+    ) {
+      return null;
+    }
+    let rest = token.value.slice(prefix.length);
+    let slashIndex = rest.indexOf("/");
+    return {
+      host: UrlbarShared.stripPrefixAndTrim(url.hostname, {
+        stripWww: true,
+        trimTrailingDot: true,
+      })[0],
+      path: slashIndex == -1 ? "" : rest.slice(slashIndex),
+    };
+  },
 };
 
 /** @type {Map<string, Values<typeof UrlbarShared.RESTRICT_TOKENS>>} */
@@ -139,7 +179,7 @@ const CHAR_TO_TYPE_MAP = new Map(
  *
  * @param {object} context
  * @param {string} context.searchString
- * @param {string} [context.searchMode]
+ * @param {SearchMode} [context.searchMode]
  * @returns {string[]} An array of string tokens.
  */
 function splitString({ searchString, searchMode }) {

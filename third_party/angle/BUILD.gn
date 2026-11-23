@@ -240,12 +240,6 @@ config("internal_config") {
     defines += [ "ANGLE_ENABLE_TRACE_EVENTS=1" ]
   }
 
-  # Enables platform trace events (PlatformMethods::addTraceEvent) e.g.
-  # AGI/perfetto on Android
-  if (angle_enable_platform_trace_events) {
-    defines += [ "ANGLE_ENABLE_PLATFORM_TRACE_EVENTS=1" ]
-  }
-
   # Output `INFO`-level logs and up.
   if (angle_always_log_info) {
     defines += [ "ANGLE_ALWAYS_LOG_INFO" ]
@@ -418,6 +412,12 @@ config("extra_warnings") {
   }
 }
 
+config("opencl_no_pragma_messages") {
+  if (is_clang) {
+    cflags = [ "-Wno-#pragma-messages" ]
+  }
+}
+
 # This config adds build-ids to the associated library. -Wl is a special option
 # that indicates that clang should pass the associated option --build-id to the
 # linker. This will cause a build-id section to be added to the associated
@@ -512,7 +512,7 @@ config("angle_asserts_config") {
 config("angle_common_config") {
   include_dirs = [
     "src/common/base",
-    "src/common/third_party/xxhash",
+    "src/common/third_party/xxhash/src",
   ]
   libs = []
   if (is_android) {
@@ -525,6 +525,9 @@ config("angle_common_config") {
   }
 
   defines = []
+  if (angle_use_partition_alloc) {
+    defines += [ "ANGLE_USE_PARTITION_ALLOC" ]
+  }
   if (angle_delegate_workers) {
     defines += [ "ANGLE_DELEGATE_WORKERS=1" ]
   }
@@ -555,6 +558,7 @@ angle_source_set("xxhash") {
 if (false && angle_has_build) {
   fuzzer_test("xxhash_fuzzer") {
     sources = [ "src/common/third_party/xxhash/xxhash_fuzzer.cpp" ]
+    include_dirs = [ "src/common/third_party/xxhash/src" ]
     deps = [ ":xxhash" ]
   }
 }
@@ -569,14 +573,17 @@ template("angle_common_lib") {
     ]
 
     deps = [ ":xxhash" ]
-    if (angle_use_partition_alloc) {
-      deps += [ "${angle_partition_alloc_dir}" ]
-    }
 
     public_deps = [
       ":angle_abseil",
       ":includes",
     ]
+    if (angle_use_partition_alloc) {
+      public_deps += [ "${angle_partition_alloc_dir}:raw_ptr" ]
+    }
+    if (angle_enable_perfetto) {
+      public_deps += [ ":angle_libperfetto" ]
+    }
     public_configs += [ ":angle_common_config" ]
     if (angle_has_build) {
       all_dependent_configs = [ ":angle_disable_pool_alloc" ]
@@ -622,6 +629,14 @@ angle_common_lib("angle_common_shader_state") {
   sources = libangle_common_shader_state_sources
 }
 
+angle_source_set("angle_frame_capture_shared") {
+  sources = [
+    "src/common/frame_capture_shared.cpp",
+    "src/common/frame_capture_shared.h",
+  ]
+  deps = [ ":angle_common" ]
+}
+
 angle_source_set("angle_capture_common") {
   sources = [
     "src/common/frame_capture_binary_data.cpp",
@@ -638,7 +653,10 @@ angle_source_set("angle_capture_common") {
     ":angle_common",
     ":angle_compression",
   ]
-  public_deps = [ ":angle_gl_enum_utils" ]
+  public_deps = [
+    ":angle_frame_capture_shared",
+    ":angle_gl_enum_utils",
+  ]
 }
 
 config("angle_image_util_config") {
@@ -1057,6 +1075,10 @@ config("libANGLE_config") {
     defines += [ "ANGLE_USE_WAYLAND" ]
   }
 
+  if (angle_has_zstd) {
+    defines += [ "ANGLE_HAS_ZSTD" ]
+  }
+
   if (angle_enable_perf_counter_output) {
     defines += [ "ANGLE_ENABLE_PERF_COUNTER_OUTPUT=1" ]
   }
@@ -1076,13 +1098,14 @@ config("libANGLE_config") {
 
 angle_source_set("libANGLE_headers") {
   sources = libangle_headers
-  if (angle_enable_cl) {
-    sources += libangle_cl_headers
-  }
   public_deps = [
     ":angle_common",
     ":angle_translator_headers",
+    ":cl_includes",
   ]
+  if (angle_enable_cl) {
+    sources += libangle_cl_headers
+  }
   public_configs += [ ":libANGLE_config" ]
 }
 
@@ -1105,6 +1128,7 @@ angle_source_set("libANGLE_no_vulkan") {
   sources = libangle_sources
   if (angle_enable_cl) {
     sources += libangle_cl_sources
+    configs += [ ":opencl_no_pragma_messages" ]
   }
   defines = []
 
@@ -1202,6 +1226,7 @@ angle_source_set("angle_frame_capture_mock") {
   public_configs = [ ":angle_frame_capture_disabled" ]
   sources = [
     "src/common/frame_capture_binary_data.h",
+    "src/common/frame_capture_shared.h",
     "src/common/frame_capture_utils.h",
     "src/common/frame_capture_utils_autogen.h",
     "src/common/gl_enum_utils_autogen.h",
@@ -1250,6 +1275,32 @@ if (angle_use_wayland) {
   }
 }
 
+if (angle_enable_perfetto) {
+  config("angle_perfetto_config") {
+    defines = [ "ANGLE_USE_PERFETTO" ]
+
+    configs = [ "$angle_perfetto_cpp_dir/gn:public_config" ]
+
+    include_dirs = [
+      "$angle_perfetto_cpp_dir/include",
+      "$root_gen_dir/third_party/perfetto",
+      "$root_gen_dir/third_party/perfetto/build_config",
+    ]
+  }
+
+  if (build_with_chromium) {
+    group("angle_libperfetto") {
+      public_deps = [ "$angle_perfetto_cpp_dir:libperfetto" ]
+      public_configs = [ ":angle_perfetto_config" ]
+    }
+  } else {
+    component("angle_libperfetto") {
+      public_deps = [ "$angle_perfetto_cpp_dir/src/tracing:client_api" ]
+      public_configs = [ ":angle_perfetto_config" ]
+    }
+  }
+}
+
 if (!defined(angle_abseil_cpp_dir)) {
   angle_abseil_cpp_dir = "//third_party/abseil-cpp"
 }
@@ -1282,10 +1333,15 @@ group("angle_abseil") {
 
     public_configs = [ ":angle_abseil_config" ]
   }
+  visibility = [ "./*" ]
 }
 
 config("angle_compression_config") {
   include_dirs = [ "//angle/third_party/zlib/google" ]
+  if (angle_has_zstd) {
+    # Chromium's zstd targets export no include path for <zstd.h>.
+    include_dirs += [ "$angle_zstd_dir/src/lib" ]
+  }
 }
 
 group("angle_compression") {
@@ -1295,12 +1351,19 @@ group("angle_compression") {
   ]
   public_deps =
       [ "$angle_zlib_compression_utils_dir:compression_utils_portable" ]
+  if (angle_has_zstd) {
+    public_deps += [
+      "$angle_zstd_dir:compress",
+      "$angle_zstd_dir:decompress",
+    ]
+  }
 }
 
 if (angle_has_rapidjson) {
   config("angle_rapidjson_config") {
     defines = [ "ANGLE_HAS_RAPIDJSON" ]
   }
+
   angle_source_set("angle_json_serializer") {
     public_deps = [
       ":angle_common",
@@ -1835,6 +1898,7 @@ if (install_prefix != "") {
     }
 
     install_deps += [ ":install_includes" ]
+
     action("install_includes") {
       script = "scripts/install_target.py"
       configs = invoker.configs

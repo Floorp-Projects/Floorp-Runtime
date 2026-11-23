@@ -19,7 +19,7 @@ FINAL_LIBRARY = "gkcodecs"
 NoVisibilityFlags()
 
 DEFINES["OPUS_BUILD"] = True
-DEFINES["OPUS_VERSION"] = "503d81b138d76621aae4b12786e90de48aa8db3a"
+DEFINES["OPUS_VERSION"] = "a8b2545eec71e0f53ecead2d583e7b6baa42684d"
 DEFINES["USE_ALLOCA"] = True
 DEFINES["ENABLE_HARDENING"] = True
 
@@ -129,6 +129,7 @@ if CONFIG["TARGET_CPU"] == "arm" and CONFIG["GNU_AS"]:
     SOURCES += [
         "!celt_pitch_xcorr_arm-gnu.s"
     ]
+    SOURCES["!celt_pitch_xcorr_arm-gnu.s"].object_deps += ["!celt/arm/armopts-gnu.S"]
     # -Os is significantly slower, enable -O3 unless optimization is disabled
     if CONFIG["MOZ_OPTIMIZE"]:
         CFLAGS += [

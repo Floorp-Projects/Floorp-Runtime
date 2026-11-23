@@ -18,10 +18,13 @@
 #include "RemoteDecodeUtils.h"
 #include "RemoteImageHolder.h"
 #include "RemoteMediaManagerParent.h"
+#include "mozilla/PRemoteCDMChild.h"
 #include "mozilla/StaticPrefs_media.h"
+#include "mozilla/gfx/Logging.h"
 #include "mozilla/layers/ImageClient.h"
 #include "mozilla/layers/TextureClient.h"
 #include "mozilla/layers/VideoBridgeChild.h"
+#include "nsPrintfCString.h"
 #ifdef MOZ_WIDGET_ANDROID
 #  include "mozilla/layers/VideoBridgeParent.h"
 #endif
@@ -93,11 +96,8 @@ MediaResult RemoteVideoDecoderChild::ProcessOutput(
 MediaResult RemoteVideoDecoderChild::InitIPDL(
     const VideoInfo& aVideoInfo, float aFramerate,
     const CreateDecoderParams::OptionSet& aOptions,
-    Maybe<layers::TextureFactoryIdentifier> aIdentifier,
     const Maybe<uint64_t>& aMediaEngineId, const Maybe<TrackingId>& aTrackingId,
     PRemoteCDMActor* aCDM) {
-  MOZ_ASSERT_IF(mLocation == RemoteMediaIn::GpuProcess, aIdentifier);
-
   RefPtr<RemoteMediaManagerChild> manager =
       RemoteMediaManagerChild::GetSingleton(mLocation);
 
@@ -111,11 +111,11 @@ MediaResult RemoteVideoDecoderChild::InitIPDL(
 
   if (!manager->CanSend()) {
     if (mLocation == RemoteMediaIn::GpuProcess) {
-      // The manager doesn't support sending messages because we've just crashed
-      // and are working on reinitialization. We immediately reject the promise
-      // when Init() is called and the caller can try again. Hopefully by then
-      // the new manager is ready, or we've notified the caller of it being no
-      // longer available. If not, then the cycle repeats until we're ready.
+      // The manager doesn't support sending messages because the GPU process
+      // crashed after RemoteMediaManagerChild::EnsureGPUProcessReady resolved.
+      // Constructing the decoder will then fail, and the caller will be
+      // notified once the GPU process has been recreated, or is no longer
+      // available.
       return NS_OK;
     }
 
@@ -139,12 +139,18 @@ MediaResult RemoteVideoDecoderChild::InitIPDL(
           NS_ERROR_DOM_MEDIA_FATAL_ERR,
           RESULT_DETAIL("PRemoteCDMActor is not PRemoteCDMChild."));
     }
+
+    // If the CDM's process crashed, then the CDM must be recreated by the
+    // caller, and we cannot send it.
+    if (!cdm->CanSend() || cdm->Manager() != manager) {
+      return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                         RESULT_DETAIL("PRemoteCDMChild is in stale process."));
+    }
   }
 
   VideoDecoderInfoIPDL decoderInfo(aVideoInfo, aFramerate);
-  if (!manager->SendPRemoteDecoderConstructor(this, decoderInfo, aOptions,
-                                              aIdentifier, aMediaEngineId,
-                                              aTrackingId, cdm)) {
+  if (!manager->SendPRemoteDecoderConstructor(
+          this, decoderInfo, aOptions, aMediaEngineId, aTrackingId, cdm)) {
     return MediaResult(
         NS_ERROR_DOM_MEDIA_FATAL_ERR,
         RESULT_DETAIL("RemoteMediaManager unable to construct."));
@@ -156,14 +162,102 @@ MediaResult RemoteVideoDecoderChild::InitIPDL(
 RemoteVideoDecoderParent::RemoteVideoDecoderParent(
     RemoteMediaManagerParent* aParent, const VideoInfo& aVideoInfo,
     float aFramerate, const CreateDecoderParams::OptionSet& aOptions,
-    const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
     nsISerialEventTarget* aManagerThread, TaskQueue* aDecodeTaskQueue,
     const Maybe<uint64_t>& aMediaEngineId, Maybe<TrackingId> aTrackingId,
     RemoteCDMParent* aCDM)
     : RemoteDecoderParent(aParent, aOptions, aManagerThread, aDecodeTaskQueue,
                           aMediaEngineId, std::move(aTrackingId), aCDM),
       mVideoInfo(aVideoInfo),
-      mFramerate(aFramerate) {
+      mFramerate(aFramerate) {}
+
+void RemoteVideoDecoderParent::ActorDestroy(ActorDestroyReason aWhy) {
+  MOZ_ASSERT(OnManagerThread());
+  mVideoBridgeRequest.DisconnectIfExists();
+  mIdentifierRequest.DisconnectIfExists();
+  RemoteDecoderParent::ActorDestroy(aWhy);
+}
+
+IPCResult RemoteVideoDecoderParent::RecvConstruct(
+    ConstructResolver&& aResolver) {
+  if (mDecoder || mShutdown || mVideoBridgeRequest.Exists() ||
+      mIdentifierRequest.Exists()) {
+    aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
+    return IPC_OK();
+  }
+
+  if (!IsMediaEngineIdAllowed()) {
+    aResolver(MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR, __func__));
+    return IPC_OK();
+  }
+
+  // If the compositor is being recreated, wait for the new video bridge so that
+  // we can share the decoded frames with it.
+  layers::VideoBridgeChild::WaitUntilReady()
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [self = RefPtr{this}, resolver = std::move(aResolver)](
+                 const GenericNonExclusivePromise::ResolveOrRejectValue&
+                     aValue) mutable {
+               self->mVideoBridgeRequest.Complete();
+               if (aValue.IsReject()) {
+                 resolver(MediaResult(NS_ERROR_DOM_MEDIA_CANCELED, __func__));
+                 return;
+               }
+               self->RequestTextureFactoryIdentifier(std::move(resolver));
+             })
+      ->Track(mVideoBridgeRequest);
+  return IPC_OK();
+}
+
+void RemoteVideoDecoderParent::RequestTextureFactoryIdentifier(
+    ConstructResolver&& aResolver) {
+  MOZ_ASSERT(OnManagerThread());
+  RefPtr<layers::VideoBridgeChild> videoBridge =
+      layers::VideoBridgeChild::GetSingleton();
+  if (!videoBridge || !videoBridge->CanSend()) {
+    CreateDecoder(Nothing(), std::move(aResolver));
+    return;
+  }
+
+  // Ask the compositor for its identifier, since the content process may not
+  // have the current one, e.g. if the GPU process is being recreated.
+  videoBridge->SendGetTextureFactoryIdentifier()
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [self = RefPtr{this}, resolver = std::move(aResolver)](
+                 layers::VideoBridgeChild::GetTextureFactoryIdentifierPromise::
+                     ResolveOrRejectValue&& aValue) mutable {
+               self->mIdentifierRequest.Complete();
+               self->CreateDecoder(
+                   aValue.IsResolve() ? Some(aValue.ResolveValue()) : Nothing(),
+                   std::move(resolver));
+             })
+      ->Track(mIdentifierRequest);
+}
+
+void RemoteVideoDecoderParent::CreateDecoder(
+    const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
+    ConstructResolver&& aResolver) {
+  MOZ_ASSERT(OnManagerThread());
+  if (mDecoder || mShutdown) {
+    aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
+    return;
+  }
+
+  if (!aIdentifier) {
+    MOZ_LOG_FMT(gRemoteDecodeLog, LogLevel::Warning,
+                "No compositor for content process {} when creating decoder",
+                uint64_t(mParent->GetContentId()));
+    gfxCriticalNote << "Decoder missing TFI, content "
+                    << uint64_t(mParent->GetContentId());
+  }
+
+  // Decoders in the GPU process must share their frames with the compositor,
+  // so let the content process use another process instead.
+  if (!aIdentifier && XRE_IsGPUProcess()) {
+    aResolver(MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                          "No compositor for the content process"));
+    return;
+  }
+
   if (aIdentifier) {
     // Check to see if we have a direct PVideoBridge connection to the
     // destination process specified in aIdentifier, and create a
@@ -171,14 +265,6 @@ RemoteVideoDecoderParent::RemoteVideoDecoderParent(
     // we fall back to returning the decoded frames directly via Output().
     mKnowsCompositor =
         KnowsCompositorVideo::TryCreateForIdentifier(*aIdentifier);
-  }
-}
-
-IPCResult RemoteVideoDecoderParent::RecvConstruct(
-    ConstructResolver&& aResolver) {
-  if (mDecoder || mShutdown) {
-    aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
-    return IPC_OK();
   }
 
   auto imageContainer = MakeRefPtr<layers::ImageContainer>(
@@ -221,7 +307,22 @@ IPCResult RemoteVideoDecoderParent::RecvConstruct(
                                       do_AddRef(self->mDecodeTaskQueue.get()));
         resolver(NS_OK);
       });
-  return IPC_OK();
+}
+
+MediaResult RemoteVideoDecoderParent::AdjustDecodeError(
+    const MediaResult& aError) {
+  MOZ_ASSERT(OnManagerThread());
+
+  // The decoder allocates its images from the video bridge. If the bridge has
+  // shut down (e.g. the GPU process crashed), allocations fail and the error is
+  // not a real decoding error. Report it as a remote crash so that the child
+  // recreates the decoder instead of treating it as fatal.
+  if (mKnowsCompositor && !mKnowsCompositor->GetTextureForwarder()) {
+    return MediaResult(NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_RDD_OR_GPU_ERR,
+                       nsPrintfCString("Video bridge shut down: %s",
+                                       aError.Description().get()));
+  }
+  return aError;
 }
 
 MediaResult RemoteVideoDecoderParent::ProcessDecodedData(

@@ -42,8 +42,7 @@ static const uint8_t kPhasorangleWidth = 8;
 
 nsIFrame* NS_NewMathMLmencloseFrame(PresShell* aPresShell,
                                     ComputedStyle* aStyle) {
-  return new (aPresShell)
-      nsMathMLmencloseFrame(aStyle, aPresShell->GetPresContext());
+  return new nsMathMLmencloseFrame(aStyle, aPresShell->GetPresContext());
 }
 
 NS_IMPL_FRAMEARENA_HELPERS(nsMathMLmencloseFrame)
@@ -196,7 +195,8 @@ void nsMathMLmencloseFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   }
 
   if (IsToDraw(MencloseNotation::LongDiv)) {
-    mMathMLChar[mLongDivCharIndex].Display(aBuilder, this, aLists, 1);
+    mMathMLChar[mLongDivCharIndex].Display(aBuilder, this, aLists, 1,
+                                           /* aIsArtifact */ true);
 
     nsRect rect;
     mMathMLChar[mLongDivCharIndex].GetRect(rect);

@@ -11,7 +11,6 @@
 #include "SharedSurfaceGL.h"  // for SharedSurface
 #include "gfxPlatform.h"
 #include "mozilla/StaticPrefs_dom.h"
-#include "mozilla/StaticPrefs_webgl.h"
 #include "mozilla/dom/HTMLCanvasElement.h"
 #include "mozilla/layers/ImageBridgeChild.h"
 #include "mozilla/layers/LayersMessages.h"  // for TimedTexture
@@ -30,7 +29,7 @@ VRLayerChild::~VRLayerChild() {
 void VRLayerChild::Initialize(dom::HTMLCanvasElement* aCanvasElement,
                               const gfx::Rect& aLeftEyeRect,
                               const gfx::Rect& aRightEyeRect) {
-  MOZ_ASSERT(aCanvasElement);
+  MOZ_RELEASE_ASSERT(aCanvasElement);
   mLeftEyeRect = aLeftEyeRect;
   mRightEyeRect = aRightEyeRect;
   mCanvasElement = aCanvasElement;
@@ -85,9 +84,6 @@ void VRLayerChild::SubmitFrame(const VRDisplayInfo& aDisplayInfo) {
     auto texType = layers::TextureType::Unknown;
     if (imageBridge) {
       texType = layers::PreferredCanvasTextureType(imageBridge);
-    }
-    if (kIsAndroid && StaticPrefs::webgl_enable_surface_texture()) {
-      texType = layers::TextureType::AndroidNativeWindow;
     }
 
     webgl->Present(mFramebuffer, texType, true);

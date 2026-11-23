@@ -81,7 +81,7 @@ LOCAL_INCLUDES += [
     "/netwerk/protocol/http",
 ]
 
-EXTRA_JS_MODULES += [
+MOZ_SRC_FILES += [
     "ThirdPartyCookieBlockingExceptionListService.sys.mjs",
 ]
 
@@ -96,3 +96,9 @@ XPCOM_MANIFESTS += [
 include("/ipc/chromium/chromium-config.mozbuild")
 
 FINAL_LIBRARY = "xul"
+
+SOURCE_HEADERS += [
+    "CookieDBWriteQueue.h",
+    "CookieDummyStorage.h",
+    "CookieLogging.h",
+]

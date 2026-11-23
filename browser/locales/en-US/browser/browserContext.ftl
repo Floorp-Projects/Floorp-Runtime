@@ -388,6 +388,11 @@ main-context-menu-add-engine =
     .label = Add Search Engine
     .accesskey = S
 
+# Actions menu that appears when selecting text with actions like Ask AI, Search, or Copy.
+main-context-menu-turn-on-actions-menu =
+    .label = Turn On Actions Menu
+    .accesskey = A
+
 main-context-menu-link-send-to-device =
     .label = Send Link to Device
     .accesskey = n
@@ -486,6 +491,9 @@ main-context-menu-reveal-password =
 
 # The label of a badge shown in menu items to call out new features.
 main-context-menu-new-feature-badge = New
+
+# The label of a badge shown in menu items to call out features that are in beta.
+main-context-menu-beta-feature-badge = Beta
 
 main-context-menu-pdfjs-copy-page =
     .label = Copy page

@@ -243,7 +243,7 @@ ipc::IPCResult CanvasTranslator::RecvAddBuffer(
 
 bool CanvasTranslator::AddBuffer(
     ipc::ReadOnlySharedMemoryHandle&& aBufferHandle) {
-  MOZ_ASSERT(IsInTaskQueue());
+  MOZ_RELEASE_ASSERT(IsInTaskQueue());
   if (mHeader->readerState == State::Failed) {
     // We failed before we got to the pause event.
     return false;
@@ -259,7 +259,7 @@ bool CanvasTranslator::AddBuffer(
     return false;
   }
 
-  MOZ_ASSERT(mDefaultBufferSize != 0);
+  MOZ_RELEASE_ASSERT(mDefaultBufferSize != 0);
 
   // Check and signal the writer when we finish with a buffer, because it
   // might have hit the buffer count limit and be waiting to use our old one.
@@ -370,7 +370,7 @@ void CanvasTranslator::DataSurfaceBufferWillChange(uint32_t aId,
 
 bool CanvasTranslator::SetDataSurfaceBuffer(
     uint32_t aId, ipc::MutableSharedMemoryHandle&& aBufferHandle) {
-  MOZ_ASSERT(IsInTaskQueue());
+  MOZ_RELEASE_ASSERT(IsInTaskQueue());
   if (mHeader->readerState == State::Failed) {
     // We failed before we got to the pause event.
     return false;
@@ -430,7 +430,7 @@ bool CanvasTranslator::SetDataSurfaceBuffer(
 }
 
 void CanvasTranslator::GetDataSurface(uint32_t aId, uint64_t aSurfaceRef) {
-  MOZ_ASSERT(IsInTaskQueue());
+  MOZ_RELEASE_ASSERT(IsInTaskQueue());
 
   ReferencePtr surfaceRef = reinterpret_cast<void*>(aSurfaceRef);
   RefPtr<gfx::DataSourceSurface> dataSurface = LookupDataSurface(surfaceRef);
@@ -562,7 +562,7 @@ void CanvasTranslator::NextBuffer() {
 }
 
 void CanvasTranslator::ActorDestroy(ActorDestroyReason why) {
-  MOZ_ASSERT(gfx::CanvasRenderThread::IsInCanvasRenderThread());
+  MOZ_RELEASE_ASSERT(gfx::CanvasRenderThread::IsInCanvasRenderThread());
 
   // Since we might need to access the actor status off the owning IPDL thread,
   // we need to cache it here.
@@ -660,6 +660,8 @@ void CanvasTranslator::BlockCanvas() {
 }
 
 void CanvasTranslator::CheckAndSignalWriter() {
+  uint32_t spinCount = mMaxSpinCount;
+  TimeStamp deadline;
   do {
     switch (mHeader->writerState) {
       case State::Processing:
@@ -672,6 +674,20 @@ void CanvasTranslator::CheckAndSignalWriter() {
         if (mIPDLClosed) {
           return;
         }
+        if (spinCount > 0) {
+          --spinCount;
+          continue;
+        }
+        // The writer only stays in this state for a few instructions, so if it
+        // does not move on in a reasonable time it is misbehaving.
+        if (deadline.IsNull()) {
+          deadline = TimeStamp::Now() + TimeDuration::FromSeconds(1);
+        } else if (TimeStamp::Now() > deadline) {
+          gfxCriticalNote << "CanvasTranslator writer stuck in AboutToWait";
+          Deactivate();
+          return;
+        }
+        PR_Sleep(PR_INTERVAL_NO_WAIT);
         continue;
       case State::Waiting:
         if (mHeader->processedCount >= mHeader->writerWaitCount) {
@@ -756,7 +772,7 @@ bool CanvasTranslator::ReadNextEvent(EventType& aEventType) {
 }
 
 bool CanvasTranslator::TranslateRecording() {
-  MOZ_ASSERT(IsInTaskQueue());
+  MOZ_RELEASE_ASSERT(IsInTaskQueue());
   MOZ_DIAGNOSTIC_ASSERT_IF(mFlushCheckpoint, HasPendingEvent());
 
   if (mHeader->readerState == State::Failed) {
@@ -866,7 +882,7 @@ void CanvasTranslator::PostCanvasTranslatorEvents(
 }
 
 void CanvasTranslator::HandleCanvasTranslatorEvents() {
-  MOZ_ASSERT(IsInTaskQueue());
+  MOZ_RELEASE_ASSERT(IsInTaskQueue());
 
   UniquePtr<CanvasTranslatorEvent> event;
   {
@@ -927,7 +943,7 @@ void CanvasTranslator::HandleCanvasTranslatorEvents() {
     }
   }
 
-  MOZ_ASSERT(!event);
+  MOZ_RELEASE_ASSERT(!event);
 
   {
     MutexAutoLock lock(mCanvasTranslatorEventsLock);
@@ -1281,7 +1297,7 @@ already_AddRefed<gfx::DrawTarget> CanvasTranslator::CreateDrawTarget(
 
 void CanvasTranslator::NotifyTextureDestruction(
     const RemoteTextureOwnerId aTextureOwnerId) {
-  MOZ_ASSERT(gfx::CanvasRenderThread::IsInCanvasRenderThread());
+  MOZ_RELEASE_ASSERT(gfx::CanvasRenderThread::IsInCanvasRenderThread());
 
   if (mIPDLClosed) {
     return;
@@ -1489,7 +1505,7 @@ bool CanvasTranslator::PushRemoteTexture(
 }
 
 void CanvasTranslator::ClearTextureInfo() {
-  MOZ_ASSERT(mIPDLClosed);
+  MOZ_RELEASE_ASSERT(mIPDLClosed);
 
   DataSurfaceBufferWillChange(0, false);
 
@@ -1572,8 +1588,8 @@ CanvasTranslator::MaybeRecycleDataSurfaceForSurfaceDescriptor(
   auto& usedDescriptor = mUsedSurfaceDescriptorForSurfaceDescriptor;
 
   if (usedDescriptor.isSome() && usedDescriptor.ref() == aSurfaceDescriptor) {
-    MOZ_ASSERT(usedSurf);
-    MOZ_ASSERT(usedWrapper);
+    MOZ_RELEASE_ASSERT(usedSurf);
+    MOZ_RELEASE_ASSERT(usedWrapper);
 
     auto* bufferTextureHost = aTextureHost->AsBufferTextureHost();
     if (bufferTextureHost) {
@@ -1735,7 +1751,7 @@ CanvasTranslator::LookupSourceSurfaceFromSurfaceDescriptor(
 #endif
 
   if (sdrd.videoType() == RemoteDecoderVideoType::MacIOSurface) {
-    MOZ_ASSERT(texture->AsMacIOSurfaceTextureHost());
+    MOZ_RELEASE_ASSERT(texture->AsMacIOSurfaceTextureHost());
 
     RefPtr<gfx::DataSourceSurface> surf =
         MaybeRecycleDataSurfaceForSurfaceDescriptor(texture, sdrd);
@@ -1853,7 +1869,7 @@ bool CanvasTranslator::ResolveExternalSnapshot(uint64_t aSyncId,
                                                const IntSize& aSize,
                                                SurfaceFormat aFormat,
                                                DrawTarget* aDT) {
-  MOZ_ASSERT(IsInTaskQueue());
+  MOZ_RELEASE_ASSERT(IsInTaskQueue());
   uint64_t prevSyncId = mLastSyncId;
   if (NS_WARN_IF(aSyncId > mLastSyncId)) {
     // If arriving here, a previous SnapshotExternalCanvas IPDL message never
@@ -1915,7 +1931,7 @@ bool CanvasTranslator::ResolveExternalSnapshot(uint64_t aSyncId,
 already_AddRefed<gfx::GradientStops> CanvasTranslator::GetOrCreateGradientStops(
     gfx::DrawTarget* aDrawTarget, gfx::GradientStop* aRawStops,
     uint32_t aNumStops, gfx::ExtendMode aExtendMode) {
-  MOZ_ASSERT(aDrawTarget);
+  MOZ_RELEASE_ASSERT(aDrawTarget);
   nsTArray<gfx::GradientStop> rawStopArray(aRawStops, aNumStops);
   return gfx::gfxGradientCache::GetOrCreateGradientStops(
       aDrawTarget, rawStopArray, aExtendMode);

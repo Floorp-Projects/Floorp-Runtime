@@ -26,12 +26,17 @@ if CONFIG["OS_ARCH"] == "WINNT":
     SOURCES += [
         "EnterprisePoliciesFlagFileTests.cpp",
         "EnterprisePoliciesTests.cpp",
+        "PostUpdateEnvironmentTests.cpp",
         "TestDirHelpers.cpp",
+    ]
+    SOURCE_HEADERS += [
+        "TestDirHelpers.h",
     ]
     USE_STATIC_MSVCRT = True
     DEFINES["UNICODE"] = True
     DEFINES["_UNICODE"] = True
     OS_LIBS += [
         "shlwapi",
+        "userenv",
         "uuid",
     ]

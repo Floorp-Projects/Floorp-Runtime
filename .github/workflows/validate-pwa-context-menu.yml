@@ -42,7 +42,7 @@ jobs:
         include:
           - runner: macos-15-intel
             arch: x86_64
-          - runner: macos-14
+          - runner: macos-15
             arch: aarch64
     steps:
       - name: Checkout maintained native integration tests

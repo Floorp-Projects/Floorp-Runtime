@@ -48,7 +48,6 @@ SurfaceD3D::SurfaceD3D(const egl::SurfaceState &state,
       mHeight(static_cast<EGLint>(attribs.get(EGL_HEIGHT, 0))),
       mSwapInterval(1),
       mShareHandle(0),
-      mD3DTexture(nullptr),
       mBuftype(buftype)
 {
     if (window != nullptr && !mFixedSize)
@@ -72,7 +71,6 @@ SurfaceD3D::SurfaceD3D(const egl::SurfaceState &state,
         case EGL_D3D_TEXTURE_ANGLE:
             mD3DTexture = static_cast<IUnknown *>(clientBuffer);
             ASSERT(mD3DTexture != nullptr);
-            mD3DTexture->AddRef();
             break;
 
         default:
@@ -84,7 +82,6 @@ SurfaceD3D::~SurfaceD3D()
 {
     releaseSwapChain();
     SafeDelete(mNativeWindow);
-    SafeRelease(mD3DTexture);
 }
 
 void SurfaceD3D::releaseSwapChain()
@@ -92,7 +89,7 @@ void SurfaceD3D::releaseSwapChain()
     SafeDelete(mSwapChain);
 }
 
-egl::Error SurfaceD3D::initialize(const egl::Display *display)
+egl::Error SurfaceD3D::initialize(const egl::ThreadSafeDisplay *display)
 {
     if (mNativeWindow->getNativeWindow())
     {
@@ -104,7 +101,7 @@ egl::Error SurfaceD3D::initialize(const egl::Display *display)
 
     if (mBuftype == EGL_D3D_TEXTURE_ANGLE)
     {
-        ANGLE_TRY(mRenderer->getD3DTextureInfo(mState.config, mD3DTexture, mState.attributes,
+        ANGLE_TRY(mRenderer->getD3DTextureInfo(mState.config, mD3DTexture.Get(), mState.attributes,
                                                &mFixedWidth, &mFixedHeight, nullptr, nullptr,
                                                &mColorFormat, nullptr));
         if (mState.attributes.contains(EGL_GL_COLORSPACE))
@@ -168,7 +165,7 @@ egl::Error SurfaceD3D::getMscRate(EGLint *numerator, EGLint *denominator)
     return egl::Error(EGL_BAD_ACCESS);
 }
 
-egl::Error SurfaceD3D::resetSwapChain(const egl::Display *display)
+egl::Error SurfaceD3D::resetSwapChain(const egl::ThreadSafeDisplay *display)
 {
     ASSERT(!mSwapChain);
 
@@ -195,9 +192,9 @@ egl::Error SurfaceD3D::resetSwapChain(const egl::Display *display)
         height = mFixedHeight;
     }
 
-    mSwapChain =
-        mRenderer->createSwapChain(mNativeWindow, mShareHandle, mD3DTexture, mRenderTargetFormat,
-                                   mDepthStencilFormat, mOrientation, mState.config->samples);
+    mSwapChain = mRenderer->createSwapChain(mNativeWindow, mShareHandle, mD3DTexture.Get(),
+                                            mRenderTargetFormat, mDepthStencilFormat, mOrientation,
+                                            mState.config->samples);
     if (!mSwapChain)
     {
         return egl::Error(EGL_BAD_ALLOC);
@@ -371,7 +368,7 @@ rx::SwapChainD3D *SurfaceD3D::getSwapChain() const
     return mSwapChain;
 }
 
-void SurfaceD3D::setSwapInterval(const egl::Display *display, EGLint interval)
+void SurfaceD3D::setSwapInterval(const egl::ThreadSafeDisplay *display, EGLint interval)
 {
     if (mSwapInterval == interval)
     {
@@ -429,20 +426,9 @@ const angle::Format *SurfaceD3D::getClientBufferTextureColorFormat() const
     return mColorFormat;
 }
 
-egl::Error SurfaceD3D::attachToFramebuffer(const gl::Context *context, gl::Framebuffer *framebuffer)
-{
-    return egl::NoError();
-}
-
-egl::Error SurfaceD3D::detachFromFramebuffer(const gl::Context *context,
-                                             gl::Framebuffer *framebuffer)
-{
-    return egl::NoError();
-}
-
 angle::Result SurfaceD3D::getAttachmentRenderTarget(const gl::Context *context,
                                                     GLenum binding,
-                                                    const gl::OwnImageIndex &ownImageIndex,
+                                                    const gl::ImageIndex &imageIndex,
                                                     GLsizei samples,
                                                     FramebufferAttachmentRenderTarget **rtOut)
 {
@@ -459,7 +445,7 @@ angle::Result SurfaceD3D::getAttachmentRenderTarget(const gl::Context *context,
 
 angle::Result SurfaceD3D::initializeContents(const gl::Context *context,
                                              GLenum binding,
-                                             const gl::OwnImageIndex &ownImageIndex)
+                                             const gl::ImageIndex &imageIndex)
 {
     switch (binding)
     {

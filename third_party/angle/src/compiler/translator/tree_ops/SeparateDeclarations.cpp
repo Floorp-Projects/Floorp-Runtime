@@ -55,18 +55,7 @@ class Separator final : private TIntermRebuild
         }
         // By default, struct specifier changes for all variables except the first one.
         uint32_t index = 1;
-        if (structure->symbolType() == SymbolType::Empty)
-        {
-            TStructure *newStructure =
-                new TStructure(&mSymbolTable, kEmptyImmutableString, &structure->fields(),
-                               SymbolType::AngleInternal);
-            newStructure->setAtGlobalScope(structure->atGlobalScope());
-            structure     = newStructure;
-            // Adding name causes the struct type to change, so also the first variable needs
-            // rewriting.
-            index = 0;
-        }
-        if (mSeparateCompoundStructDeclarations)
+        if (structure->symbolType() == SymbolType::Empty || mSeparateCompoundStructDeclarations)
         {
             mNewStructure = structure;
             // Separating struct and variable declaration causes the variable type to change
@@ -116,9 +105,9 @@ class Separator final : private TIntermRebuild
             replacements.push_back(replacement);
             mNewStructure = nullptr;
         }
-        for (uint32_t index = 0; index < sequence.size(); ++index)
+        for (TIntermNode *declaratorNode : sequence)
         {
-            TIntermTyped *declarator        = sequence.at(index)->getAsTyped();
+            TIntermTyped *declarator        = declaratorNode->getAsTyped();
             TIntermDeclaration *replacement = new TIntermDeclaration({declarator});
             replacement->setLine(declarator->getLine());
             replacements.push_back(replacement);

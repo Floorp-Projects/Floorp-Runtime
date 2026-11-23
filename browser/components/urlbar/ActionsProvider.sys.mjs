@@ -22,10 +22,11 @@ export class ActionsProvider {
    * with this provider, to save on resources.
    *
    * @param {UrlbarQueryContext} _queryContext The query context object.
+   * @param {UrlbarParentController} _controller The current controller.
    * @returns {boolean} Whether this provider should be invoked for the search.
    * @abstract
    */
-  isActive(_queryContext) {
+  isActive(_queryContext, _controller) {
     throw new Error("Not implemented.");
   }
 
@@ -33,10 +34,11 @@ export class ActionsProvider {
    * Query for actions based on the current users input.
    *
    * @param {UrlbarQueryContext} _queryContext The query context object.
+   * @param {UrlbarParentController} _controller The current controller.
    * @returns {Promise<ActionsResult[]>}
    * @abstract
    */
-  async queryActions(_queryContext) {
+  async queryActions(_queryContext, _controller) {
     throw new Error("Not implemented.");
   }
 
@@ -63,6 +65,8 @@ export class ActionsProvider {
  *   The id of the l10n string displayed in the action button, if any.
  * @property {{[arg: string]: any}} [l10nArgs]
  *   Arguments passed to construct the above string.
+ * @property {string} [labelText]
+ *   Plain text displayed in the action button when there's no `l10nId`.
  * @property {string} [icon]
  *   The icon displayed in the button; the view falls back to a default when
  *   it's absent.

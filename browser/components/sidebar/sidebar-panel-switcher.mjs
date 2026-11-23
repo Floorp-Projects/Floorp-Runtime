@@ -4,7 +4,7 @@
 
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 import { html } from "chrome://global/content/vendor/lit.all.mjs";
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://global/content/elements/panel-list.mjs";
 
 /**
@@ -38,55 +38,21 @@ export class SidebarPanelSwitcher extends MozLitElement {
     this.open = false;
   }
 
-  get #controller() {
-    return window.browsingContext.embedderWindowGlobal.browsingContext.window
-      .SidebarController;
-  }
-
   get #currentView() {
-    return this.view || this.#controller.currentID;
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    // Extension panels share a single document which is reused as the user
-    // switches between them, so re-resolve the label whenever a panel is shown.
-    window.addEventListener("SidebarFocused", this);
-    this.#updateLabel();
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    window.removeEventListener("SidebarFocused", this);
-  }
-
-  handleEvent() {
-    this.#updateLabel();
-  }
-
-  willUpdate(changedProperties) {
-    if (changedProperties.has("view")) {
-      this.#updateLabel();
-    }
-  }
-
-  async #updateLabel() {
-    const items = await this.#controller.getRevampSwitcherItems();
-    this.label =
-      items.find(item => item.view === this.#currentView)?.label ?? "";
+    return this.view || window.SidebarController.currentID;
   }
 
   async #onButtonClick(e) {
     // Rebuild the list each time so it reflects the currently enabled tools and
     // extensions, then open the dropdown anchored to the switcher button.
-    this.items = await this.#controller.getRevampSwitcherItems();
+    this.items = await window.SidebarController.getRevampSwitcherItems();
     await this.updateComplete;
     this.panelList.toggle(e);
   }
 
   #onItemClick(view) {
     if (view !== this.#currentView) {
-      this.#controller.show(view);
+      window.SidebarController.show(view);
     }
   }
 

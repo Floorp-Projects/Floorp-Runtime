@@ -48,7 +48,7 @@ bool DoesFieldContainRowMajorMatrix(const TField *field, bool isBlockRowMajor)
     // The field is qualified with row_major, but if it's not a matrix or a struct containing
     // matrices, that's a useless qualifier.
     const TType *type = field->type();
-    return type->isMatrix() || type->isStructureContainingMatrices();
+    return type->isMatrixPackingApplicable();
 }
 
 TField *DuplicateField(const TField *field)
@@ -281,10 +281,9 @@ class TransformArrayHelper
     TIntermTyped *getCurrentElement(TIntermTyped *expression)
     {
         TIntermTyped *element = expression->deepCopy();
-        for (auto it = mArrayIndices.rbegin(); it != mArrayIndices.rend(); ++it)
+        for (unsigned int index : angle::Reversed(mArrayIndices))
         {
-            unsigned int index = *it;
-            element            = new TIntermBinary(EOpIndexDirect, element, CreateIndexNode(index));
+            element = new TIntermBinary(EOpIndexDirect, element, CreateIndexNode(index));
         }
         return element;
     }
@@ -949,7 +948,7 @@ class RewriteRowMajorMatricesTraverser : public TIntermTraverser
                 // nor a matrix, there's no transformation required.  This can happen if we decend
                 // through a struct marked with row-major but arrive at a member that doesn't
                 // include a matrix.
-                if (!ancestorType.isMatrix() && !ancestorType.isStructureContainingMatrices())
+                if (!ancestorType.isMatrixPackingApplicable())
                 {
                     requiresTransformation = false;
                 }

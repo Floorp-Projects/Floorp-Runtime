@@ -113,6 +113,30 @@ Example:
 }
 ```
 
+### `OPEN_SUPPORT_PAGE`
+
+* args:
+```ts
+{
+  args: string, // support page slug, e.g. "firefox-backup"
+  where?: "current" | "save" | "tab" | "tabshifted" | "window", // defaults to "current"
+}
+```
+
+Opens a support.mozilla.org article. `args` is the article's slug, resolved against
+the `app.support.baseURL` pref, so the link always points to the support site for
+the user's version, OS and locale. The page must resolve to a URL under
+`app.support.baseURL`; other URLs throw an error.
+
+Example:
+
+```json
+"action": {
+  "type": "OPEN_SUPPORT_PAGE",
+  "data": { "args": "firefox-backup", "where": "current" }
+}
+```
+
 ### `SHOW_FIREFOX_ACCOUNTS`
 
 * args: (none)
@@ -173,9 +197,26 @@ window or tab closed before sign-in could be completed.
 }
 ```
 
+### `SHOW_QR_CODE`
+
+* args: `string` (a url)
+
+Shows a QR code for the given url in a dialog over the current tab. Resolves once the dialog is closed.
+
+Example:
+
+```json
+"action": {
+  "type": "SHOW_QR_CODE",
+  "data": { "args": "https://www.mozilla.org/firefox/mobile/" }
+}
+```
+
 ### `SHOW_MIGRATION_WIZARD`
 
-* args: (none)
+* args:
+  * `source` (optional): key of the browser to pre-select, e.g. `"chrome"`
+  * `tabModal` (optional): `true` to open the wizard as a dialog over the current tab instead of in about:preferences
 
 Opens import wizard to bring in settings and data from another browser.
 
@@ -216,6 +257,24 @@ Opens the protection panel behind on the lock icon of the awesomebar
 Opens the Smart Window Monitor toolbar panel straight to the create form.
 
 * args: (none)
+
+### `SUBMIT_SMARTWINDOW_PROMPT`
+
+Sends a prompt to the Smart Window sidebar chat, as if the user had typed it
+there. If the sidebar is closed, it is opened on the selected tab's
+conversation first.
+
+* args:
+```ts
+{
+  // Prompt to send, e.g. "Collect ingredients from recipes in my open tabs
+  // and put them in a page".
+  prompt: string;
+  // Recorded as submit_type on chat telemetry and how_initiated on AI Tab
+  // telemetry. Defaults to "fxms".
+  source?: string;
+}
+```
 
 ### `DISABLE_STP_DOORHANGERS`
 
@@ -275,6 +334,7 @@ Action for pinning Firefox to the user's taskbar.
 {
   privatePin?: boolean; // Pin private browsing mode
   fireAndForget?: boolean; // Don't wait for user confirmation before resolving the action
+  promptOnly?: boolean; // Only pin via the OS consent prompt and never fall back to silent pinning. Set automatically for action_only messages
 }
 ```
 
@@ -293,6 +353,7 @@ Action for pinning Firefox to the user's taskbar and setting it as the default b
 {
   privatePin?: boolean; // Pin private browsing mode
   fireAndForget?: boolean; // Don't wait for user confirmation before resolving the action
+  promptOnly?: boolean; // Only pin via the OS consent prompt and never fall back to silent pinning. Set automatically for action_only messages
 }
 ```
 
@@ -543,6 +604,12 @@ Notify Firefox that the Terms of Use policy was interacted with.
 
 - args: (none)
 
+### `ACCEPT_SMARTWINDOW_TOU`
+
+Notify Smart Window that the user accepted its Terms of Use, through the `smartwindow-tou-accepted` observer notification. Smart Window records the consent itself.
+
+- args: (none)
+
 ### `CREATE_NEW_SELECTABLE_PROFILE`
 
 Creates a new user profile and launches it in a separate instance.
@@ -735,3 +802,20 @@ Changes the browser icon to the one identified by `id` using `CustomIconManager`
 ### `GET_REFERRAL_CODE`
 
 Gets the user's referral code (or generates one if it doesn't exist), and opens about:referrals with the code as a param. Throws an error if referrals are not enabled.
+
+### `SELECT_AND_MARK_MENU_ITEM`
+
+Open the app menu and mark an item inside it, to point the user at a feature.
+Marking of a nested item is cancelled if the user opens a different subview.
+
+* args:
+```ts
+{
+  data: {
+    // ids of the items to select and mark. The first is in the app menu's
+    // main view; each later id is marked once the user opens the subview
+    // holding it.
+    itemIds: string[],
+  }
+}
+```

@@ -14,6 +14,9 @@ interface nsIWebTransportReceiveStream;
 interface nsIWebTransportHash;
 
 %{C++
+namespace mozilla {
+class TimeStamp;
+}
 namespace mozilla::dom {
 class ClientInfo;
 class WebTransportStatsData;
@@ -29,6 +32,7 @@ class WebTransportStreamBase;
 [ptr] native WebTransportSessionPtr(mozilla::net::WebTransportSessionBase);
 [ptr] native WebTransportStreamPtr(mozilla::net::WebTransportStreamBase);
 native Datagram(nsTArray<uint8_t>&&);
+native TimeStamp(mozilla::TimeStamp);
 [ref] native const_MaybeClientInfoRef(const mozilla::Maybe<mozilla::dom::ClientInfo>);
 
 [builtinclass, scriptable, uuid(c20d6e77-8cb1-4838-a88d-fff826080aa3)]
@@ -52,6 +56,9 @@ interface nsIWebTransport : nsISupports {
                     in WebTransportSessionEventListener aListener,
                     [optional] in nsIWebTransport_HTTPVersion aVersion);
 
+  // aHeaderNames and aHeaderValues are parallel arrays of extra request
+  // headers; the caller has already applied the Fetch request-header
+  // restrictions.
   [noscript]
   void asyncConnectWithClient(in nsIURI aURI,
                     in boolean aDedicated,
@@ -62,7 +69,11 @@ interface nsIWebTransport : nsISupports {
                     in WebTransportSessionEventListener aListener,
                     in const_MaybeClientInfoRef aClientInfo,
                     in Array<AString> aProtocols,
-                    in nsIWebTransport_HTTPVersion aVersion);
+                    in Array<ACString> aHeaderNames,
+                    in Array<ACString> aHeaderValues,
+                    in nsIWebTransport_HTTPVersion aVersion,
+                    in unsigned short aAnticipatedConcurrentIncomingUnidirectionalStreams,
+                    in unsigned short aAnticipatedConcurrentIncomingBidirectionalStreams);
 
   // Asynchronously get stats. On success (NS_OK), results in exactly one
   // call to onStatsAvailable(), even if stats could not be gathered (in
@@ -72,10 +83,14 @@ interface nsIWebTransport : nsISupports {
   // null aStats.
   void getStats();
 
+  // Largest aOutputLength exportKeyingMaterial() accepts.
+  const unsigned long MAX_KEYING_MATERIAL_LENGTH = 4096;
+
   // Export keying material using TLS exporter (RFC 5705).
   // Returns the exported keying material in the output array.
   void exportKeyingMaterial(in Array<uint8_t> aLabel,
                            in Array<uint8_t> aContext,
+                           in uint32_t aOutputLength,
                            out Array<uint8_t> aKeyingMaterial);
 
   // Close the session.
@@ -89,16 +104,42 @@ interface nsIWebTransport : nsISupports {
   void sendDatagram(in Array<uint8_t> aData, in uint64_t aTrackingId,
                     in uint64_t aSendGroupId, in int64_t aSendOrder);
 
+  // As sendDatagram(), for a datagram written at aTimestamp: outgoingMaxAge
+  // is measured from then, not from when it reaches the queue.
+  [noscript] void sendDatagramAt(in Array<uint8_t> aData,
+                                 in uint64_t aTrackingId,
+                                 in uint64_t aSendGroupId,
+                                 in int64_t aSendOrder,
+                                 in TimeStamp aTimestamp);
+
   void getMaxDatagramSize();
 
   uint64_t getHttpChannelID();
+
+  // Set the outgoing datagram queue's maximum buffered datagram count
+  void setDatagramMaxBufferedDatagrams(in uint32_t aMaxBufferedDatagrams);
+
+  // Set the outgoing datagram queue max age in milliseconds
+  void setDatagramMaxAge(in double aMaxAge);
 
   // Get the negotiated protocol (subprotocol) for the session.
   // Returns empty string if no protocol was negotiated.
   ACString getNegotiatedProtocol();
 
+  // Get the HTTP response headers from the session establishment.
+  // Returns empty arrays if no headers were received.
+  [noscript] void getResponseHeaders(out Array<ACString> aNames,
+                                     out Array<ACString> aValues);
+
   // Register a send group with a caller-provided ID.
   void registerSendGroup(in uint64_t groupId);
+
+  // Set anticipated concurrent incoming stream limits. These raise the peer's
+  // stream limit via MAX_STREAMS frames; they cannot lower it. Callable from
+  // any thread, and before the session is ready, in which case the value is
+  // applied once it comes up.
+  void setAnticipatedConcurrentIncomingUnidirectionalStreams(in unsigned short aValue);
+  void setAnticipatedConcurrentIncomingBidirectionalStreams(in unsigned short aValue);
 
   // This can be only called after onSessionReady().
   // After this point, we can retarget the underlying WebTransportSessionProxy
@@ -130,8 +171,10 @@ interface WebTransportSessionEventListener : nsISupports {
   void onIncomingBidirectionalStreamAvailable(in nsIWebTransportBidirectionalStream aStream);
   void onIncomingUnidirectionalStreamAvailable(in nsIWebTransportReceiveStream aStream);
 
-  void onStopSending(in uint64_t aStreamId, in nsresult aError);
-  void onResetReceived(in uint64_t aStreamId, in nsresult aError);
+  // aErrorCode is the application error code.  A value above 0xffffffff means
+  // the peer sent no code that maps to one.
+  void onStopSending(in uint64_t aStreamId, in uint64_t aErrorCode);
+  void onResetReceived(in uint64_t aStreamId, in uint64_t aErrorCode);
 
   // When a new datagram has been received.
   void onDatagramReceived(in Array<uint8_t> aData);
@@ -142,6 +185,8 @@ interface WebTransportSessionEventListener : nsISupports {
     UNKNOWN               = 0,
     DROPPED_TOO_MUCH_DATA = 1,
     SENT                  = 2,
+    DROPPED_TOO_OLD       = 3,
+    DROPPED_QUEUE_FULL    = 4,
   };
 
   void onOutgoingDatagramOutCome(
@@ -152,7 +197,7 @@ interface WebTransportSessionEventListener : nsISupports {
   void onStatsAvailable(in nsIWebTransportSessionStats aStats);
 };
 
-[uuid(8fb30aa9-5163-4eb3-81f3-371e1ccb5b0e)]
+[uuid(8d265242-8a8c-46d2-a9e2-8859bf9b9a88)]
 interface WebTransportSessionEventListenerInternal : nsISupports {
   // This is used internally to pass the reference of WebTransportSession
   // object to WebTransportSessionProxy.
@@ -164,6 +209,11 @@ interface WebTransportSessionEventListenerInternal : nsISupports {
 
   // This is used internally to pass the datagram to WebTransportSessionProxy.
   void onDatagramReceivedInternal(in Datagram aData);
+
+  // The anticipatedConcurrentIncoming{Uni,Bi}directionalStreams values to
+  // apply once the CONNECT has been sent. 0 means not requested.
+  void getAnticipatedConcurrentIncomingStreams(out uint16_t aUni,
+                                               out uint16_t aBidi);
 };
 
 [uuid(faad75bd-83c6-420b-9fdb-a70bd70be449)]

@@ -23,7 +23,6 @@
 #include "api/rtp_headers.h"
 #include "api/transport/network_types.h"
 #include "api/units/time_delta.h"
-#include "api/video/video_bitrate_allocation.h"
 #include "modules/include/module_fec_types.h"
 #include "modules/rtp_rtcp/include/report_block_data.h"
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
@@ -64,20 +63,14 @@ class MockRtpRtcpInterface : public RtpRtcpInterface {
   MOCK_METHOD(bool, SupportsPadding, (), (const, override));
   MOCK_METHOD(bool, SupportsRtxPayloadPadding, (), (const, override));
   MOCK_METHOD(uint32_t, StartTimestamp, (), (const, override));
-  MOCK_METHOD(void, SetStartTimestamp, (uint32_t timestamp), (override));
   MOCK_METHOD(uint16_t, SequenceNumber, (), (const, override));
   MOCK_METHOD(void, SetSequenceNumber, (uint16_t seq), (override));
-  MOCK_METHOD(void, SetRtpState, (const RtpState& rtp_state), (override));
-  MOCK_METHOD(void, SetRtxState, (const RtpState& rtp_state), (override));
   MOCK_METHOD(void, SetNonSenderRttMeasurement, (bool enabled), (override));
   MOCK_METHOD(RtpState, GetRtpState, (), (const, override));
   MOCK_METHOD(RtpState, GetRtxState, (), (const, override));
   MOCK_METHOD(uint32_t, SSRC, (), (const, override));
-  MOCK_METHOD(void, SetMid, (absl::string_view mid), (override));
-  MOCK_METHOD(void, SetRtxSendStatus, (int modes), (override));
   MOCK_METHOD(int, RtxSendStatus, (), (const, override));
   MOCK_METHOD(std::optional<uint32_t>, RtxSsrc, (), (const, override));
-  MOCK_METHOD(void, SetRtxSendPayloadType, (int, int), (override));
   MOCK_METHOD(std::optional<uint32_t>, FlexfecSsrc, (), (const, override));
   MOCK_METHOD(int32_t, SetSendingStatus, (bool sending), (override));
   MOCK_METHOD(bool, Sending, (), (const, override));
@@ -185,10 +178,6 @@ class MockRtpRtcpInterface : public RtpRtcpInterface {
                uint16_t last_received_seq_num,
                bool decodability_flag,
                bool buffering_allowed),
-              (override));
-  MOCK_METHOD(void,
-              SetVideoBitrateAllocation,
-              (const VideoBitrateAllocation&),
               (override));
   MOCK_METHOD(RTPSender*, RtpSender, (), (override));
   MOCK_METHOD(const RTPSender*, RtpSender, (), (const, override));

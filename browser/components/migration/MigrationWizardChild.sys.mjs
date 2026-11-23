@@ -175,7 +175,10 @@ export class MigrationWizardChild extends JSWindowActorChild {
           key: event.detail.key,
         });
         if (success) {
-          await this.#requestState(true /* allowOnlyFileMigrators */);
+          await this.#requestState(
+            true /* allowOnlyFileMigrators */,
+            event.detail.key
+          );
         }
         break;
       }
@@ -195,12 +198,12 @@ export class MigrationWizardChild extends JSWindowActorChild {
     }
   }
 
-  async #requestState(allowOnlyFileMigrators) {
+  async #requestState(allowOnlyFileMigrators, migratorKey) {
     this.setComponentState({
       page: MigrationWizardConstants.PAGES.LOADING,
     });
 
-    await this.#populateMigrators(allowOnlyFileMigrators);
+    await this.#populateMigrators(allowOnlyFileMigrators, migratorKey);
 
     this.#wizardEl.dispatchEvent(
       new this.contentWindow.CustomEvent("MigrationWizard:Ready", {
@@ -219,6 +222,23 @@ export class MigrationWizardChild extends JSWindowActorChild {
    */
   #sendTelemetryEvent(type, args) {
     this.sendAsyncMessage("RecordEvent", { type, args });
+  }
+
+  /**
+   * Returns where the <migration-wizard> was opened from, as set by its host
+   * page in the entrypoint attribute. The parent validates this against
+   * MigrationUtils.MIGRATION_ENTRYPOINTS.
+   *
+   * @returns {string|null}
+   */
+  #getEntrypoint() {
+    if (this.#wizardEl.hasAttribute("entrypoint")) {
+      return this.#wizardEl.getAttribute("entrypoint");
+    }
+    if (this.#wizardEl.hasAttribute("in-aboutwelcome-bundle")) {
+      return "aboutwelcome";
+    }
+    return null;
   }
 
   /**
@@ -370,6 +390,7 @@ export class MigrationWizardChild extends JSWindowActorChild {
     extraArgs = await this.sendQuery("Migrate", {
       migrationDetails,
       extraArgs,
+      entrypoint: this.#getEntrypoint(),
     });
     this.#sendTelemetryEvent("migrationFinished", extraArgs);
 

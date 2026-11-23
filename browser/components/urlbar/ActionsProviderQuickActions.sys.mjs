@@ -3,15 +3,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { ActionsProvider } from "moz-src:///browser/components/urlbar/ActionsProvider.sys.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
 /**
  * @import {ActionsResult} from "moz-src:///browser/components/urlbar/ActionsProvider.sys.mjs"
  */
 
-const lazy = {};
-ChromeUtils.defineESModuleGetters(lazy, {
+const lazy = XPCOMUtils.declareLazy({
   QuickActionsLoaderDefault:
     "moz-src:///browser/components/urlbar/QuickActionsLoaderDefault.sys.mjs",
+  QuickActionsLoaderMessaging:
+    "moz-src:///browser/components/urlbar/QuickActionsLoaderMessaging.sys.mjs",
   UrlbarPrefs: "moz-src:///browser/components/urlbar/UrlbarPrefs.sys.mjs",
 });
 
@@ -26,8 +28,10 @@ const MIN_SEARCH_PREF = "quickactions.minimumSearchString";
  *   The possible typed entries that this command will be displayed for.
  * @property {string} icon
  *   The URI of the icon associated with this command.
- * @property {string} label
+ * @property {string} [label]
  *   The id of the label for the result element.
+ * @property {string} [labelText]
+ *   Plain text for the label, used when there's no `label` l10n id.
  * @property {() => boolean} [isUnsupported]
  *   Called to check whether this action's underlying feature or capability is
  *   unavailable, e.g. disabled by a pref or policy, or missing on this build.
@@ -52,7 +56,12 @@ class ProviderQuickActions extends ActionsProvider {
     return "ActionsProviderQuickActions";
   }
 
-  isActive(queryContext) {
+  /**
+   * @param {UrlbarQueryContext} queryContext
+   * @param {UrlbarParentController} _controller
+   * @returns {boolean}
+   */
+  isActive(queryContext, _controller) {
     return (
       queryContext.sapName == "urlbar" &&
       lazy.UrlbarPrefs.get(ENABLED_PREF) &&
@@ -63,7 +72,12 @@ class ProviderQuickActions extends ActionsProvider {
     );
   }
 
-  async queryActions(queryContext) {
+  /**
+   * @param {UrlbarQueryContext} queryContext
+   * @param {UrlbarParentController} _controller
+   * @returns {Promise<ActionsResult[]>}
+   */
+  async queryActions(queryContext, _controller) {
     let input = queryContext.trimmedLowerCaseSearchString;
     let results = await this.getActions({ input });
 
@@ -93,6 +107,7 @@ class ProviderQuickActions extends ActionsProvider {
         providerName: this.name,
         key,
         l10nId: action.label,
+        labelText: action.labelText,
         icon: action.icon,
         dataset: {
           action: key,
@@ -135,6 +150,12 @@ class ProviderQuickActions extends ActionsProvider {
     if (options?.focusContent) {
       controller.browserWindow.gBrowser.selectedBrowser.focus();
     }
+  }
+
+  onSearchSessionEnd(_queryContext, _controller, _details) {
+    // Refresh actions from messages, whose targeting may depend on state that
+    // changed, e.g. whether backups are enabled.
+    lazy.QuickActionsLoaderMessaging.reload();
   }
 
   /**

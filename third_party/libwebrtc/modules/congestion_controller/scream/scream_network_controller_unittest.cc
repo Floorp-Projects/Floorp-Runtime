@@ -128,6 +128,63 @@ TEST(ScreamControllerTest,
                 PacerConfig::kDefaultTimeInterval);
 }
 
+class ScreamControllerSafeResetTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(ScreamControllerSafeResetTest,
+       OnNetworkRouteChangeWithRestartBweOnDegradedLink) {
+  bool safe_reset = GetParam();
+  SimulatedClock clock(Timestamp::Seconds(1'234));
+  Environment env = CreateTestEnvironment(
+      {.field_trials =
+           safe_reset ? ""
+                      : "WebRTC-Bwe-ScreamV2/SafeResetOnRouteChange:false/",
+       .time = &clock});
+  NetworkControllerConfig config(env);
+  config.constraints.starting_rate = DataRate::KilobitsPerSec(300);
+  config.stream_based_config.max_total_allocated_bitrate =
+      DataRate::KilobitsPerSec(1000);
+  ScreamNetworkController scream_controller(config);
+  scream_controller.OnNetworkAvailability(
+      {.at_time = clock.CurrentTime(), .network_available = true});
+
+  // Low capacity link to cause target rate to decrease below starting rate.
+  CcFeedbackGenerator feedback_generator({
+      .network_config = {.link_capacity = DataRate::KilobitsPerSec(100)},
+  });
+
+  DataRate send_rate = DataRate::KilobitsPerSec(300);
+  for (int i = 0; i < 20; ++i) {
+    TransportPacketsFeedback feedback =
+        feedback_generator.ProcessUntilNextFeedback(send_rate, clock);
+    NetworkControlUpdate update =
+        scream_controller.OnTransportPacketsFeedback(feedback);
+    if (update.target_rate.has_value()) {
+      send_rate = update.target_rate->target_rate;
+    }
+  }
+  ASSERT_LT(send_rate, DataRate::KilobitsPerSec(300));
+
+  // Route change with restart_bwe = true and default starting rate of 300 kbps.
+  NetworkRouteChange route_change;
+  route_change.restart_bwe = true;
+  route_change.constraints.starting_rate = DataRate::KilobitsPerSec(300);
+  route_change.at_time = clock.CurrentTime();
+
+  NetworkControlUpdate update =
+      scream_controller.OnNetworkRouteChange(route_change);
+  ASSERT_TRUE(update.has_updates());
+  ASSERT_TRUE(update.target_rate.has_value());
+  if (safe_reset) {
+    // Target rate must not jump back up to 300 kbps on route change.
+    EXPECT_LE(update.target_rate->target_rate, send_rate);
+  } else {
+    // When safe reset is disabled, target rate resets back up to 300 kbps.
+    EXPECT_EQ(update.target_rate->target_rate, DataRate::KilobitsPerSec(300));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(All, ScreamControllerSafeResetTest, ::testing::Bool());
+
 TEST(ScreamControllerTest, TargetRateRampsUptoTargetConstraints) {
   SimulatedClock clock(Timestamp::Seconds(1'234));
   Environment env = CreateTestEnvironment({.time = &clock});
@@ -1086,6 +1143,61 @@ TEST(ScreamControllerTest, PacingRateUpdatesOnStreamsConfigChange) {
   EXPECT_EQ(stream_update.pacer_config->data_window,
             DataRate::KilobitsPerSec(300) * kPacingFactor *
                 PacerConfig::kDefaultTimeInterval);
+}
+
+void TestClampsRefWindowOnFirstCongestionWhenStartingRateIsHigh(
+    bool send_as_ect1) {
+  SimulatedClock clock(Timestamp::Seconds(1'234));
+  Environment env = CreateTestEnvironment({.time = &clock});
+  NetworkControllerConfig config(env);
+  config.constraints.starting_rate = DataRate::KilobitsPerSec(300);
+  config.constraints.min_data_rate = DataRate::KilobitsPerSec(20);
+  config.constraints.max_data_rate = DataRate::KilobitsPerSec(1000);
+  config.stream_based_config.max_total_allocated_bitrate =
+      DataRate::KilobitsPerSec(1000);
+  ScreamNetworkController scream_controller(config);
+  scream_controller.OnNetworkAvailability(
+      {.at_time = clock.CurrentTime(), .network_available = true});
+
+  // RTT is 200ms (100ms one-way delay), link capacity is 30 kbps.
+  CcFeedbackGenerator feedback_generator({
+      .network_config = {.queue_delay_ms = 100,
+                         .link_capacity = DataRate::KilobitsPerSec(30)},
+      .send_as_ect1 = send_as_ect1,
+      .packet_size = DataSize::Bytes(150),
+  });
+
+  TimeDelta rtt = TimeDelta::Millis(200);
+  Timestamp start_time = clock.CurrentTime();
+  DataRate target_rate = config.constraints.starting_rate.value();
+  while (target_rate > DataRate::KilobitsPerSec(60) &&
+         clock.CurrentTime() - start_time < 10 * rtt) {
+    TransportPacketsFeedback feedback =
+        feedback_generator.ProcessUntilNextFeedback(
+            target_rate, clock, [&](const SentPacket& packet) {
+              scream_controller.OnSentPacket(packet);
+            });
+    NetworkControlUpdate update =
+        scream_controller.OnTransportPacketsFeedback(feedback);
+    if (update.target_rate.has_value()) {
+      target_rate = update.target_rate->target_rate;
+    }
+  }
+  EXPECT_LE(target_rate, DataRate::KilobitsPerSec(60));
+  EXPECT_GE(target_rate, DataRate::KilobitsPerSec(20));
+  EXPECT_LE(clock.CurrentTime() - start_time, 2 * rtt);
+}
+
+TEST(ScreamControllerTest,
+     ClampsRefWindowOnFirstDelayCongestionWhenStartingRateIsHigh) {
+  TestClampsRefWindowOnFirstCongestionWhenStartingRateIsHigh(
+      /*send_as_ect1=*/false);
+}
+
+TEST(ScreamControllerTest,
+     ClampsRefWindowOnFirstCeCongestionWhenStartingRateIsHigh) {
+  TestClampsRefWindowOnFirstCongestionWhenStartingRateIsHigh(
+      /*send_as_ect1=*/true);
 }
 
 }  // namespace

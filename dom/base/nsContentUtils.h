@@ -49,6 +49,7 @@
 #include "nsINode.h"
 #include "nsIScriptError.h"
 #include "nsIThread.h"
+#include "nsIWeakReferenceUtils.h"
 #include "nsLiteralString.h"
 #include "nsMargin.h"
 #include "nsPIDOMWindow.h"
@@ -133,6 +134,7 @@ class PropertyDescriptor;
 }  // namespace JS
 
 namespace mozilla {
+class CycleCollectedJSContext;
 class Dispatcher;
 class EditorBase;
 class ErrorResult;
@@ -1418,11 +1420,14 @@ class nsContentUtils {
    *   @param aOperation The deprecated operation being reported.
    *   @param aLocation Source location of the operation. Pass the empty
    *          location to omit line and column information.
+   *   @param aParams Parameters for the warning message, as passed to
+   *          Document::WarnOnceAbout.
    */
-  static void ReportDeprecation(nsIGlobalObject* aGlobal, const Document* aDoc,
-                                nsIURI* aURI,
-                                mozilla::dom::DeprecatedOperations aOperation,
-                                const mozilla::JSCallingLocation& aLocation);
+  static void ReportDeprecation(
+      nsIGlobalObject* aGlobal, const Document* aDoc, nsIURI* aURI,
+      mozilla::dom::DeprecatedOperations aOperation,
+      const mozilla::JSCallingLocation& aLocation,
+      const nsTArray<nsString>& aParams = nsTArray<nsString>());
 
   static void ReportEmptyGetElementByIdArg(const Document* aDoc);
 
@@ -1920,19 +1925,6 @@ class nsContentUtils {
                                         mozilla::EventClassID aEventClassID,
                                         EventMessage* aEventMessage);
 
-  /**
-   * Adds aManager to the list of the managers nodes own, which is used for
-   * unmarking gray JS listeners during cycle collection.
-   */
-  static void AddNodeListenerManager(mozilla::EventListenerManager* aManager);
-
-  /**
-   * Removes aManager from that list, if it's in it.  Only for
-   * ~EventListenerManager.
-   */
-  static void RemoveNodeListenerManager(
-      mozilla::EventListenerManager* aManager);
-
   static void AddEntryToDOMArenaTable(nsINode* aNode,
                                       mozilla::dom::DOMArena* aDOMArena);
 
@@ -1941,8 +1933,6 @@ class nsContentUtils {
 
   static already_AddRefed<mozilla::dom::DOMArena> TakeEntryFromDOMArenaTable(
       const nsINode* aNode);
-
-  static void UnmarkGrayJSListenersInCCGenerationDocuments();
 
   static bool IsInitialized() { return sInitialized; }
 
@@ -2007,6 +1997,8 @@ class nsContentUtils {
   // setHTML().
   static const int32_t kParseFragmentNoSanitization = -2;
 
+  enum class SanitizerMode { Safe, Unsafe };
+
   /**
    * Invoke the fragment parsing algorithm (innerHTML) using the HTML parser.
    *
@@ -2034,7 +2026,7 @@ class nsContentUtils {
    * @param aSanitizer the Sanitizer API configuration to apply while parsing
    * (the spec's "parser sanitizer configuration"), or nullptr not to sanitize
    * while parsing.
-   * @param aSanitizerSafe safely sanitize, i.e.
+   * @param aSanitizerMode whether to safely sanitize, i.e.
    * "remove javascript navigation URLs".
    * @return NS_ERROR_DOM_INVALID_STATE_ERR if a re-entrant attempt to parse
    *         fragments is made, NS_ERROR_OUT_OF_MEMORY if aSourceBuffer is too
@@ -2047,7 +2039,7 @@ class nsContentUtils {
       mozilla::Maybe<RefPtr<mozilla::dom::CustomElementRegistry>>
           aCustomElementRegistry,
       mozilla::dom::Sanitizer* aSanitizer = nullptr,
-      bool aSanitizerSafe = false);
+      SanitizerMode aSanitizerMode = SanitizerMode::Unsafe);
 
   /**
    * Invoke the fragment parsing algorithm (innerHTML) using the XML parser.
@@ -2088,7 +2080,7 @@ class nsContentUtils {
    * @param aSanitizer the Sanitizer API configuration to apply while parsing
    * (the spec's "parser sanitizer configuration"), or nullptr not to sanitize
    * while parsing.
-   * @param aSanitizerSafe safely sanitize, i.e.
+   * @param aSanitizerMode whether to safely sanitize, i.e.
    * "remove javascript navigation URLs".
    * @return NS_ERROR_DOM_INVALID_STATE_ERR if a re-entrant attempt to parse
    *         fragments is made, NS_ERROR_OUT_OF_MEMORY if aSourceBuffer is too
@@ -2098,7 +2090,7 @@ class nsContentUtils {
       const nsAString& aSourceBuffer, Document* aTargetDocument,
       bool aScriptingEnabledForNoscriptParsing,
       mozilla::dom::Sanitizer* aSanitizer = nullptr,
-      bool aSanitizerSafe = false);
+      SanitizerMode aSanitizerMode = SanitizerMode::Unsafe);
 
   /**
    * Converts HTML source to plain text by parsing the source and using the
@@ -2298,10 +2290,8 @@ class nsContentUtils {
    *
    * @param aContent the node on which a link was triggered.
    * @param aLinkURI the URI of the link, must be non-null.
-   * @param aTargetSpec the target (like target=, may be empty).
    */
-  static void TriggerLinkMouseOver(nsIContent* aContent, nsIURI* aLinkURI,
-                                   const nsString& aTargetSpec);
+  static void TriggerLinkMouseOver(nsIContent* aContent, nsIURI* aLinkURI);
 
   /**
    * Get the link location.
@@ -4011,6 +4001,7 @@ nsContentUtils::InternalContentPolicyTypeToExternal(nsContentPolicyType aType) {
       return ExtContentPolicy::TYPE_FETCH;
 
     case nsIContentPolicy::TYPE_INTERNAL_EXTERNAL_RESOURCE:
+    case nsIContentPolicy::TYPE_INTERNAL_SPECULATION_RULES:
       return ExtContentPolicy::TYPE_OTHER;
 
     case nsIContentPolicy::TYPE_INTERNAL_JSON_PRELOAD:
@@ -4076,6 +4067,20 @@ class MOZ_STACK_CLASS nsAutoScriptBlockerSuppressNodeRemoved
   }
 };
 
+// Like nsAutoMicroTask, but doesn't perform a checkpoint for a document
+// without an inner window (e.g. an SVG image): such documents can't run
+// script, so a checkpoint from them would only run other documents'
+// microtasks.
+class MOZ_STACK_CLASS nsAutoMicroTaskForDocument {
+ public:
+  explicit nsAutoMicroTaskForDocument(const mozilla::dom::Document* aDocument);
+  MOZ_CAN_RUN_SCRIPT ~nsAutoMicroTaskForDocument();
+
+ private:
+  // Null when the checkpoint is skipped.
+  mozilla::CycleCollectedJSContext* const mContext;
+};
+
 namespace mozilla::dom {
 
 class TreeOrderComparator {
@@ -4093,14 +4098,23 @@ class TreeOrderComparator {
 #define NS_INTERFACE_MAP_ENTRY_TEAROFF(_interface, _allocator) \
   NS_INTERFACE_MAP_ENTRY_TEAROFF_AMBIGUOUS(_interface, _interface, _allocator)
 
-#define NS_INTERFACE_MAP_ENTRY_TEAROFF_AMBIGUOUS(_interface, _implClass, \
-                                                 _allocator)             \
-  if (aIID.Equals(NS_GET_IID(_interface))) {                             \
-    foundInterface = static_cast<_implClass*>(_allocator);               \
-    if (!foundInterface) {                                               \
-      *aInstancePtr = nullptr;                                           \
-      return NS_ERROR_OUT_OF_MEMORY;                                     \
-    }                                                                    \
+#define NS_INTERFACE_MAP_ENTRY_TEAROFF_AMBIGUOUS(_interface, _implClass,      \
+                                                 _allocator)                  \
+  if (aIID.Equals(NS_GET_IID(_interface))) {                                  \
+    static_assert(                                                          \
+        /* Check the interface correctly defines HasWeakReferenceTearoff */ \
+        /* This is needed for do_GetWeakReference static checks          */ \
+        /* (see do_GetWeakReference and GetCheckedWeakReference)         */ \
+        !std::is_same_v<_interface, nsISupportsWeakReference> ||            \
+            mozilla::detail::ProvidesWeakReferenceTearoff<                  \
+                std::remove_pointer_t<decltype(this)>>,                     \
+        "declare `static constexpr bool kHasWeakReferenceTearoff = true;` " \
+        "in the class that tears off nsISupportsWeakReference"); \
+    foundInterface = static_cast<_implClass*>(_allocator);                    \
+    if (!foundInterface) {                                                    \
+      *aInstancePtr = nullptr;                                                \
+      return NS_ERROR_OUT_OF_MEMORY;                                          \
+    }                                                                         \
   } else
 
 /*

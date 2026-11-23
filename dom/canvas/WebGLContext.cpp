@@ -8,6 +8,7 @@
 #include <array>
 #include <bitset>
 #include <cctype>
+#include <memory>
 
 #include "AccessCheck.h"
 #include "CompositableHost.h"
@@ -67,7 +68,6 @@
 #include "WebGLBuffer.h"
 #include "WebGLChild.h"
 #include "WebGLContextLossHandler.h"
-#include "WebGLContextUtils.h"
 #include "WebGLExtensions.h"
 #include "WebGLFormats.h"
 #include "WebGLFramebuffer.h"
@@ -434,7 +434,7 @@ bool WebGLContext::CreateAndInitGL(
 
   const auto val = StaticPrefs::webgl_debug_incomplete_tex_color();
   if (val) {
-    mIncompleteTexOverride.reset(new gl::Texture(*gl));
+    mIncompleteTexOverride = std::make_unique<gl::Texture>(*gl);
     const gl::ScopedBindTexture autoBind(gl, mIncompleteTexOverride->name);
     const auto heapVal = std::make_unique<uint32_t>(val);
     gl->fTexImage2D(LOCAL_GL_TEXTURE_2D, 0, LOCAL_GL_RGBA, 1, 1, 0,
@@ -1210,7 +1210,7 @@ void InitSwapChain(gl::GLContext& gl, gl::SwapChain& swapChain,
   }
   if (!swapChain.mFactory) {
     NS_WARNING("Failed to make an ideal SurfaceFactory.");
-    swapChain.mFactory = MakeUnique<gl::SurfaceFactory_Basic>(gl);
+    swapChain.mFactory = std::make_unique<gl::SurfaceFactory_Basic>(gl);
   }
   MOZ_ASSERT(swapChain.mFactory);
   if (useAsync) {

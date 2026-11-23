@@ -3,11 +3,6 @@
 
 "use strict";
 
-const lazy = {};
-ChromeUtils.defineESModuleGetters(lazy, {
-  AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
-});
-
 const NEW_PROFILE_NAME = "This is a new profile name";
 
 const setup = async () => {
@@ -233,111 +228,6 @@ add_task(async function test_edit_profile_avatar() {
   );
 });
 
-add_task(async function test_edit_profile_theme() {
-  if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
-    // `mochitest-browser` suite `add_task` does not yet support
-    // `properties.skip_if`.
-    ok(true, "Skipping because !AppConstants.MOZ_SELECTABLE_PROFILES");
-    return;
-  }
-  let profile = await setup();
-
-  let defaultTheme = await lazy.AddonManager.getAddonByID(
-    "default-theme@mozilla.org"
-  );
-  await defaultTheme.enable();
-
-  // Set the profile to the built-in light theme to avoid theme randomization
-  // by the new profile card and make the built-in dark theme card available
-  // to be clicked.
-  let lightTheme = await lazy.AddonManager.getAddonByID(
-    "firefox-compact-light@mozilla.org"
-  );
-
-  let profileUpdated = TestUtils.topicObserved("sps-profiles-updated");
-  await lightTheme.enable();
-  await profileUpdated;
-
-  let expectedThemeId = "default-theme@mozilla.org";
-
-  is(
-    null,
-    Glean.profilesExisting.theme.testGetValue(),
-    "We have not recorded any Glean data yet"
-  );
-
-  await BrowserTestUtils.withNewTab(
-    {
-      gBrowser,
-      url: "about:editprofile",
-    },
-    async browser => {
-      await SpecialPowers.spawn(browser, [], async () => {
-        let editProfileCard =
-          content.document.querySelector("edit-profile-card").wrappedJSObject;
-
-        await ContentTaskUtils.waitForCondition(
-          () => editProfileCard.initialized,
-          "Waiting for edit-profile-card to be initialized"
-        );
-
-        await editProfileCard.updateComplete;
-
-        let themesPicker = editProfileCard.themesPicker;
-
-        Assert.ok(themesPicker, "Themes picker should exist");
-        Assert.equal(
-          themesPicker.headingLevel,
-          2,
-          "Themes picker should have headingLevel of 2"
-        );
-
-        let defaultThemeCard = editProfileCard.themesPicker.querySelector(
-          "moz-visual-picker-item[value='default-theme@mozilla.org']"
-        );
-
-        Assert.ok(
-          !defaultThemeCard.checked,
-          "Default theme chip should not be selected"
-        );
-        EventUtils.synthesizeMouseAtCenter(defaultThemeCard, {}, content);
-
-        await ContentTaskUtils.waitForCondition(
-          () => defaultThemeCard.checked,
-          "Waiting for the new theme chip to be selected"
-        );
-
-        // Sometimes the theme takes a little longer to update.
-        await new Promise(resolve => content.setTimeout(resolve, 100));
-      });
-
-      let curProfile = await SelectableProfileService.getProfile(profile.id);
-
-      Assert.equal(
-        curProfile.theme.themeId,
-        expectedThemeId,
-        "Profile theme was updated in database"
-      );
-
-      Assert.equal(
-        SelectableProfileService.currentProfile.theme.themeId,
-        expectedThemeId,
-        "Current profile theme was updated"
-      );
-
-      await assertGlean("profiles", "existing", "theme", expectedThemeId);
-    }
-  );
-
-  // Restore the light theme for later tests.
-  lightTheme = await lazy.AddonManager.getAddonByID(
-    "firefox-compact-light@mozilla.org"
-  );
-  profileUpdated = TestUtils.topicObserved("sps-profiles-updated");
-  await lightTheme.enable();
-  await profileUpdated;
-});
-
 add_task(async function test_edit_profile_explore_more_themes() {
   if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
     // `mochitest-browser` suite `add_task` does not yet support
@@ -557,205 +447,6 @@ add_task(async function test_avatar_picker_arrow_key_support() {
   );
 });
 
-add_task(async function test_theme_picker_arrow_key_support() {
-  if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
-    // `mochitest-browser` suite `add_task` does not yet support
-    // `properties.skip_if`.
-    ok(true, "Skipping because !AppConstants.MOZ_SELECTABLE_PROFILES");
-    return;
-  }
-
-  await initGroupDatabase();
-  let profile = SelectableProfileService.currentProfile;
-  Assert.ok(profile, "Should have a profile now");
-
-  await BrowserTestUtils.withNewTab(
-    {
-      gBrowser,
-      url: "about:editprofile",
-    },
-    async browser => {
-      await SpecialPowers.spawn(browser, [], async () => {
-        const EventUtils = ContentTaskUtils.getEventUtils(content);
-
-        let editProfileCard =
-          content.document.querySelector("edit-profile-card").wrappedJSObject;
-
-        await ContentTaskUtils.waitForCondition(
-          () => editProfileCard.initialized,
-          "Waiting for edit-profile-card to be initialized"
-        );
-        await editProfileCard.updateComplete;
-        let themeCards = editProfileCard.themeCards;
-
-        // Select and focus the light theme to get started.
-        EventUtils.synthesizeMouseAtCenter(themeCards[0], {}, content);
-        themeCards[0].focus();
-
-        await ContentTaskUtils.waitForCondition(
-          () => themeCards[0].checked,
-          "Wait for theme card to be checked"
-        );
-        let selectedTheme = editProfileCard.shadowRoot.querySelector(
-          "#themes > moz-visual-picker-item[checked]"
-        );
-        Assert.equal(
-          themeCards[0].value,
-          selectedTheme.value,
-          "Gray theme was selected"
-        );
-        Assert.equal(
-          editProfileCard.shadowRoot.activeElement,
-          selectedTheme,
-          "The selected theme has focus"
-        );
-
-        // Simulate a down arrow key and the focus should move, making the
-        // next element focused, but not selected.
-        let nextTheme = selectedTheme.nextElementSibling;
-        EventUtils.synthesizeKey("KEY_ArrowDown", {}, content);
-        Assert.equal(
-          editProfileCard.shadowRoot.activeElement,
-          nextTheme,
-          "The next theme has focus"
-        );
-        Assert.ok(!nextTheme.checked, "The next theme is not selected");
-
-        // Now, use the up arrow key to move focus back.
-        EventUtils.synthesizeKey("KEY_ArrowUp", {}, content);
-        Assert.equal(
-          editProfileCard.shadowRoot.activeElement,
-          selectedTheme,
-          "The selected theme has focus"
-        );
-
-        // Same thing, this time using the right and left arrows:
-
-        EventUtils.synthesizeKey("KEY_ArrowRight", {}, content);
-        Assert.equal(
-          editProfileCard.shadowRoot.activeElement,
-          nextTheme,
-          "The next theme has focus"
-        );
-        Assert.ok(!nextTheme.checked, "The next theme is not selected");
-
-        EventUtils.synthesizeKey("KEY_ArrowLeft", {}, content);
-        Assert.equal(
-          editProfileCard.shadowRoot.activeElement,
-          selectedTheme,
-          "The selected theme has focus"
-        );
-      });
-    }
-  );
-});
-
-add_task(async function test_edit_profile_system_theme() {
-  if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
-    // `mochitest-browser` suite `add_task` does not yet support
-    // `properties.skip_if`.
-    ok(true, "Skipping because !AppConstants.MOZ_SELECTABLE_PROFILES");
-    return;
-  }
-  let profile = await setup();
-
-  let defaultTheme = await lazy.AddonManager.getAddonByID(
-    "default-theme@mozilla.org"
-  );
-  await defaultTheme.enable();
-
-  // Set to light theme so we can select the system theme in the page
-  let lightTheme = await lazy.AddonManager.getAddonByID(
-    "firefox-compact-light@mozilla.org"
-  );
-  let profileUpdated = TestUtils.topicObserved("sps-profiles-updated");
-  await lightTheme.enable();
-  await profileUpdated;
-
-  let expectedThemeId = "default-theme@mozilla.org";
-
-  let themePromise = new Promise(r =>
-    window.addEventListener("windowlwthemeupdate", r, {
-      once: true,
-    })
-  );
-
-  await BrowserTestUtils.withNewTab(
-    {
-      gBrowser,
-      url: "about:editprofile",
-    },
-    async browser => {
-      await SpecialPowers.spawn(browser, [], async () => {
-        let editProfileCard =
-          content.document.querySelector("edit-profile-card").wrappedJSObject;
-
-        await ContentTaskUtils.waitForCondition(
-          () => editProfileCard.initialized,
-          "Waiting for edit-profile-card to be initialized"
-        );
-
-        await editProfileCard.updateComplete;
-
-        let defaultThemeCard = editProfileCard.themesPicker.querySelector(
-          "moz-visual-picker-item[value='default-theme@mozilla.org']"
-        );
-
-        Assert.ok(
-          !defaultThemeCard.checked,
-          "Default theme chip should not be selected"
-        );
-        EventUtils.synthesizeMouseAtCenter(defaultThemeCard, {}, content);
-
-        await ContentTaskUtils.waitForCondition(
-          () => defaultThemeCard.checked,
-          "Waiting for the new theme chip to be selected"
-        );
-
-        // Sometimes the theme takes a little longer to update.
-        await new Promise(resolve => content.setTimeout(resolve, 100));
-      });
-
-      await themePromise;
-
-      let curProfile = await SelectableProfileService.getProfile(profile.id);
-
-      let themeColors = SelectableProfileService.getColorsForDefaultTheme();
-
-      Assert.equal(
-        curProfile.theme.themeId,
-        expectedThemeId,
-        "Profile theme was updated in database"
-      );
-
-      Assert.equal(
-        SelectableProfileService.currentProfile.theme.themeId,
-        expectedThemeId,
-        "Current profile theme was updated"
-      );
-
-      Assert.equal(
-        SelectableProfileService.currentProfile.theme.themeBg,
-        themeColors.themeBg,
-        "Theme background color is expected: " + themeColors.themeBg
-      );
-      Assert.equal(
-        SelectableProfileService.currentProfile.theme.themeFg,
-        themeColors.themeFg,
-        "Theme  color is expected: " + themeColors.themeFg
-      );
-    }
-  );
-
-  // Restore the light theme for later tests.
-  lightTheme = await lazy.AddonManager.getAddonByID(
-    "firefox-compact-light@mozilla.org"
-  );
-  profileUpdated = TestUtils.topicObserved("sps-profiles-updated");
-  await lightTheme.enable();
-  await profileUpdated;
-});
-
 add_task(async function test_edit_link_keyboard_accessibility() {
   if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
     ok(true, "Skipping because !AppConstants.MOZ_SELECTABLE_PROFILES");
@@ -805,17 +496,161 @@ add_task(async function test_edit_link_keyboard_accessibility() {
           "Avatar selector should be visible after Enter key"
         );
 
-        editButton.focus();
-        EventUtils.synthesizeKey("KEY_Enter", {}, content); // Hide the avatar selector first
+        EventUtils.synthesizeKey("KEY_Escape", {}, content);
         Assert.ok(
           ContentTaskUtils.isHidden(avatarSelector.dialog),
           "Avatar selector should be hidden again"
+        );
+        Assert.equal(
+          editProfileCard.shadowRoot.activeElement,
+          editButton,
+          "Focus should return to the edit button"
         );
 
         EventUtils.synthesizeKey(" ", {}, content);
         Assert.ok(
           ContentTaskUtils.isVisible(avatarSelector.dialog),
           "Avatar selector should be visible after Space key"
+        );
+      });
+    }
+  );
+});
+
+add_task(async function test_avatar_selector_closes_on_click_outside() {
+  if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
+    ok(true, "Skipping because !AppConstants.MOZ_SELECTABLE_PROFILES");
+    return;
+  }
+
+  await setup();
+
+  await BrowserTestUtils.withNewTab(
+    {
+      gBrowser,
+      url: "about:editprofile",
+    },
+    async browser => {
+      await SpecialPowers.spawn(browser, [], async () => {
+        const EventUtils = ContentTaskUtils.getEventUtils(content);
+
+        let editProfileCard =
+          content.document.querySelector("edit-profile-card").wrappedJSObject;
+
+        await ContentTaskUtils.waitForCondition(
+          () => editProfileCard.initialized,
+          "Waiting for edit-profile-card to be initialized"
+        );
+        await editProfileCard.updateComplete;
+
+        let avatarSelector = editProfileCard.avatarSelector;
+
+        EventUtils.synthesizeMouseAtCenter(
+          editProfileCard.avatarSelectorButton,
+          {},
+          content
+        );
+        Assert.ok(
+          ContentTaskUtils.isVisible(avatarSelector.dialog),
+          "Avatar selector should be visible"
+        );
+
+        EventUtils.synthesizeMouse(
+          content.document.documentElement,
+          2,
+          2,
+          {},
+          content
+        );
+        Assert.ok(
+          ContentTaskUtils.isHidden(avatarSelector.dialog),
+          "Avatar selector should be hidden after clicking outside of it"
+        );
+      });
+    }
+  );
+});
+
+add_task(async function test_avatar_selector_contains_focus() {
+  if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
+    ok(true, "Skipping because !AppConstants.MOZ_SELECTABLE_PROFILES");
+    return;
+  }
+
+  await setup();
+
+  await BrowserTestUtils.withNewTab(
+    {
+      gBrowser,
+      url: "about:editprofile",
+    },
+    async browser => {
+      await SpecialPowers.spawn(browser, [], async () => {
+        const EventUtils = ContentTaskUtils.getEventUtils(content);
+
+        let editProfileCard =
+          content.document.querySelector("edit-profile-card").wrappedJSObject;
+
+        await ContentTaskUtils.waitForCondition(
+          () => editProfileCard.initialized,
+          "Waiting for edit-profile-card to be initialized"
+        );
+        await editProfileCard.updateComplete;
+
+        let avatarSelector = editProfileCard.avatarSelector;
+
+        const getDeepActiveElement = () => {
+          let element = content.document.activeElement;
+          while (element?.shadowRoot?.activeElement) {
+            element = element.shadowRoot.activeElement;
+          }
+          return element;
+        };
+
+        const isInDialog = element => {
+          while (element) {
+            if (avatarSelector.dialog.contains(element)) {
+              return true;
+            }
+            element = element.getRootNode().host;
+          }
+          return false;
+        };
+
+        EventUtils.synthesizeMouseAtCenter(
+          editProfileCard.avatarSelectorButton,
+          {},
+          content
+        );
+        Assert.ok(
+          ContentTaskUtils.isVisible(avatarSelector.dialog),
+          "Avatar selector should be visible"
+        );
+        let initialFocus = getDeepActiveElement();
+        Assert.ok(
+          isInDialog(initialFocus),
+          "Focus should move into the avatar selector when it opens"
+        );
+
+        // Tab until focus leaves the page or wraps back to where it started.
+        // Focus must never land on the page behind the dialog.
+        let focused;
+        do {
+          EventUtils.synthesizeKey("KEY_Tab", {}, content);
+          focused = content.document.hasFocus() ? getDeepActiveElement() : null;
+          if (focused) {
+            Assert.ok(
+              isInDialog(focused),
+              "Focus should stay inside the avatar selector"
+            );
+          }
+        } while (focused && focused !== initialFocus);
+
+        editProfileCard.nameInput.focus();
+        Assert.notEqual(
+          editProfileCard.shadowRoot.activeElement,
+          editProfileCard.nameInput,
+          "Content behind the avatar selector should not be focusable"
         );
       });
     }

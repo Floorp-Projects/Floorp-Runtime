@@ -292,7 +292,7 @@ extern bool NS_ProcessNextEvent(nsIThread* aThread = nullptr,
  */
 extern bool NS_IsInCompositorThread();
 
-extern bool NS_IsInCanvasThreadOrWorker();
+extern bool NS_IsInCanvasThread();
 
 extern bool NS_IsInVRThread();
 
@@ -1096,7 +1096,7 @@ class RunnableMethodImpl final
 
  private:
   virtual ~RunnableMethodImpl() { Revoke(); };
-  static void TimedOut(nsITimer* aTimer, void* aClosure) {
+  static void TimedOut(nsITimer* /*aTimer*/, void* aClosure) {
     static_assert(IsIdle(Kind), "Don't use me!");
     RefPtr<CancelableIdleRunnable> r =
         static_cast<CancelableIdleRunnable*>(aClosure);

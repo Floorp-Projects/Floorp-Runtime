@@ -22,6 +22,7 @@ import { InstallButton } from "./InstallButton";
 import { SubmenuButton } from "./SubmenuButton";
 
 const DEFAULT_AUTO_ADVANCE_MS = 20000;
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const CORNER_IMAGE_POSITIONS = new Set([
   "bottom-left",
   "bottom-right",
@@ -75,6 +76,47 @@ function resolveDirectionalImage(image) {
   return isRTL && image?.rtl ? { ...image, ...image.rtl } : image;
 }
 
+/**
+ * Dismisses the message once the screen has been shown for `autoDismiss.after`
+ * milliseconds. The countdown only runs while the page is visible and restarts
+ * when it becomes visible again, so the screen can't time out while invisible
+ * in the background.
+ */
+function useAutoDismiss(autoDismiss, messageId) {
+  const after = autoDismiss?.after;
+  useEffect(() => {
+    if (!Number.isFinite(after) || after < 0 || after > MAX_TIMEOUT_MS) {
+      return undefined;
+    }
+
+    let timer = null;
+    let dismissed = false;
+    const dismiss = () => {
+      dismissed = true;
+      MultiStageUtils.sendActionTelemetry(
+        messageId,
+        "auto_dismiss",
+        "AUTO_DISMISS"
+      );
+      window.AWFinish();
+    };
+    const restartCountdown = () => {
+      clearTimeout(timer);
+      timer =
+        !dismissed && document.visibilityState === "visible"
+          ? setTimeout(dismiss, after)
+          : null;
+    };
+
+    restartCountdown();
+    document.addEventListener("visibilitychange", restartCountdown);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", restartCountdown);
+    };
+  }, [after, messageId]);
+}
+
 export const MultiStageProtonScreen = props => {
   const {
     autoAdvance,
@@ -84,6 +126,7 @@ export const MultiStageProtonScreen = props => {
     navigate,
     order,
   } = props;
+  useAutoDismiss(props.autoDismiss, messageId);
   useEffect(() => {
     if (!autoAdvance && !advanceOnExperimentLoad) {
       return () => {};
@@ -650,6 +693,20 @@ export class ProtonScreen extends React.PureComponent {
     );
   }
 
+  // Draws the front card plus one back card for each screen still to come, up
+  // to two.
+  renderCardStackLayers() {
+    const { order = 0, totalNumberOfScreens = 1 } = this.props;
+    const cardsBehind = totalNumberOfScreens - order - 1;
+    return (
+      <>
+        <div className="card-stack-front" />
+        {cardsBehind >= 1 ? <div className="card-stack-layer-1" /> : null}
+        {cardsBehind >= 2 ? <div className="card-stack-layer-2" /> : null}
+      </>
+    );
+  }
+
   renderCornerImage(anchor) {
     const cornerImage = this.props.content.corner_image;
     const position = resolveCornerImagePosition(cornerImage.position);
@@ -781,7 +838,7 @@ export class ProtonScreen extends React.PureComponent {
   }
 
   getEffectiveBackground(content) {
-    if (content.position !== "split") {
+    if (!["split", "card-stack"].includes(content.position)) {
       const gradient =
         content.zap_border_gradient ||
         "linear-gradient(96deg, #B89CFF 20.68%, #FF9565 79.34%)";
@@ -833,28 +890,45 @@ export class ProtonScreen extends React.PureComponent {
   renderSecondarySection(content) {
     const background = this.getEffectiveBackground(content);
     const heroImageUrl = this.getEffectiveHeroImageUrl(content);
-    // pinnable_sites exposes its background through a custom property so the
-    // stylesheet can swap the wide-layout image for a narrow gradient without
-    // overriding an inline `background` shorthand.
+    const cardStackImageClass = content.card_stack_image
+      ? `card-stack-image-${content.card_stack_image.type ?? "float"}`
+      : "";
     const tiles = Array.isArray(content.tiles)
       ? content.tiles
       : [content.tiles];
     const isPinnableSites = tiles.some(tile => tile?.type === "pinnable_sites");
+    let style = {};
+    // compute the style prop depending on the message type
+    if (content.position === "card-stack" && content.card_stack_image) {
+      // set variables to use in the CSS
+      style = {
+        "--card-stack-bkg": background,
+        "--card-stack-bkg-uncropped":
+          content.card_stack_image.background_uncropped ?? background,
+        "--card-stack-bkg-medium":
+          content.card_stack_image.background_medium ?? background,
+        "--card-stack-bkg-small":
+          content.card_stack_image.background_small ?? background,
+      };
+    } else {
+      // pinnable_sites exposes its background through a custom property so the
+      // stylesheet can swap the wide-layout image for a narrow gradient without
+      // overriding an inline `background` shorthand.
+      style = background
+        ? {
+            [isPinnableSites ? "--pinnable-sites-bkg" : "background"]:
+              background,
+            "--mr-secondary-background-position-y":
+              content.split_narrow_bkg_position,
+          }
+        : {};
+    }
     return (
       <div
         className={`section-secondary ${
           content.hide_secondary_section ? "with-secondary-section-hidden" : ""
-        }`}
-        style={
-          background
-            ? {
-                [isPinnableSites ? "--pinnable-sites-bkg" : "background"]:
-                  background,
-                "--mr-secondary-background-position-y":
-                  content.split_narrow_bkg_position,
-              }
-            : {}
-        }
+        } ${cardStackImageClass}`}
+        style={style}
       >
         {content.dismiss_button && content.reverse_split
           ? this.renderDismissButton()
@@ -1141,7 +1215,18 @@ export class ProtonScreen extends React.PureComponent {
           this.mainContentHeader = input;
         }}
         no-rdm={content.no_rdm ? "" : null}
+        // eslint-disable-next-line react/no-unknown-property
+        initial-card={
+          content.position === "card-stack" &&
+          this.props.isFirstScreen &&
+          this.props.previousOrder < 0
+            ? ""
+            : null
+        }
       >
+        {content.position === "card-stack"
+          ? this.renderCardStackLayers()
+          : null}
         {cornerImageAnchor === "screen"
           ? this.renderCornerImage("screen")
           : null}
@@ -1434,6 +1519,25 @@ export const screenContentShape = {
     // The URL of the static hero image, provided if the default hero image
     // has animated content.
     url: PropTypes.string,
+  }),
+  // The image to insert into the secondary section background
+  // if the screen is a card stack. "Float" is the default
+  // and uses the "background" property under the hood, so no
+  // extra URLs are needed.
+  card_stack_image: PropTypes.shape({
+    // The image type; 'float' is a centered floating image (default),
+    // 'bleed' is an image designed to bleed over the bottom edge of the
+    // card, and 'banner' is a wider image that will bleed over two edges,
+    // and convert to a centered image at smaller widths.
+    type: PropTypes.oneOf(["float", "bleed", "banner"]),
+    // The static CSS background to use with the 'bleed' image type
+    background_uncropped: PropTypes.string,
+    // The static CSS background to use at the middle breakpoint
+    // for the 'banner' image type
+    background_medium: PropTypes.string,
+    // The static CSS background to use at the smallest breakpoint
+    // for the 'banner' image type
+    background_small: PropTypes.string,
   }),
   // A single checkbox action.
   checkbox: PropTypes.shape({
@@ -1728,7 +1832,11 @@ export const screenContentShape = {
       // CSS overrides of the tile container. Any CSS properties starting with
       // '--' are also allowed.
       style: PropTypes.object,
-      // Accessible name for the optional carousel pill navigation.
+      // Optional, currently for single-select tiles only. Visual layout for
+      // the tile's items.
+      layout: PropTypes.oneOf(["carousel"]),
+      // Optional, currently for single-select tiles only. Accessible name for
+      // the carousel pill navigation.
       pill_nav_label: localizableThingPropTypes,
       // Array of tile configurations needed for the tile type.
       data: PropTypes.oneOfType([PropTypes.array, PropTypes.object]),

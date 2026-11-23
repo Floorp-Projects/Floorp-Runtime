@@ -5,6 +5,7 @@
 
 #include "GPUVideoImage.h"
 #include "ImageContainer.h"
+#include "MockGPUVideoSurfaceManager.h"
 #include "gtest/gtest.h"
 #include "mozilla/RemoteImageHolder.h"
 #include "mozilla/gfx/Types.h"
@@ -18,7 +19,7 @@ using namespace mozilla::gfx;
 using namespace mozilla::ipc;
 using namespace mozilla::layers;
 
-class TestGPUVideoSurfaceManager final : public IGPUVideoSurfaceManager {
+class TestGPUVideoSurfaceManager final : public MockGPUVideoSurfaceManager {
  public:
   struct ColorMetadata {
     ColorDepth mColorDepth;
@@ -27,13 +28,6 @@ class TestGPUVideoSurfaceManager final : public IGPUVideoSurfaceManager {
     TransferFunction mTransferFunction;
     ColorRange mColorRange;
   };
-
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(TestGPUVideoSurfaceManager, override)
-
-  already_AddRefed<SourceSurface> Readback(
-      const SurfaceDescriptorGPUVideo&) override {
-    return nullptr;
-  }
 
   already_AddRefed<Image> TransferToImage(const SurfaceDescriptorGPUVideo&,
                                           const IntSize&,
@@ -47,9 +41,6 @@ class TestGPUVideoSurfaceManager final : public IGPUVideoSurfaceManager {
                            aTransferFunction, aColorRange});
     return nullptr;
   }
-
-  void DeallocateSurfaceDescriptor(const SurfaceDescriptorGPUVideo&) override {}
-  void OnSetCurrent(const SurfaceDescriptorGPUVideo&) override {}
 
   Maybe<ColorMetadata> mColorMetadata;
 
@@ -106,6 +97,16 @@ static YCbCrDescriptor MakeInvalidChromaDimensionsDescriptor() {
                          ColorDepth::COLOR_8, YUVColorSpace::BT601,
                          ColorRange::LIMITED, TransferFunction::BT709,
                          ChromaSubsampling::FULL, Nothing());
+}
+
+// Padded frame from a real decoder: ySize is taller than the display rect and
+// cbCrSize is larger than ySize implies.
+static YCbCrDescriptor MakePaddedChromaDescriptor() {
+  return YCbCrDescriptor(
+      IntRect(0, 0, 1920, 1080), IntSize(1920, 1090), 1920u, IntSize(1024, 546),
+      1024u, 0u, 2092800u, 2651904u, StereoMode::MONO, ColorDepth::COLOR_8,
+      YUVColorSpace::BT709, ColorRange::LIMITED, TransferFunction::BT709,
+      ChromaSubsampling::HALF_WIDTH_AND_HEIGHT, Nothing());
 }
 
 TEST(TestRemoteImageHolder, InvalidDescriptorValidation)
@@ -356,4 +357,32 @@ TEST(TestRemoteImageHolder, RejectsInvalidChromaDimensions)
   EXPECT_TRUE(image == nullptr)
       << "TransferToImage should reject descriptor with inconsistent chroma "
          "dimensions";
+}
+
+TEST(TestRemoteImageHolder, AcceptsPaddedChromaPlanes)
+{
+  auto desc = MakePaddedChromaDescriptor();
+
+  uint32_t descriptorSize =
+      desc.crOffset() + desc.cbCrStride() * desc.cbCrSize().height;
+
+  auto shmemBuilder = Shmem::Builder(descriptorSize);
+  ASSERT_TRUE(shmemBuilder);
+
+  auto [msg, shmem] = shmemBuilder.Build(7, false, 0);
+  ASSERT_TRUE(shmem.IsWritable());
+  ASSERT_GE(shmem.Size<uint8_t>(), descriptorSize);
+
+  memset(shmem.get<uint8_t>(), 0, descriptorSize);
+
+  BufferDescriptor bufferDesc(desc);
+  MemoryOrShmem memOrShmem(shmem);
+  SurfaceDescriptorBuffer sdBuffer(bufferDesc, memOrShmem);
+  SurfaceDescriptor sd(sdBuffer);
+
+  RemoteImageHolder holder(std::move(sd));
+  RefPtr<BufferRecycleBin> recycleBin = new BufferRecycleBin();
+  RefPtr<layers::Image> image = holder.TransferToImage(recycleBin);
+
+  EXPECT_TRUE(image);
 }

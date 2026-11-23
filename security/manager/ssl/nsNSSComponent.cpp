@@ -125,15 +125,7 @@ void TruncateFromLastDirectorySeparator(nsCString& path) {
   path.Truncate(index);
 }
 
-bool LoadIPCClientCerts() {
-  if (!LoadIPCClientCertsModule()) {
-    MOZ_LOG(gPIPNSSLog, LogLevel::Debug, ("failed to load ipcclientcerts"));
-    return false;
-  }
-  return true;
-}
-
-// This function can be called from chrome or content or socket processes
+// This function can be called from chrome or content processes
 // to ensure that NSS is initialized.
 bool EnsureNSSInitializedChromeOrContent() {
   static Atomic<bool> initialized(false);
@@ -177,18 +169,6 @@ bool EnsureNSSInitializedChromeOrContent() {
 
   if (NSS_NoDB_Init(nullptr) != SECSuccess) {
     return false;
-  }
-
-  if (XRE_IsSocketProcess()) {
-    if (NS_FAILED(CommonInit())) {
-      return false;
-    }
-    // If ipcclientcerts fails to load, client certificate authentication won't
-    // work (if networking is done on the socket process). This is preferable
-    // to stopping the program entirely, so treat this as best-effort.
-    (void)NS_WARN_IF(!LoadIPCClientCerts());
-    initialized = true;
-    return true;
   }
 
   if (NS_FAILED(mozilla::psm::InitializeCipherSuite())) {
@@ -499,8 +479,7 @@ LoadLoadableCertsTask::Run() {
   }
 
 #if defined(NIGHTLY_BUILD) && !defined(MOZ_NO_SMART_CARDS)
-  if (StaticPrefs::security_utility_pkcs11_module_process_enabled() &&
-      !GetInSafeMode()) {
+  if (PKCS11ModuleDB::UtilityProcessEnabled() && !GetInSafeMode()) {
     bool success = LoadRemoteCertsModule();
     MOZ_LOG(
         gPIPNSSLog, LogLevel::Debug,
@@ -581,8 +560,7 @@ nsresult CheckForSmartCardChanges() {
 #  ifdef NIGHTLY_BUILD
   // If this is the parent process and PKCS#11 modules are loaded in the
   // utility process, this is a no-op.
-  if (XRE_IsParentProcess() &&
-      StaticPrefs::security_utility_pkcs11_module_process_enabled()) {
+  if (XRE_IsParentProcess() && PKCS11ModuleDB::UtilityProcessEnabled()) {
     return NS_OK;
   }
 #  endif
@@ -892,14 +870,8 @@ nsresult CommonInit() {
   DisableMD5();
 
   mozilla::pkix::RegisterErrorTable();
-  nsSSLIOLayerHelpers::GlobalInit();
 
   return NS_OK;
-}
-
-void PrepareForShutdownInSocketProcess() {
-  MOZ_ASSERT(XRE_IsSocketProcess());
-  nsSSLIOLayerHelpers::GlobalCleanup();
 }
 
 bool HandleTLSPrefChange(const nsCString& prefName) {
@@ -1565,9 +1537,6 @@ nsresult nsNSSComponent::InitializeNSS() {
   SetNSSDatabaseCacheModeAsAppropriate();
 #endif
 
-  // `always`-mirrored, not `_AtStartup` (see the pref definition): NSS can be
-  // initialized before user prefs are read, where a `once` read would snapshot
-  // every once-mirrored pref at its default too early.
   bool nocertdb = StaticPrefs::security_nocertdb();
   bool inSafeMode = GetInSafeMode();
   MOZ_LOG(gPIPNSSLog, LogLevel::Debug, ("inSafeMode: %u\n", inSafeMode));
@@ -1594,6 +1563,8 @@ nsresult nsNSSComponent::InitializeNSS() {
   if (NS_FAILED(rv)) {
     return NS_ERROR_UNEXPECTED;
   }
+
+  nsSSLIOLayerHelpers::GlobalInit();
 
   nsCOMPtr<nsICertOverrideService> certOverrideService(
       do_GetService(NS_CERTOVERRIDE_CONTRACTID));
@@ -1785,7 +1756,7 @@ nsNSSComponent::Observe(nsISupports* aSubject, const char* aTopic,
     // in this context.
     SSL_ClearSessionCache();
     // SSLTokensCache observes this notification itself and clears PBM
-    // token-cache entries and forwards a scoped clear to the socket process.
+    // token-cache entries.
     return NS_OK;
   }
 
@@ -1976,6 +1947,15 @@ bool IsGeckoSearchingForClientAuthCertificates(uint64_t uniqueSlotID) {
 }
 
 AutoSearchingForCertificates::AutoSearchingForCertificates() {
+  // Cache remote cryptoki objects before acquiring the lock, so that it's not
+  // held while doing that work (which may involve waiting on a dispatch to the
+  // main thread).
+  // Also, doing this work first ensures that the results are already there
+  // when a call to IsGeckoSearchingForCertificates eventually returns true.
+#if defined(NIGHTLY_BUILD) && !defined(MOZ_NO_SMART_CARDS)
+  CacheRemoteCryptokiObjects(SearchingFor::CACertificates);
+#endif  // NIGHTLY_BUILD && !MOZ_NO_SMART_CARDS
+
   auto certificateSearchState = sCertificateSearchState.Lock();
   // If some other thread is already searching, there's no point in updating
   // any state here.
@@ -1995,6 +1975,11 @@ AutoSearchingForCertificates::~AutoSearchingForCertificates() {
 
 AutoSearchingForClientAuthCertificates::
     AutoSearchingForClientAuthCertificates() {
+  // See the comment for the corresponding CacheRemoteCryptokiObjects call in
+  // AutoSearchingForCertificates::AutoSearchingForCertificates().
+#if defined(NIGHTLY_BUILD) && !defined(MOZ_NO_SMART_CARDS)
+  CacheRemoteCryptokiObjects(SearchingFor::ClientCertificates);
+#endif  // NIGHTLY_BUILD && !MOZ_NO_SMART_CARDS
   auto clientCertificateSearchState = sClientCertificateSearchState.Lock();
   // If some other thread is already searching, there's no point in updating
   // any state here.

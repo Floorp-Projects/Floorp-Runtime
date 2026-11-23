@@ -901,7 +901,12 @@ def InterfacePrototypeObjectProtoGetter(descriptor):
         if descriptor.interface.getExtendedAttribute("ExceptionClass"):
             protoGetter = "JS::GetRealmErrorPrototype"
         elif descriptor.interface.isIteratorInterface():
-            protoGetter = "JS::GetRealmIteratorPrototype"
+            if descriptor.interface.iterableInterface.isSetlike():
+                protoGetter = "JS::GetRealmSetIteratorPrototype"
+            elif descriptor.interface.iterableInterface.isMaplike():
+                protoGetter = "JS::GetRealmMapIteratorPrototype"
+            else:
+                protoGetter = "JS::GetRealmIteratorPrototype"
         elif descriptor.interface.isAsyncIteratorInterface():
             protoGetter = "JS::GetRealmAsyncIteratorPrototype"
         else:
@@ -8769,6 +8774,57 @@ def callerTypeGetterForDescriptor(descriptor):
     return "%s(cx) ? CallerType::System : CallerType::NonSystem" % systemCallerGetter
 
 
+def getCallArgument(a, name):
+    """
+    The expression that hands the converted value |name| of the IDL argument
+    |a| to a native method.
+    """
+    arg = CGGeneric(name)
+
+    # Now constify the things that need it
+    def needsConst(a):
+        if a.type.isDictionary():
+            return True
+        if a.type.isSequence():
+            return True
+        if a.type.isRecord():
+            return True
+        # isObject() types are always a JS::Rooted, whether
+        # nullable or not, and it turns out a const JS::Rooted
+        # is not very helpful at all (in particular, it won't
+        # even convert to a JS::Handle).
+        # XXX bz Well, why not???
+        if a.type.nullable() and not a.type.isObject():
+            return True
+        if a.type.isString():
+            return True
+        if a.canHaveMissingValue():
+            # This will need an Optional or it's a variadic;
+            # in both cases it should be const.
+            return True
+        if a.type.isUnion():
+            return True
+        if a.type.isSpiderMonkeyInterface():
+            return True
+        return False
+
+    if needsConst(a):
+        arg = CGWrapper(arg, pre="Constify(", post=")")
+    # And convert NonNull<T> to T&
+    if (
+        (a.type.isGeckoInterface() or a.type.isCallback() or a.type.isPromise())
+        and not a.type.nullable()
+    ) or a.type.isDOMString():
+        arg = CGWrapper(arg, pre="NonNullHelper(", post=")")
+
+    # If it's a refcounted object, let the static analysis know it's
+    # alive for the duration of the call.
+    if a.type.isGeckoInterface() or a.type.isCallback():
+        arg = CGWrapper(arg, pre="MOZ_KnownLive(", post=")")
+
+    return arg
+
+
 class CGCallGenerator(CGThing):
     """
     A class to generate an actual call to a C++ object.  Assumes that the C++
@@ -8817,50 +8873,7 @@ class CGCallGenerator(CGThing):
 
         args = CGList([CGGeneric(arg) for arg in argsPre], ", ")
         for a, name in arguments:
-            arg = CGGeneric(name)
-
-            # Now constify the things that need it
-            def needsConst(a):
-                if a.type.isDictionary():
-                    return True
-                if a.type.isSequence():
-                    return True
-                if a.type.isRecord():
-                    return True
-                # isObject() types are always a JS::Rooted, whether
-                # nullable or not, and it turns out a const JS::Rooted
-                # is not very helpful at all (in particular, it won't
-                # even convert to a JS::Handle).
-                # XXX bz Well, why not???
-                if a.type.nullable() and not a.type.isObject():
-                    return True
-                if a.type.isString():
-                    return True
-                if a.canHaveMissingValue():
-                    # This will need an Optional or it's a variadic;
-                    # in both cases it should be const.
-                    return True
-                if a.type.isUnion():
-                    return True
-                if a.type.isSpiderMonkeyInterface():
-                    return True
-                return False
-
-            if needsConst(a):
-                arg = CGWrapper(arg, pre="Constify(", post=")")
-            # And convert NonNull<T> to T&
-            if (
-                (a.type.isGeckoInterface() or a.type.isCallback() or a.type.isPromise())
-                and not a.type.nullable()
-            ) or a.type.isDOMString():
-                arg = CGWrapper(arg, pre="NonNullHelper(", post=")")
-
-            # If it's a refcounted object, let the static analysis know it's
-            # alive for the duration of the call.
-            if a.type.isGeckoInterface() or a.type.isCallback():
-                arg = CGWrapper(arg, pre="MOZ_KnownLive(", post=")")
-
-            args.append(arg)
+            args.append(getCallArgument(a, name))
 
         needResultDecl = False
 
@@ -9514,18 +9527,24 @@ class CGPerSignatureCall(CGThing):
                 )
             )
 
-        # If this is a method that was generated by a maplike/setlike
-        # interface, use the maplike/setlike generator to fill in the body.
+        # If this is a method that was generated by a maplike/setlike or
+        # iterable interface, use the matching generator to fill in the body.
         # Otherwise, use CGCallGenerator to call the native method.
         if idlNode.isMethod() and idlNode.isMaplikeOrSetlikeOrIterableMethod():
-            if (
-                idlNode.maplikeOrSetlikeOrIterable.isMaplike()
-                or idlNode.maplikeOrSetlikeOrIterable.isSetlike()
-            ):
+            collection = idlNode.maplikeOrSetlikeOrIterable
+            if collection.isMaplikeOrSetlike() and collection.domBackedStorage:
+                cgThings.append(
+                    CGDOMBackedStorageMethodGenerator(
+                        descriptor,
+                        idlNode,
+                        self.getArguments(),
+                    )
+                )
+            elif collection.isMaplikeOrSetlike():
                 cgThings.append(
                     CGMaplikeOrSetlikeMethodGenerator(
                         descriptor,
-                        idlNode.maplikeOrSetlikeOrIterable,
+                        collection,
                         idlNode.identifier.name,
                     )
                 )
@@ -11295,12 +11314,16 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
             nativeType=self.descriptor.nativeType,
         )
 
-        if self.attr.isMaplikeOrSetlikeAttr():
+        if (
+            self.attr.isMaplikeOrSetlikeAttr()
+            and not self.attr.maplikeOrSetlike.domBackedStorage
+        ):
             assert not self.attr.getExtendedAttribute("CrossOriginReadable")
             # If the interface is maplike/setlike, there will be one getter
             # method for the size property of the backing object. Due to having
             # to unpack the backing object from the slot, this requires its own
-            # generator.
+            # generator. The size of a [DOMBackedStorage] one is an ordinary
+            # getter that calls the implementation's Size().
             return prefix + getMaplikeOrSetlikeSizeGetterBody(
                 self.descriptor, self.attr
             )
@@ -12357,15 +12380,69 @@ class CGMemberJITInfo(CGThing):
             return result
         raise TypeError("Illegal member type to CGPropertyJITInfo")
 
+    @staticmethod
+    def mayCreateNonPlainObjects(t):
+        """
+        Returns whether converting a value of type t to JS may create
+        objects other than plain objects and arrays.  Creating such an
+        object can lazily define an interface object or a standard
+        constructor on the global, or mark a prototype as used, which
+        are side-effects the JIT must know about. Plain objects are
+        fine because Object is resolved when the global is created,
+        and arrays are fine because Ion resolves Array before
+        compiling a call to a DOM operation.
+        """
+        if t.nullable():
+            t = t.inner
+        if t.isUndefined() or t.isPrimitive() or t.isString() or t.isEnum():
+            return False
+        if t.isUnion():
+            return any(
+                CGMemberJITInfo.mayCreateNonPlainObjects(m) for m in t.flatMemberTypes
+            )
+        # A sequence becomes an array.
+        # A record or dictionary becomes a plain object.
+        if t.isSequence() or t.isRecord():
+            return CGMemberJITInfo.mayCreateNonPlainObjects(t.inner)
+        if t.isDictionary():
+            dictionary = t.inner
+            while dictionary:
+                if any(
+                    CGMemberJITInfo.mayCreateNonPlainObjects(m.type)
+                    for m in dictionary.members
+                ):
+                    return True
+                dictionary = dictionary.parent
+            return False
+        return True
+
+    def returnMayCreateNonPlainObjects(self):
+        """
+        Returns whether converting the return value of this attribute or method
+        to JS may create objects other than plain objects and arrays.  If so,
+        we can't promise the JIT that calling it has no side-effects.
+        """
+        if self.member.isAttr():
+            # The JIT reads StoreInSlot values from the slot without calling
+            # the getter.
+            if self.member.getExtendedAttribute("StoreInSlot"):
+                return False
+            types = [self.member.type]
+        else:
+            types = [s[0] for s in self.member.signatures()]
+        return any(CGMemberJITInfo.mayCreateNonPlainObjects(t) for t in types)
+
     def mayBeMovable(self):
         """
-        Returns whether this attribute or method may be movable, just
-        based on Affects/DependsOn annotations.
+        Returns whether this attribute or method may be movable, based on
+        Affects/DependsOn annotations and the return type.
         """
         affects = self.member.affects
         dependsOn = self.member.dependsOn
         assert affects in IDLInterfaceMember.AffectsValues
         assert dependsOn in IDLInterfaceMember.DependsOnValues
+        if self.returnMayCreateNonPlainObjects():
+            return False
         # Things that are DependsOn=DeviceState are not movable, because we
         # don't want them coalesced with each other or loop-hoisted, since
         # their return value can change even if nothing is going on from our
@@ -12376,8 +12453,8 @@ class CGMemberJITInfo(CGThing):
 
     def mayBeEliminatable(self):
         """
-        Returns whether this attribute or method may be eliminatable, just
-        based on Affects/DependsOn annotations.
+        Returns whether this attribute or method may be eliminatable, based on
+        Affects/DependsOn annotations and the return type.
         """
         # dependsOn shouldn't affect this decision at all, except in jitinfo we
         # have no way to express "Depends on everything, affects nothing",
@@ -12393,6 +12470,8 @@ class CGMemberJITInfo(CGThing):
         dependsOn = self.member.dependsOn
         assert affects in IDLInterfaceMember.AffectsValues
         assert dependsOn in IDLInterfaceMember.DependsOnValues
+        if self.returnMayCreateNonPlainObjects():
+            return False
         return affects == "Nothing" and dependsOn != "Everything"
 
     def aliasSet(self):
@@ -12404,6 +12483,9 @@ class CGMemberJITInfo(CGThing):
         """
         dependsOn = self.member.dependsOn
         assert dependsOn in IDLInterfaceMember.DependsOnValues
+
+        if self.returnMayCreateNonPlainObjects():
+            return "AliasEverything"
 
         if dependsOn == "Nothing" or dependsOn == "DeviceState":
             assert self.member.affects == "Nothing"
@@ -17188,12 +17270,23 @@ class CGDescriptor(CGThing):
 
         self.name = descriptor.interface.getClassName()
         self._deps = descriptor.interface.getDeps()
+        self._isIteratorInterface = (
+            descriptor.interface.isIteratorInterface()
+            or descriptor.interface.isAsyncIteratorInterface()
+        )
 
         iteratorCGThings = None
         if (
-            descriptor.interface.isIterable()
-            and descriptor.interface.maplikeOrSetlikeOrIterable.isPairIterator()
-        ) or descriptor.interface.isAsyncIterable():
+            (
+                descriptor.interface.isIterable()
+                and descriptor.interface.maplikeOrSetlikeOrIterable.isPairIterator()
+            )
+            or descriptor.interface.isAsyncIterable()
+            or (
+                (descriptor.interface.isMaplike() or descriptor.interface.isSetlike())
+                and descriptor.interface.maplikeOrSetlikeOrIterable.iteratorType
+            )
+        ):
             # We need the Wrap function when using the [Async]IterableIterator type, so we want to declare it before we need it. We don't really want to expose it in the header file, so we make it static too.
             iteratorCGThings = []
             itr_iface = (
@@ -17218,11 +17311,7 @@ class CGDescriptor(CGThing):
 
         cgThings = []
 
-        isIteratorInterface = (
-            descriptor.interface.isIteratorInterface()
-            or descriptor.interface.isAsyncIteratorInterface()
-        )
-        if not isIteratorInterface:
+        if not self._isIteratorInterface:
             cgThings.append(
                 CGGeneric(declare="typedef %s NativeType;\n" % descriptor.nativeType)
             )
@@ -17292,7 +17381,7 @@ class CGDescriptor(CGThing):
                             needCrossOriginPropertyArrays = True
             # If we've hit the maplike/setlike member itself, go ahead and
             # generate its convenience functions.
-            elif m.isMaplikeOrSetlike():
+            elif m.isMaplikeOrSetlike() and not m.domBackedStorage:
                 cgThings.append(CGMaplikeOrSetlikeHelperGenerator(descriptor, m))
             elif m.isAttr():
                 if m.type.isObservableArray():
@@ -17480,7 +17569,7 @@ class CGDescriptor(CGThing):
         # want to export it for the iterator interfaces, or if we don't need it
         # for child interfaces or for the named properties object.
         protoObjectHandleGetterIsStatic = descriptor.concrete and (
-            isIteratorInterface
+            self._isIteratorInterface
             or (
                 descriptor.interface.hasInterfacePrototypeObject()
                 and not descriptor.interface.hasChildInterfaces()
@@ -17516,7 +17605,9 @@ class CGDescriptor(CGThing):
                 cgThings.append(CGWrapMethod(descriptor))
             else:
                 cgThings.append(
-                    CGWrapNonWrapperCacheMethod(descriptor, static=isIteratorInterface)
+                    CGWrapNonWrapperCacheMethod(
+                        descriptor, static=self._isIteratorInterface
+                    )
                 )
 
         # If we're not wrappercached, we don't know how to clear our
@@ -17581,7 +17672,7 @@ class CGDescriptor(CGThing):
                     properties,
                     haveUnscopables,
                     haveLegacyWindowAliases,
-                    static=isIteratorInterface,
+                    static=self._isIteratorInterface,
                 )
             )
 
@@ -17594,7 +17685,7 @@ class CGDescriptor(CGThing):
                     )
                 )
                 if descriptor.interface.hasChildInterfaces():
-                    assert not isIteratorInterface
+                    assert not self._isIteratorInterface
                     cgThings.append(CGGetProtoObjectMethod(descriptor))
             if descriptor.interface.hasInterfaceObject():
                 cgThings.append(CGGetConstructorObjectHandleMethod(descriptor))
@@ -17622,6 +17713,10 @@ class CGDescriptor(CGThing):
         return self.cgRoot.define()
 
     def forward_declare(self):
+        # If this is a generated iterator interface, we only create these
+        # in the generated bindings, and don't need to forward declare.
+        if self._isIteratorInterface:
+            return ""
         return f"class {self.name};"
 
     def deps(self):
@@ -19358,11 +19453,17 @@ class CGBindingRoot(CGThing):
         bindingHeaders["mozilla/dom/IterableIterator.h"] = any(
             (
                 d.interface.isIteratorInterface()
+                and d.interface.maplikeOrSetlikeOrIterable
                 and d.interface.maplikeOrSetlikeOrIterable.isPairIterator()
             )
             or d.interface.isAsyncIteratorInterface()
             or d.interface.isIterable()
             or d.interface.isAsyncIterable()
+            for d in descriptors
+        )
+        bindingHeaders["mozilla/dom/ECMACollectionIterator.h"] = any(
+            (d.interface.isMaplike() or d.interface.isSetlike())
+            and d.interface.maplikeOrSetlikeOrIterable.domBackedStorage
             for d in descriptors
         )
 
@@ -22657,6 +22758,9 @@ class CGMaplikeOrSetlikeMethodGenerator(CGThing):
             # function. Truncate the double underscore so calling the right
             # underlying JSAPI function still works.
             impl_method_name = impl_method_name[2:]
+
+        assert not maplikeOrSetlike.domBackedStorage
+
         self.cgRoot.append(
             CGGeneric(
                 getMaplikeOrSetlikeBackingObject(
@@ -23263,6 +23367,37 @@ class CGMaplikeOrSetlikeHelperGenerator(CGNamespace):
         CGNamespace.__init__(self, self.namespace, CGList(self.helpers))
 
 
+def getForEachBody(preamble, loopHead, setCallArgs):
+    """
+    Body of the generated forEach() of an iterable or [DOMBackedStorage]
+    setlike/maplike interface. Both walk their entries and hand each one to the
+    callback along with the interface object; they differ only in how they get
+    from a position to the value and the key, which setCallArgs does.
+    """
+    return fill(
+        """
+        if (!JS::IsCallable(arg0)) {
+          cx.ThrowErrorMessage<MSG_NOT_CALLABLE>("Argument 1");
+          return false;
+        }
+        JS::RootedValueArray<3> callArgs(cx);
+        callArgs[2].setObject(*obj);
+        JS::Rooted<JS::Value> ignoredReturnVal(cx);
+        $*{preamble}
+        ${loopHead} {
+          $*{setCallArgs}
+          if (!JS::Call(cx, arg1, arg0, JS::HandleValueArray(callArgs),
+                        &ignoredReturnVal)) {
+            return false;
+          }
+        }
+        """,
+        preamble=preamble,
+        loopHead=loopHead,
+        setCallArgs=setCallArgs,
+    )
+
+
 class CGIterableMethodGenerator(CGGeneric):
     """
     Creates methods for iterable interfaces. Unwrapping/wrapping
@@ -23277,34 +23412,27 @@ class CGIterableMethodGenerator(CGGeneric):
 
             CGGeneric.__init__(
                 self,
-                fill(
-                    """
-                if (!JS::IsCallable(arg0)) {
-                  cx.ThrowErrorMessage<MSG_NOT_CALLABLE>("Argument 1");
-                  return false;
-                }
-                JS::RootedValueArray<3> callArgs(cx);
-                callArgs[2].setObject(*obj);
-                JS::Rooted<JS::Value> ignoredReturnVal(cx);
-                auto GetKeyAtIndex = &${selfType}::GetKeyAtIndex;
-                auto GetValueAtIndex = &${selfType}::GetValueAtIndex;
-                for (size_t i = 0; i < self->GetIterableLength(); ++i) {
-                  if (!CallIterableGetter(cx, GetValueAtIndex, self, i,
-                                          callArgs[0])) {
-                    return false;
-                  }
-                  if (!CallIterableGetter(cx, GetKeyAtIndex, self, i,
-                                          callArgs[1])) {
-                    return false;
-                  }
-                  if (!JS::Call(cx, arg1, arg0, JS::HandleValueArray(callArgs),
-                                &ignoredReturnVal)) {
-                    return false;
-                  }
-                }
-                """,
-                    ifaceName=descriptor.interface.identifier.name,
-                    selfType=descriptor.nativeType,
+                getForEachBody(
+                    preamble=fill(
+                        """
+                        auto GetKeyAtIndex = &${selfType}::GetKeyAtIndex;
+                        auto GetValueAtIndex = &${selfType}::GetValueAtIndex;
+                        """,
+                        selfType=descriptor.nativeType,
+                    ),
+                    loopHead="for (size_t i = 0; i < self->GetIterableLength(); ++i)",
+                    setCallArgs=dedent(
+                        """
+                        if (!CallIterableGetter(cx, GetValueAtIndex, self, i,
+                                                callArgs[0])) {
+                          return false;
+                        }
+                        if (!CallIterableGetter(cx, GetKeyAtIndex, self, i,
+                                                callArgs[1])) {
+                          return false;
+                        }
+                        """
+                    ),
                 ),
             )
             return
@@ -23355,6 +23483,141 @@ class CGIterableMethodGenerator(CGGeneric):
             )
 
         CGGeneric.__init__(self, createIterator)
+
+
+class CGDOMBackedStorageMethodGenerator(CGGeneric):
+    """
+    Creates methods for [DOMBackedStorage] setlike/maplike interfaces. They call
+    into the SetlikeMixin or MaplikeMixin of the implementation, except for
+    forEach and the iterators, which walk its ECMASet or ECMAMap. Unwrapping/
+    wrapping will be taken care of by the usual method generation machinery in
+    CGMethodCall/CGPerSignatureCall.
+    """
+
+    def __init__(self, descriptor, method, arguments):
+        self.descriptor = descriptor
+        self.method = method
+        self.collection = method.maplikeOrSetlikeOrIterable
+        assert self.collection.isMaplikeOrSetlike()
+        assert self.collection.domBackedStorage
+        self.args = ", ".join(
+            getCallArgument(a, name).define() for a, name in arguments
+        )
+        CGGeneric.__init__(self, getattr(self, method.identifier.name)())
+
+    def storageAccessor(self):
+        return "Setlike" if self.collection.isSetlike() else "Maplike"
+
+    def has(self):
+        return f"bool result(MOZ_KnownLive(self)->Has({self.args}));\n"
+
+    def delete(self):
+        return f"bool result(MOZ_KnownLive(self)->Delete({self.args}));\n"
+
+    def clear(self):
+        return "MOZ_KnownLive(self)->Clear();\n"
+
+    def get(self):
+        return fill(
+            """
+            JS::Rooted<JS::Value> result(cx);
+            if (auto* value = MOZ_KnownLive(self)->Get(${args})) {
+              if (!ToJSValue(cx, *value, &result)) {
+                return false;
+              }
+            }
+            """,
+            args=self.args,
+        )
+
+    def callReturningSelf(self, nativeMethod):
+        """
+        add() and set(), which return the interface object. Implementations can
+        reject the entry, which they report through the ErrorResult.
+        """
+        return fill(
+            """
+            FastErrorResult rv;
+            MOZ_KnownLive(self)->${nativeMethod}(${args}, rv);
+            if (rv.MaybeSetPendingException(cx, "${label}")) [[unlikely]] {
+              return false;
+            }
+            JS::Rooted<JSObject*> result(cx, obj);
+            """,
+            nativeMethod=nativeMethod,
+            args=self.args,
+            label=GetLabelForErrorReporting(self.descriptor, self.method, False),
+        )
+
+    def add(self):
+        return self.callReturningSelf("Add")
+
+    def set(self):
+        return self.callReturningSelf("Set")
+
+    def forEach(self):
+        if self.collection.isSetlike():
+            # A setlike hands the value to the callback as both the value and
+            # the key.
+            setCallArgs = fill(
+                """
+                if (!binding_detail::ECMAKeyToJSValue<${nativeType}>(
+                        cx, entry->mValue, callArgs[0])) {
+                  return false;
+                }
+                callArgs[1].set(callArgs[0]);
+                """,
+                nativeType=self.descriptor.nativeType,
+            )
+        else:
+            setCallArgs = fill(
+                """
+                if (!ToJSValue(cx, entry->mValue, callArgs[0])) {
+                  return false;
+                }
+                if (!binding_detail::ECMAKeyToJSValue<${nativeType}>(
+                        cx, entry->mKey, callArgs[1])) {
+                  return false;
+                }
+                """,
+                nativeType=self.descriptor.nativeType,
+            )
+        # The cursor is registered with the storage, so entries added or
+        # deleted by the callback are visited exactly as ES Set/Map iteration
+        # requires.
+        return getForEachBody(
+            preamble=f"auto cursor = self->{self.storageAccessor()}().CreateCursor();\n",
+            loopHead="while (const auto* entry = cursor.Next())",
+            setCallArgs=setCallArgs,
+        )
+
+    def createIterator(self):
+        iterTemplate = (
+            "WrappableECMASetIterator"
+            if self.collection.isSetlike()
+            else "WrappableECMAMapIterator"
+        )
+        wrap = f"{self.descriptor.interface.identifier.name}Iterator_Binding::Wrap"
+        return fill(
+            """
+            typedef mozilla::dom::binding_detail::${iterTemplate}<${nativeType}, &${wrap}> itrType;
+            RefPtr<itrType> result(new itrType(self,
+                                               itrType::IteratorType::${itrMethod}));
+            """,
+            iterTemplate=iterTemplate,
+            nativeType=self.descriptor.nativeType,
+            wrap=wrap,
+            itrMethod=self.method.identifier.name.title(),
+        )
+
+    def keys(self):
+        return self.createIterator()
+
+    def values(self):
+        return self.createIterator()
+
+    def entries(self):
+        return self.createIterator()
 
 
 def getObservableArrayBackingObject(
@@ -24519,12 +24782,11 @@ class GlobalGenRoots:
             "mozilla/dom/WebIDLSerializable.h",
             "mozilla/PerfectHash.h",
         ])
-        names = list()
-        for d in config.getDescriptors(isSerializable=True):
-            names.append(d.name)
+        descriptors = config.getDescriptors(isSerializable=True)
+        for d in descriptors:
             defineIncludes.add(CGHeaders.getDeclarationFilename(d.interface))
 
-        if len(names) == 0:
+        if len(descriptors) == 0:
             # We can't really create a PerfectHash out of this, but also there's
             # not much point to this file if we have no [Serializable] objects.
             # Just spit out an empty file.
@@ -24546,17 +24808,21 @@ class GlobalGenRoots:
         # basically making a second copy of this array ordered by tag, with the
         # holes filled in.  Again, worth checking whether this still happens if
         # we have too many serializable things.
-        if len(names) > 20:
+        if len(descriptors) > 20:
             raise TypeError(
                 "We now have %s serializable interfaces.  "
                 "Double-check that the compiler is still "
-                "generating a jump table." % len(names)
+                "generating a jump table." % len(descriptors)
             )
 
         entries = list()
         # Make sure we have stable ordering.
-        for name in sorted(names):
+        for d in sorted(descriptors, key=lambda descriptor: descriptor.name):
+            name = d.name
             exposedGlobals = computeGlobalNamesFromExposureSet(d.interface.exposureSet)
+            secureContext = toStringBool(
+                d.interface.getExtendedAttribute("SecureContext") is not None
+            )
             # Strip off trailing newline to make our formatting look right.
             entries.append(
                 fill(
@@ -24565,17 +24831,19 @@ class GlobalGenRoots:
                   /* mTag */ ${tag},
                   /* mDeserialize */ ${name}_Binding::Deserialize,
                   /* mExposedGlobals */ ${exposedGlobals},
+                  /* mSecureContext */ ${secureContext},
                 }
                 """,
                     tag=StructuredCloneTag(name),
                     name=name,
                     exposedGlobals=exposedGlobals,
+                    secureContext=secureContext,
                 )[:-1]
             )
 
         declare = dedent(
             """
-            Maybe<std::pair<uint16_t, WebIDLDeserializer>> LookupDeserializer(StructuredCloneTags aTag);
+            Maybe<std::tuple<uint16_t, bool, WebIDLDeserializer>> LookupDeserializer(StructuredCloneTags aTag);
             """
         )
         define = fill(
@@ -24584,16 +24852,17 @@ class GlobalGenRoots:
               StructuredCloneTags mTag;
               WebIDLDeserializer mDeserialize;
               uint16_t mExposedGlobals;
+              bool mSecureContext;
             };
 
             static const WebIDLSerializableEntry sEntries[] = {
               $*{entries}
             };
 
-            Maybe<std::pair<uint16_t, WebIDLDeserializer>> LookupDeserializer(StructuredCloneTags aTag) {
+            Maybe<std::tuple<uint16_t, bool, WebIDLDeserializer>> LookupDeserializer(StructuredCloneTags aTag) {
               for (auto& entry : sEntries) {
                 if (entry.mTag == aTag) {
-                  return Some(std::pair(entry.mExposedGlobals, entry.mDeserialize));
+                  return Some(std::tuple(entry.mExposedGlobals, entry.mSecureContext, entry.mDeserialize));
                 }
               }
               return Nothing();

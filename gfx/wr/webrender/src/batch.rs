@@ -19,6 +19,7 @@ use crate::internal_types::{FastHashMap, FrameAllocator, FrameMemory, FrameVec, 
 use crate::prim_store::PrimitiveKind;
 use crate::prim_store::PrimitiveInstance;
 use crate::prim_store::{ClipMaskKind, ClipTaskIndex};
+use crate::path_tiler::PathTileInstance;
 use crate::quad;
 use crate::render_target::RenderTargetContext;
 use crate::render_task_graph::{RenderTaskId, RenderTaskGraph};
@@ -1012,11 +1013,16 @@ impl BatchBuilder {
         let prim_instance = &prim_instances[prim_info.prim_instance_index.0 as usize];
 
         match prim_instance.kind {
-            PrimitiveKind::TextRun { data_handle, .. } => {
+            PrimitiveKind::TextRun { handle } => {
                 let text_run_scratch_handle = prim_info.kind_scratch.unwrap_text_run();
                 let run_scratch = &ctx.scratch.frame.text_runs[text_run_scratch_handle];
                 let subpx_dir = run_scratch.used_font.get_subpx_dir();
-                let prim_data = &ctx.data_stores.text_run[data_handle].kind;
+                // A run that resolved to nothing never made it here: `prepare`
+                // pushes no kind scratch for it, so it has no draw to batch.
+                let prim_data = ctx.dl_stores.text_runs[handle]
+                    .kind
+                    .as_ref()
+                    .expect("bug: batching a text run that resolved to nothing");
 
                 let glyph_keys = &ctx.scratch.frame.glyph_keys[run_scratch.glyph_keys_range];
 
@@ -1279,6 +1285,10 @@ pub struct ClipMaskInstanceList {
 
     pub image_mask_instances: FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>,
     pub image_mask_instances_with_scissor: FastHashMap<(DeviceIntRect, TextureSource), FrameVec<PrimitiveInstanceData>>,
+
+    /// Drawn with the premultiplied dest-out blend mode. Positioned relative
+    /// to their render task by the shader, so they never need a scissor rect.
+    pub path_tiles: FrameVec<PathTileInstance>,
 }
 
 impl ClipMaskInstanceList {
@@ -1292,6 +1302,7 @@ impl ClipMaskInstanceList {
             mask_instances_slow_with_scissor: FastHashMap::default(),
             image_mask_instances: FastHashMap::default(),
             image_mask_instances_with_scissor: FastHashMap::default(),
+            path_tiles: memory.new_vec(),
         }
     }
 
@@ -1307,6 +1318,7 @@ impl ClipMaskInstanceList {
             mask_instances_slow_with_scissor,
             image_mask_instances,
             image_mask_instances_with_scissor,
+            path_tiles,
         } = self;
 
         mask_instances_fast.is_empty()
@@ -1317,6 +1329,7 @@ impl ClipMaskInstanceList {
             && mask_instances_slow_with_scissor.is_empty()
             && image_mask_instances.is_empty()
             && image_mask_instances_with_scissor.is_empty()
+            && path_tiles.is_empty()
     }
 }
 

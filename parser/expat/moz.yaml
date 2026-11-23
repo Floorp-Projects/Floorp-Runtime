@@ -9,8 +9,8 @@ origin:
   name: libexpat
   description: Expat is an XML parser.
   url: https://github.com/libexpat/libexpat
-  release: R_2_8_4 (2026-08-31T15:24:26+02:00).
-  revision: R_2_8_4
+  release: R_2_8_5 (2026-09-22T13:07:30+02:00).
+  revision: R_2_8_5
   license: MIT
   license-file: COPYING
 
@@ -56,11 +56,7 @@ vendoring:
     - 01_report_mismatched_tag.patch
     - 02_dont_generate_salt.patch
     - 03_always_set_eventptrs.patch
-    - 04_getcurrentbyteindex.patch
-    - 05_always_store_rawnames.patch
     - 06_dont_ignore_undeclared_entity.patch
     - 07_include_xmlns.patch
-    - 08_internalsubset.patch
-    - 09_version_limit.patch
     - 10_no_debug_report.patch
     - 11_unused.patch

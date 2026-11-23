@@ -19,6 +19,8 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   isTrailingDotPolicyDuplicate:
     "resource://gre/modules/PoliciesHelpers.sys.mjs",
+  PushNotificationHelper:
+    "resource://gre/modules/PushNotificationHelper.sys.mjs",
 });
 
 XPCOMUtils.defineLazyServiceGetter(
@@ -46,6 +48,10 @@ const sitePermissionsL10n = {
     description: "permissions-site-xr-desc",
     disableLabel: "permissions-site-xr-disable-label",
     disableDescription: "permissions-site-xr-disable-desc",
+  },
+  "register-protocol-handler": {
+    window: "permissions-site-app-links-window",
+    description: "permissions-site-app-links-desc",
   },
   camera: {
     window: "permissions-site-camera-window2",
@@ -159,6 +165,11 @@ const NOTIFICATIONS_PERMISSION_PREF =
 
 const AUTOPLAY_PREF = "media.autoplay.default";
 
+const CLOSED_DELIVERY_AVAILABLE_PREF =
+  "app.backgroundNotifications.helper.available";
+const CLOSED_DELIVERY_ENABLED_PREF =
+  "app.backgroundNotifications.helper.enabled";
+
 var gSitePermissionsManager = {
   _type: "",
   _isObserving: false,
@@ -215,6 +226,10 @@ var gSitePermissionsManager = {
       "permissionsDisableDescription"
     );
     this._setAutoplayPref = document.getElementById("setAutoplayPref");
+    this._closedDeliveryBox = document.getElementById("closedDeliveryBox");
+    this._closedDeliveryCheckbox = document.getElementById(
+      "closedDeliveryCheckbox"
+    );
 
     this._list.addEventListener("keypress", event =>
       this.onPermissionKeyPress(event)
@@ -228,6 +243,9 @@ var gSitePermissionsManager = {
     document.l10n.setAttributes(permissionsText, l10n.description);
     if (l10n.disableLabel) {
       document.l10n.setAttributes(this._checkbox, l10n.disableLabel);
+    } else {
+      this._checkbox.hidden = true;
+      this._permissionsDisableDescription.hidden = true;
     }
     if (l10n.disableDescription) {
       document.l10n.setAttributes(
@@ -249,6 +267,9 @@ var gSitePermissionsManager = {
     // when it is disabled by an extension.
     this._defaultPermissionStatePrefName = "permissions.default." + this._type;
     this._watchPermissionPrefChange();
+    if (this._type == "desktop-notification") {
+      this._watchClosedDeliveryPrefs();
+    }
 
     this._loadPermissions();
     this.buildPermissionsList();
@@ -395,6 +416,48 @@ var gSitePermissionsManager = {
       Services.prefs.removeObserver(
         this._defaultPermissionStatePrefName,
         observer
+      );
+    });
+  },
+
+  /**
+   * Shows the closed-browser delivery checkbox only on Windows, where
+   * PushNotificationHelper is packaged, and where Nimbus has made the feature
+   * available. Keeps it in step with writes made elsewhere, such as from
+   * messaging, while the dialog is open.
+   */
+  _watchClosedDeliveryPrefs() {
+    if (AppConstants.platform != "win") {
+      return;
+    }
+    let updateVisibility = () => {
+      this._closedDeliveryBox.hidden = !Services.prefs.getBoolPref(
+        CLOSED_DELIVERY_AVAILABLE_PREF,
+        false
+      );
+    };
+    let updateChecked = () => {
+      this._closedDeliveryCheckbox.checked = Services.prefs.getBoolPref(
+        CLOSED_DELIVERY_ENABLED_PREF,
+        false
+      );
+    };
+    updateVisibility();
+    updateChecked();
+
+    Services.prefs.addObserver(
+      CLOSED_DELIVERY_AVAILABLE_PREF,
+      updateVisibility
+    );
+    Services.prefs.addObserver(CLOSED_DELIVERY_ENABLED_PREF, updateChecked);
+    window.addEventListener("unload", () => {
+      Services.prefs.removeObserver(
+        CLOSED_DELIVERY_AVAILABLE_PREF,
+        updateVisibility
+      );
+      Services.prefs.removeObserver(
+        CLOSED_DELIVERY_ENABLED_PREF,
+        updateChecked
       );
     });
   },
@@ -655,6 +718,19 @@ var gSitePermissionsManager = {
         this._defaultPermissionStatePrefName,
         SitePermissions.UNKNOWN
       );
+    }
+
+    if (
+      this._type == "desktop-notification" &&
+      !this._closedDeliveryBox.hidden
+    ) {
+      let { checked } = this._closedDeliveryCheckbox;
+      if (
+        checked !=
+        Services.prefs.getBoolPref(CLOSED_DELIVERY_ENABLED_PREF, false)
+      ) {
+        lazy.PushNotificationHelper.setEnabled(checked);
+      }
     }
   },
 

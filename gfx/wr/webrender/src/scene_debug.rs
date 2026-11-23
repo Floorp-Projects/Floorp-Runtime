@@ -16,9 +16,11 @@ use api::units::{DevicePixel, DeviceRect, LayoutPixel, LayoutRect};
 use crate::debug_colors;
 use crate::internal_types::FastHashSet;
 #[cfg(feature = "debugger")]
-use crate::prim_store::{PictureIndex, PrimitiveFrameScratch, PrimitiveInstanceIndex, PrimitiveKind};
+use crate::internal_types::FastHashMap;
 #[cfg(feature = "debugger")]
-use crate::render_backend::DataStores;
+use crate::prim_store::{PictureIndex, PrimitiveFrameScratch, PrimitiveKind};
+#[cfg(feature = "debugger")]
+use crate::render_backend::{DataStores, DlStores};
 #[cfg(feature = "debugger")]
 use crate::scene::{BuiltScene, SceneProperties};
 #[cfg(feature = "debugger")]
@@ -131,17 +133,24 @@ impl SceneDebugOverride {
 pub fn build_debug_tree(
     scene: &BuiltScene,
     data_stores: &DataStores,
+    dl_stores: &DlStores,
     spatial_tree: &SpatialTree,
     frame_scratch: &PrimitiveFrameScratch,
     scene_properties: &SceneProperties,
     device_rect: DeviceRect,
     scene_generation: u64,
 ) -> SceneDebugTree {
+    let mut draw_states = FastHashMap::default();
+    for draw in frame_scratch.draws() {
+        draw_states.entry(draw.prim_instance_index.0).or_insert(draw.state);
+    }
+
     let mut walker = TreeWalker {
         scene,
         data_stores,
+        dl_stores,
         spatial_tree,
-        frame_scratch,
+        draw_states,
         scene_properties,
         map_to_device: SpaceMapper::new(
             spatial_tree.root_reference_frame_index(),
@@ -168,8 +177,11 @@ pub fn build_debug_tree(
 struct TreeWalker<'a> {
     scene: &'a BuiltScene,
     data_stores: &'a DataStores,
+    dl_stores: &'a DlStores,
     spatial_tree: &'a SpatialTree,
-    frame_scratch: &'a PrimitiveFrameScratch,
+    /// The state of the first draw of each primitive instance drawn by the
+    /// last frame, keyed by instance index.
+    draw_states: FastHashMap<u32, DrawState>,
     scene_properties: &'a SceneProperties,
     map_to_device: SpaceMapper<LayoutPixel, DevicePixel>,
 }
@@ -177,11 +189,8 @@ struct TreeWalker<'a> {
 #[cfg(feature = "debugger")]
 impl<'a> TreeWalker<'a> {
     fn draw_state(&self, prim_index: usize) -> String {
-        if prim_index >= self.frame_scratch.instance_count() {
-            return "NotDrawn".into();
-        }
-        match self.frame_scratch.draw_for_instance(PrimitiveInstanceIndex(prim_index as u32)) {
-            Some(draw) => match draw.state {
+        match self.draw_states.get(&(prim_index as u32)) {
+            Some(state) => match state {
                 DrawState::Unset => "Unset".into(),
                 DrawState::Culled => "Culled".into(),
                 DrawState::PassThrough => "PassThrough".into(),
@@ -235,6 +244,7 @@ impl<'a> TreeWalker<'a> {
         spatial_node_index: SpatialNodeIndex,
     ) -> SceneDebugNode {
         let data_stores = self.data_stores;
+        let dl_stores = self.dl_stores;
         let prim = &self.scene.prim_instances[prim_index];
 
         let mut color = None;
@@ -245,22 +255,27 @@ impl<'a> TreeWalker<'a> {
                 Some(pic_index),
                 self.picture_children(pic_index),
             ),
-            PrimitiveKind::TextRun { data_handle } => {
-                let data = &data_stores.text_run[data_handle].kind;
-                color = Some(data.font.color.into());
-                ("TextRun", format!("{} glyphs", data.glyphs.len()), None, Vec::new())
+            PrimitiveKind::TextRun { handle } => {
+                let data = &dl_stores.text_runs[handle];
+                match data.kind {
+                    Some(ref run) => {
+                        color = Some(run.font.color.into());
+                        ("TextRun", format!("{} glyphs", run.glyphs.len()), None, Vec::new())
+                    }
+                    None => ("TextRun", "unresolved font".to_string(), None, Vec::new()),
+                }
             }
-            PrimitiveKind::Rectangle { data_handle } => {
-                let data = &data_stores.prim[data_handle];
+            PrimitiveKind::Rectangle { handle } => {
+                let data = &dl_stores.rectangles[handle];
                 color = Some(data.resolve(self.scene_properties));
                 ("Rectangle", String::new(), None, Vec::new())
             }
-            PrimitiveKind::Image { data_handle } => {
-                let data = &data_stores.image[data_handle];
+            PrimitiveKind::Image { handle } => {
+                let data = &dl_stores.images[handle];
                 ("Image", format!("{:?}", data.kind.key), None, Vec::new())
             }
-            PrimitiveKind::YuvImage { data_handle } => {
-                let data = &data_stores.yuv_image[data_handle];
+            PrimitiveKind::YuvImage { handle } => {
+                let data = &dl_stores.yuv_images[handle];
                 ("YuvImage", format!("{:?}", data.kind.format), None, Vec::new())
             }
             PrimitiveKind::LineDecoration { .. } => ("LineDecoration", String::new(), None, Vec::new()),
@@ -276,14 +291,14 @@ impl<'a> TreeWalker<'a> {
                 Some(pic_index),
                 Vec::new(),
             ),
-            PrimitiveKind::BoxShadow { data_handle } => {
-                let data = &data_stores.box_shadow[data_handle];
+            PrimitiveKind::BoxShadow { handle } => {
+                let data = &dl_stores.box_shadows[handle];
                 color = Some(data.kind.color);
                 ("BoxShadow", String::new(), None, Vec::new())
             }
         };
 
-        let local_rect = data_stores.prim_rect(prim);
+        let local_rect = data_stores.prim_rect(prim, dl_stores);
         let device_rect = self.device_rect(&local_rect, spatial_node_index);
 
         SceneDebugNode {

@@ -49,6 +49,9 @@ ChromeUtils.defineLazyGetter(lazy, "isRunningTests", () => {
   return false;
 });
 
+const REMOTE_ACTIVITY_DISABLED =
+  Services.env.get("MOZ_REMOTE_SETTINGS_DISABLED") === "1";
+
 // Overriding the server URL is normally disabled on Beta and Release channels,
 // except under some conditions.
 ChromeUtils.defineLazyGetter(lazy, "allowServerURL", () => {
@@ -119,6 +122,9 @@ export var Utils = {
   log,
 
   get shouldSkipRemoteActivity() {
+    if (REMOTE_ACTIVITY_DISABLED) {
+      return true;
+    }
     if (
       (lazy.isRunningTests || Cu.isInAutomation) &&
       this.SERVER_URL == "data:,#remote-settings-dummy/v1"
@@ -460,6 +466,21 @@ export var Utils = {
   },
 
   /**
+   * Compute the current server time from the response headers.
+   *
+   * @param {Headers} headers response headers
+   * @returns {number} server time in milliseconds
+   */
+  serverTimeMillis(headers) {
+    const serverTimeMillis = Date.parse(headers.get("Date"));
+    // Since the response is served via a CDN, the Date header value could have been cached.
+    const cacheAgeSeconds = headers.has("Age")
+      ? parseInt(headers.get("Age"), 10)
+      : 0;
+    return serverTimeMillis + cacheAgeSeconds * 1000;
+  },
+
+  /**
    * Fetch the list of remote collections and their timestamp.
    * ```
    *   {
@@ -540,12 +561,7 @@ export var Utils = {
 
     const { changes = [], timestamp } = payload;
 
-    let serverTimeMillis = Date.parse(response.headers.get("Date"));
-    // Since the response is served via a CDN, the Date header value could have been cached.
-    const cacheAgeSeconds = response.headers.has("Age")
-      ? parseInt(response.headers.get("Age"), 10)
-      : 0;
-    serverTimeMillis += cacheAgeSeconds * 1000;
+    const serverTimeMillis = Utils.serverTimeMillis(response.headers);
 
     // Age of data (time between publication and now).
     const ageSeconds = (serverTimeMillis - timestamp) / 1000;

@@ -30,7 +30,6 @@ XPIDL_SOURCES += [
     "nsISelectionController.idl",
     "nsISelectionDisplay.idl",
     "nsISelectionListener.idl",
-    "nsISlowScriptDebug.idl",
 ]
 
 XPIDL_MODULE = "dom"
@@ -226,6 +225,7 @@ EXPORTS.mozilla.dom += [
     "NodeInfoInlines.h",
     "NodeIterator.h",
     "NodeList.h",
+    "NodeOwnedObjectList.h",
     "ParentProcessMessageManager.h",
     "PlacesBookmark.h",
     "PlacesBookmarkAddition.h",
@@ -256,6 +256,7 @@ EXPORTS.mozilla.dom += [
     "PrefetchCandidates.h",
     "ProcessMessageManager.h",
     "ProfilerCounter.h",
+    "QuotaExceededError.h",
     "RadioGroupContainer.h",
     "Range.h",
     "RequestCallbackManager.h",
@@ -472,6 +473,7 @@ UNIFIED_SOURCES += [
     "PrefetchCandidates.cpp",
     "ProcessMessageManager.cpp",
     "ProfilerCounter.cpp",
+    "QuotaExceededError.cpp",
     "RadioGroupContainer.cpp",
     "Range.cpp",
     "RangeUtils.cpp",
@@ -578,7 +580,6 @@ MOZ_SRC_FILES += [
     "ContentAreaDropListener.sys.mjs",
     "IndexedDBHelper.sys.mjs",
     "LocationHelper.sys.mjs",
-    "SlowScriptDebug.sys.mjs",
 ]
 
 XPCOM_MANIFESTS += [
@@ -665,3 +666,38 @@ GeneratedFile(
         "/servo/components/style/properties/counted_unknown_properties.py",
     ],
 )
+
+SOURCE_HEADERS += [
+    "CharacterDataBufferGeneric.h",
+    "CharacterDataBufferGenericFwd.h",
+    "CharacterDataBufferImpl.h",
+    "InProcessBrowserChildMessageManager.h",
+    "nsAttrValueOrString.h",
+    "nsCCUncollectableMarker.h",
+    "nsContentAreaDragDrop.h",
+    "nsContentPolicy.h",
+    "nsDataDocumentContentPolicy.h",
+    "nsDOMCaretPosition.h",
+    "nsDOMWindowUtils.h",
+    "nsGlobalWindowCommands.h",
+    "nsHistory.h",
+    "nsISizeOfEventTarget.h",
+    "nsMimeTypeArray.h",
+    "nsNoDataProtocolContentPolicy.h",
+    "nsNodeSupportsWeakRefTearoff.h",
+    "nsObjectLoadingContent.h",
+    "nsOpenURIInFrameParams.h",
+    "nsPluginArray.h",
+    "nsQueryContentEventResult.h",
+    "nsScreen.h",
+    "nsSyncLoadService.h",
+    "nsWindowRoot.h",
+    "StorageAccessPermissionRequest.h",
+    "TextDirectiveCreator.h",
+    "TextDirectiveFinder.h",
+    "TextDirectiveUtil.h",
+    "ThirdPartyUtil.h",
+    "TimeoutExecutor.h",
+    "WindowDestroyedEvent.h",
+    "WindowNamedPropertiesHandler.h",
+]

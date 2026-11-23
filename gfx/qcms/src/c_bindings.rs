@@ -1,6 +1,9 @@
 #![allow(clippy::missing_safety_doc)]
 
-use std::{ptr::null_mut, slice};
+use std::{
+    ptr::{null, null_mut},
+    slice,
+};
 
 use libc::{fclose, fopen, fread, free, malloc, memset, FILE};
 
@@ -128,6 +131,41 @@ pub extern "C" fn qcms_profile_get_color_space(profile: &Profile) -> icColorSpac
 #[no_mangle]
 pub extern "C" fn qcms_profile_is_sRGB(profile: &Profile) -> bool {
     profile.is_sRGB()
+}
+
+/// Fills in the chromaticities of an RGB profile's colorants and white point.
+/// Returns false, leaving the outputs untouched, if they aren't available.
+#[no_mangle]
+pub extern "C" fn qcms_profile_get_primaries(
+    profile: &Profile,
+    primaries: &mut qcms_CIE_xyYTRIPLE,
+    white_point: &mut qcms_CIE_xyY,
+) -> bool {
+    match profile.colorant_chromaticities() {
+        Some((p, w)) => {
+            *primaries = p;
+            *white_point = w;
+            true
+        }
+        None => false,
+    }
+}
+
+/// Returns the profile's description as UTF-8 that is not NULL terminated and
+/// lives as long as the profile, storing its length in `len`. Returns null if
+/// the profile has no readable description.
+#[no_mangle]
+pub extern "C" fn qcms_profile_get_description(profile: &Profile, len: &mut usize) -> *const u8 {
+    match profile.description() {
+        Some(description) => {
+            *len = description.len();
+            description.as_ptr()
+        }
+        None => {
+            *len = 0;
+            null()
+        }
+    }
 }
 
 #[no_mangle]

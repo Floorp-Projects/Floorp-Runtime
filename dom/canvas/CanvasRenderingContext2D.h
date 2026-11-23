@@ -55,6 +55,7 @@ using CanvasImageSource =
     HTMLImageElementOrSVGImageElementOrHTMLCanvasElementOrHTMLVideoElementOrOffscreenCanvasOrImageBitmapOrVideoFrame;
 class ImageBitmap;
 class ImageData;
+struct ImageDataSettings;
 class UTF8StringOrCanvasGradientOrCanvasPattern;
 class OwningUTF8StringOrCanvasGradientOrCanvasPattern;
 class TextMetrics;
@@ -264,12 +265,14 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
     DrawImage(aImage, aSx, aSy, aSw, aSh, aDx, aDy, aDw, aDh, 6, aError);
   }
 
-  already_AddRefed<ImageData> CreateImageData(JSContext*, int32_t aSw,
-                                              int32_t aSh, ErrorResult&);
+  already_AddRefed<ImageData> CreateImageData(
+      JSContext*, int32_t aSw, int32_t aSh, const ImageDataSettings& aSettings,
+      ErrorResult&);
   already_AddRefed<ImageData> CreateImageData(JSContext*, ImageData&,
                                               ErrorResult&);
   already_AddRefed<ImageData> GetImageData(JSContext*, int32_t aSx, int32_t aSy,
                                            int32_t aSw, int32_t aSh,
+                                           const ImageDataSettings& aSettings,
                                            nsIPrincipal& aSubjectPrincipal,
                                            ErrorResult&);
   void PutImageData(ImageData&, int32_t aDx, int32_t aDy, ErrorResult&);
@@ -497,6 +500,8 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
   int32_t GetWidth() override { return GetSize().width; }
   int32_t GetHeight() override { return GetSize().height; }
 
+  PredefinedColorSpace GetColorSpace() const { return mColorSpace; }
+
   // nsICanvasRenderingContextInternal
   /**
    * Gets the pres shell from either the canvas element or the doc shell
@@ -543,8 +548,8 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
     Redraw(ToRect(aR));
     return NS_OK;
   }
-  NS_IMETHOD SetContextOptions(JSContext* aCx, JS::Handle<JS::Value> aOptions,
-                               ErrorResult& aRvForDictionaryInit) override;
+  NS_IMETHOD SetContextOptions(
+      const CanvasRenderingContextOptions& aOptions) override;
 
   /**
    * An abstract base class to be implemented by callers wanting to be notified
@@ -605,11 +610,13 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
       mozilla::CanvasUtils::ImageExtraction aExtractionBehavior,
       int32_t* out_format, gfx::IntSize* out_imageSize) override;
 
-  void OnShutdown();
+  void OnShutdown() override;
 
   bool IsContextLost() const { return mIsContextLost; }
-  void OnRemoteCanvasLost();
-  void OnRemoteCanvasRestored();
+  void OnRemoteCanvasLost() override;
+  void OnRemoteCanvasRestored() override;
+  void OnRemoteCanvasReset(
+      const nsTArray<layers::RemoteTextureOwnerId>& aOwnerIds) override;
 
   /**
    * Update CurrentState().filter with the filter description for
@@ -637,13 +644,15 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
 
   nsresult GetImageDataArray(JSContext* aCx, int32_t aX, int32_t aY,
                              uint32_t aWidth, uint32_t aHeight,
+                             PredefinedColorSpace aColorSpace,
                              nsIPrincipal& aSubjectPrincipal,
                              JSObject** aRetval);
 
   void PutImageData_explicit(int32_t aX, int32_t aY, ImageData&,
                              bool aHasDirtyRect, int32_t aDirtyX,
                              int32_t aDirtyY, int32_t aDirtyWidth,
-                             int32_t aDirtyHeight, ErrorResult&);
+                             int32_t aDirtyHeight,
+                             PredefinedColorSpace aColorSpace, ErrorResult&);
 
   bool CopyBufferProvider(layers::PersistentBufferProvider& aOld,
                           gfx::DrawTarget& aTarget, gfx::IntRect aCopyRect);
@@ -868,6 +877,9 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
   // Member vars
   int32_t mWidth, mHeight;
 
+  // Determines the context colorspace
+  PredefinedColorSpace mColorSpace;
+
   // This is true when the canvas is valid, but of zero size, this requires
   // specific behavior on some operations.
   bool mZero;
@@ -923,8 +935,6 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
   // Which context properties apply to an SVG when calling drawImage.
   CanvasContextProperties mContextProperties = CanvasContextProperties::None;
 
-  bool AddShutdownObserver();
-  void RemoveShutdownObserver();
   bool AlreadyShutDown() const { return mHasShutdown; }
 
   /**
@@ -1017,14 +1027,16 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
   }
 
   /**
-   * Calls UpdateFilter if the canvas's WriteOnly state has changed between the
-   * last call to UpdateFilter and now.
+   * Calls UpdateFilter if the filter description hasn't been built for the
+   * current filter chain yet, or if the canvas's WriteOnly state has changed
+   * between the last call to UpdateFilter and now.
    */
   const gfx::FilterDescription& EnsureUpdatedFilter() {
     bool isWriteOnly = IsWriteOnly() ||
                        (mCanvasElement && mCanvasElement->IsWriteOnly()) ||
                        (mOffscreenCanvas && mOffscreenCanvas->IsWriteOnly());
-    if (CurrentState().filterSourceGraphicTainted != isWriteOnly) {
+    if (!CurrentState().filterDescriptionUpToDate ||
+        CurrentState().filterSourceGraphicTainted != isWriteOnly) {
       // Do not flush here: this runs inside drawing operations that hold raw
       // references to mPath/state, and a flush can run script that resets the
       // context, leading to UAF. Flush already happened at SetFilter() time.
@@ -1171,6 +1183,8 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
     // We keep track of this to ensure that if this gets out of sync with the
     // tainted state of the canvas itself, we update our filters accordingly.
     bool filterSourceGraphicTainted = false;
+    // Whether |filter| has been built for |filterChain| by UpdateFilter().
+    bool filterDescriptionUpToDate = false;
     bool imageSmoothingEnabled = true;
 
     // Whether resolvedFontLang was an explicitly-specified lang or inferred.

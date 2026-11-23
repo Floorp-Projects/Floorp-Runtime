@@ -34,6 +34,9 @@ user_pref("security.remote_settings.intermediates.enabled", false);
 // all processes would run at low priority, which is not desirable, so we
 // disable the process priority manager entirely here.
 user_pref("dom.ipc.processPriorityManager.enabled", false);
+// xpcshell tests composite nothing, so a GPU process is only overhead, and on
+// macOS it can hang at shutdown.
+user_pref("layers.gpu-process.enabled", false);
 // Bug 455077 - Ensure we use sRGB as the output profile for test consistency.
 user_pref("gfx.color_management.force_srgb", true);
 user_pref("gfx.color_management.mode", 1);
@@ -58,22 +61,11 @@ user_pref("app.update.disabledForTesting", true);
 // Better stacks for errors.
 user_pref("javascript.options.asyncstack_capture_debuggee_only", false);
 
-// Disable writing to the ProfileDatastoreService by Nimbus in xpcshell tests.
-// TODO(bug 1967779): Require the ProfileDatastoreService by default and remove
-// this.
-// TODO(bug 2032586): Remove this pref.
-user_pref("nimbus.profilesdatastoreservice.enabled", false);
-
-// Disable reading from the ProfilesDatastoreService by Nimbus in xpcshell tests.
-// TODO(bug 1967779): Require the ProfileDatastoreService by default.
-// TODO(bug 2032586): Remove this pref.
-user_pref("nimbus.profilesdatastoreservice.read.enabled", false);
-
-// Disable syncing enrollments from other profiles in xpcshell tests.
-// TODO(bug 1967779): Require the ProfileDatastoreService by default.
-// TODO(bug 2032586): Remove this pref.
-user_pref("nimbus.profilesdatastoreservice.sync.enabled", false);
-
 // Turn off semantic history search as it triggers network connections to
 // download ML models.
 user_pref("places.semanticHistory.featureGate", false);
+
+// Disable Nimbus persistence in all xpcshell tests. Persistence requires the
+// ProfilesDatastoreService to be enabled, which is not initialized by default
+// in xpcshell tests.
+user_pref("nimbus.persistence.enabled", false);

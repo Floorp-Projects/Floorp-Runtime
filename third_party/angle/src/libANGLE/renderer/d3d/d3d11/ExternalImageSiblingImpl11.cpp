@@ -32,8 +32,8 @@ egl::Error ExternalImageSiblingImpl11::initialize(const egl::Display *display)
     ANGLE_TRY(mRenderer->getD3DTextureInfo(nullptr, static_cast<IUnknown *>(mBuffer), mAttribs,
                                            &mWidth, &mHeight, &mSamples, &mFormat, &angleFormat,
                                            &mArraySlice));
-    ID3D11Texture2D *texture =
-        d3d11::DynamicCastComObject<ID3D11Texture2D>(static_cast<IUnknown *>(mBuffer));
+    angle::ComPtr<ID3D11Texture2D> texture =
+        angle::DynamicCastComObject<ID3D11Texture2D>(static_cast<IUnknown *>(mBuffer));
     ASSERT(texture != nullptr);
 
     D3D11_TEXTURE2D_DESC textureDesc = {};
@@ -55,24 +55,31 @@ egl::Error ExternalImageSiblingImpl11::initialize(const egl::Display *display)
             return egl::Error(EGL_BAD_PARAMETER, err.str());
         }
 
-        mTexture.set(texture, d3d11::GetYUVPlaneFormat(textureDesc.Format, plane));
+        mTexture.set(std::move(texture), d3d11::GetYUVPlaneFormat(textureDesc.Format, plane));
+    }
+    else if (const d3d11::Format *packedYUVFormat = d3d11::GetPackedYUVFormat(textureDesc.Format))
+    {
+        // Sampled through the documented aliased view; see GetPackedYUVFormat.
+        mTexture.set(std::move(texture), *packedYUVFormat);
     }
     else
     {
-        // TextureHelper11 will release texture on destruction.
-        mTexture.set(texture, d3d11::Format::Get(angleFormat->glInternalFormat,
-                                                 mRenderer->getRenderer11DeviceCaps()));
+        mTexture.set(std::move(texture), d3d11::Format::Get(angleFormat->glInternalFormat,
+                                                            mRenderer->getRenderer11DeviceCaps()));
     }
 
-    IDXGIResource *resource = d3d11::DynamicCastComObject<IDXGIResource>(mTexture.get());
+    angle::ComPtr<IDXGIResource> resource =
+        angle::DynamicCastComObject<IDXGIResource>(mTexture.get());
     ASSERT(resource != nullptr);
     DXGI_USAGE resourceUsage = 0;
     resource->GetUsage(&resourceUsage);
-    SafeRelease(resource);
 
+    // Bind flags can claim render-target usage for formats without a renderable
+    // view (packed YUV has none); the format entry is the ground truth.
     mIsRenderable = (textureDesc.BindFlags & D3D11_BIND_RENDER_TARGET) &&
                     (resourceUsage & DXGI_USAGE_RENDER_TARGET_OUTPUT) &&
-                    !(resourceUsage & DXGI_USAGE_READ_ONLY);
+                    !(resourceUsage & DXGI_USAGE_READ_ONLY) &&
+                    (mTexture.getFormatSet().rtvFormat != DXGI_FORMAT_UNKNOWN);
 
     mIsTexturable = (textureDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE) &&
                     (resourceUsage & DXGI_USAGE_SHADER_INPUT);
@@ -120,7 +127,7 @@ size_t ExternalImageSiblingImpl11::getSamples() const
 angle::Result ExternalImageSiblingImpl11::getAttachmentRenderTarget(
     const gl::Context *context,
     GLenum binding,
-    const gl::OwnImageIndex &ownImageIndex,
+    const gl::ImageIndex &imageIndex,
     GLsizei samples,
     FramebufferAttachmentRenderTarget **rtOut)
 {
@@ -131,7 +138,7 @@ angle::Result ExternalImageSiblingImpl11::getAttachmentRenderTarget(
 
 angle::Result ExternalImageSiblingImpl11::initializeContents(const gl::Context *context,
                                                              GLenum binding,
-                                                             const gl::OwnImageIndex &ownImageIndex)
+                                                             const gl::ImageIndex &imageIndex)
 {
     UNREACHABLE();
     return angle::Result::Stop;

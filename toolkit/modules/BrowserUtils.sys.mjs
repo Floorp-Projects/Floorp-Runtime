@@ -83,6 +83,7 @@ ChromeUtils.defineLazyGetter(lazy, "CatManListenerManager", () => {
               return obj[method](...args);
             };
             fn._descriptiveName = value;
+            fn._module = module;
             return fn;
           } catch (ex) {
             console.error(
@@ -107,6 +108,86 @@ ChromeUtils.defineLazyGetter(lazy, "CatManListenerManager", () => {
   Services.obs.addObserver(CatManListenerManager, "xpcom-category-cleared");
   return CatManListenerManager;
 });
+
+// The module URI schemes that category entries declared in .manifest files
+// use, and the dotted identifier shape of their `object.method` consumers
+// and of error names. Entries registered at runtime, e.g. through the
+// experimental WebExtension API, can name an arbitrary URI or object, which
+// is reported as UNREPORTABLE_VALUE instead of being recorded as-is. The
+// file an error was created in is held to the same schemes: a local path
+// can contain the user's name and a moz-extension:// URI a per-profile UUID.
+// A URI must not contain whitespace, because script file names chain the
+// loading and loaded URIs, e.g. "resource://a.sys.mjs -> moz-extension://b"
+// (XPCJSRuntime.cpp) or "chrome://a.js line 7 > eval" (JSScript.cpp).
+const REPORTABLE_URI = /^(moz-src|resource|chrome):\/\/\S*$/;
+const REPORTABLE_IDENTIFIER = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
+const UNREPORTABLE_VALUE = "other";
+
+/**
+ * What the value a category consumer threw says about itself.
+ *
+ * @param {any} ex
+ *        The value the consumer threw.
+ * @returns {{name: string, fileName: string|undefined, lineNumber: number|undefined}}
+ *        `name` is a JS error or DOMException name such as "TypeError", the
+ *        `NS_ERROR_*` name if the consumer threw an XPCOM exception or a bare
+ *        nsresult, or "" for a thrown value that has neither. `fileName` and
+ *        `lineNumber` are where the error was created, from a JS error's
+ *        `fileName` or an XPCOM exception or DOMException's `filename`; each
+ *        is undefined if the thrown value does not carry it, and exceptions
+ *        report line 0 for an unknown line.
+ */
+function describeConsumerError(ex) {
+  let name;
+  if (DOMException.isInstance(ex)) {
+    name = ex.name;
+  } else if (ex instanceof Ci.nsIException) {
+    name = ChromeUtils.getXPCOMErrorName(ex.result);
+  } else if (typeof ex == "number") {
+    name = ChromeUtils.getXPCOMErrorName(ex);
+  } else {
+    name = typeof ex?.name == "string" ? ex.name : "";
+  }
+  let fileName = ex?.fileName ?? ex?.filename;
+  let lineNumber = ex?.lineNumber;
+  return {
+    name,
+    fileName: typeof fileName == "string" && fileName ? fileName : undefined,
+    lineNumber:
+      Number.isInteger(lineNumber) && lineNumber > 0 ? lineNumber : undefined,
+  };
+}
+
+/**
+ * Report a category consumer that threw to telemetry.
+ *
+ * @param {string} categoryName
+ *        The category the failing consumer is registered in.
+ * @param {Function} fn
+ *        The failing consumer's listener, as built by
+ *        CatManListenerManager.getListeners.
+ * @param {any} ex
+ *        The value the consumer threw.
+ */
+function reportCategoryConsumerError(categoryName, fn, ex) {
+  Glean.browserUtils.categoryConsumerResult.get(categoryName, "failure").add(1);
+  let reportableIdentifier = value =>
+    !value || REPORTABLE_IDENTIFIER.test(value) ? value : UNREPORTABLE_VALUE;
+  let { name, fileName, lineNumber } = describeConsumerError(ex);
+  if (!fileName || !REPORTABLE_URI.test(fileName)) {
+    fileName = fileName ? UNREPORTABLE_VALUE : undefined;
+    // A line is only meaningful alongside its file.
+    lineNumber = undefined;
+  }
+  Glean.browserUtils.categoryDispatchError.record({
+    category: categoryName,
+    module: REPORTABLE_URI.test(fn._module) ? fn._module : UNREPORTABLE_VALUE,
+    consumer: reportableIdentifier(fn._descriptiveName),
+    errorName: reportableIdentifier(name),
+    fileName,
+    lineNumber,
+  });
+}
 
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
@@ -741,10 +822,12 @@ export var BrowserUtils = {
    * @param {object} options
    * @param {string} options.categoryName
    *        What category's consumers to call.
-   * @param {boolean} [options.idleDispatch=false]
-   *        If set to true, call each consumer in an idle task. If jsGlobal is a
-   *        window that has closed by the time the idle task runs, the consumer
-   *        is dropped, so we don't initialize (and leak) a closing window.
+   * @param {boolean|Window} [options.idleDispatch=false]
+   *        If set, call each consumer in an idle task. If set to a window, the
+   *        tasks are queued with that window's requestIdleCallback, so that
+   *        pending tasks are dropped with the window instead of keeping it
+   *        alive, and a consumer is skipped if the window has closed by the time
+   *        its task runs, so we don't initialize (and leak) a closing window.
    * @param {string} [options.profilerMarker=""]
    *        If specified, will create a profiler marker with the provided
    *        identifier for each consumer.
@@ -776,11 +859,15 @@ export var BrowserUtils = {
       let startTime = profilerMarker ? ChromeUtils.now() : 0;
       try {
         await fn(jsGlobal, ...args);
+        Glean.browserUtils.categoryConsumerResult
+          .get(categoryName, "success")
+          .add(1);
       } catch (ex) {
         console.error(
           `Error in processing ${categoryName} for ${fn._descriptiveName}`
         );
         console.error(ex);
+        reportCategoryConsumerError(categoryName, fn, ex);
         try {
           await failureHandler?.(ex);
         } catch (nestedEx) {
@@ -807,6 +894,7 @@ export var BrowserUtils = {
     };
 
     let allTasks = [];
+    let idleWindow = idleDispatch === true ? null : idleDispatch;
 
     for (let listener of lazy.CatManListenerManager.getListeners(
       categoryName
@@ -814,15 +902,20 @@ export var BrowserUtils = {
       if (idleDispatch) {
         allTasks.push(
           new Promise(resolve => {
-            ChromeUtils.idleDispatch(() => {
+            let task = () => {
               // Drop the task if it targets a window that has closed in the
               // meantime, to avoid initializing (and leaking) a closing window.
-              if (jsGlobal?.closed) {
+              if (idleWindow?.closed) {
                 resolve();
                 return;
               }
               resolve(callSingleListener(listener));
-            });
+            };
+            if (idleWindow) {
+              idleWindow.requestIdleCallback(task);
+            } else {
+              ChromeUtils.idleDispatch(task);
+            }
           })
         );
       } else {

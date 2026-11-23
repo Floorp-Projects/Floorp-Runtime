@@ -18,8 +18,10 @@ UNIFIED_SOURCES += [
     "TestFontFallback.cpp",
     "TestFontOverlapPrevention.cpp",
     "TestGfxWidgets.cpp",
+    "TestImageAddressableSize.cpp",
     "TestMatrix.cpp",
     "TestMoz2D.cpp",
+    "TestNVImage.cpp",
     "TestPlanarYCbCrImage.cpp",
     "TestPoint.cpp",
     "TestPolygon.cpp",
@@ -48,6 +50,11 @@ if CONFIG["OS_TARGET"] == "Darwin":
     SOURCES += [
         "TestMacIOSurfaceHelpers.cpp",
         "TestNativeLayerCA.mm",
+    ]
+
+if CONFIG["OS_ARCH"] == "WINNT":
+    SOURCES += [
+        "TestRenderD3D11TextureHost.cpp",
     ]
 
 UNIFIED_SOURCES += [
@@ -89,3 +96,10 @@ LOCAL_INCLUDES += [
 ]
 
 FINAL_LIBRARY = "xul-gtest"
+
+SOURCE_HEADERS += [
+    "MockWidget.h",
+    "PolygonTestUtils.h",
+    "TextureHelper.h",
+    "YCbCrTestHelpers.h",
+]

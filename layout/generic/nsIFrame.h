@@ -75,6 +75,7 @@
 #include "nsFrameState.h"
 #include "nsIContent.h"
 #include "nsITheme.h"
+#include "nsPresArena.h"
 #include "nsPresContext.h"
 #include "nsQueryFrame.h"
 #include "nsStyleStruct.h"
@@ -585,18 +586,18 @@ static void ReleaseValue(T* aPropertyValue) {
 #define NS_DECL_FRAMEARENA_HELPERS(class)                                      \
   NS_DECL_QUERYFRAME_TARGET(class)                                             \
   static constexpr nsIFrame::ClassID kClassID = nsIFrame::ClassID::class##_id; \
-  void* operator new(size_t, mozilla::PresShell*) MOZ_MUST_OVERRIDE;           \
+  void* operator new(size_t) MOZ_MUST_OVERRIDE;                                \
   nsQueryFrame::FrameIID GetFrameId() const override MOZ_MUST_OVERRIDE {       \
     return nsQueryFrame::class##_id;                                           \
   }
 
-#define NS_IMPL_FRAMEARENA_HELPERS(class)                              \
-  void* class ::operator new(size_t sz, mozilla::PresShell * aShell) { \
-    return aShell->AllocateFrame(nsQueryFrame::class##_id, sz);        \
+#define NS_IMPL_FRAMEARENA_HELPERS(class)                               \
+  void* class ::operator new(size_t sz) {                               \
+    return mozilla::FrameArena::Allocate(nsQueryFrame::class##_id, sz); \
   }
 
-#define NS_DECL_ABSTRACT_FRAME(class)                                         \
-  void* operator new(size_t, mozilla::PresShell*) MOZ_MUST_OVERRIDE = delete; \
+#define NS_DECL_ABSTRACT_FRAME(class)                    \
+  void* operator new(size_t) MOZ_MUST_OVERRIDE = delete; \
   nsQueryFrame::FrameIID GetFrameId() const override MOZ_MUST_OVERRIDE = 0;
 
 //----------------------------------------------------------------------
@@ -802,7 +803,7 @@ class nsIFrame : public nsQueryFrame {
   virtual void Init(nsIContent* aContent, nsContainerFrame* aParent,
                     nsIFrame* aPrevInFlow);
 
-  void* operator new(size_t, mozilla::PresShell*) MOZ_MUST_OVERRIDE;
+  void* operator new(size_t) MOZ_MUST_OVERRIDE;
 
   using DestroyContext = mozilla::FrameDestroyContext;
 
@@ -866,9 +867,6 @@ class nsIFrame : public nsQueryFrame {
   void operator delete(void* aPtr, size_t sz);
 
  private:
-  // Left undefined; nsIFrame objects are never allocated from the heap.
-  void* operator new(size_t sz) noexcept(true);
-
   // Returns true if this frame has any kind of CSS animations.
   bool HasCSSAnimations();
 
@@ -1841,9 +1839,7 @@ class nsIFrame : public nsQueryFrame {
    * which return a baseline from GetBaseline which is not useful for
    * caret positioning.
    */
-  virtual nscoord GetCaretBaseline() const {
-    return GetLogicalBaseline(GetWritingMode());
-  }
+  virtual nscoord GetCaretBaseline() const;
 
   // Gets a caret baseline suitable for the frame if the frame doesn't have one.
   nscoord GetFontMetricsDerivedCaretBaseline() const;
@@ -4581,6 +4577,21 @@ class nsIFrame : public nsQueryFrame {
    */
   bool IsGeneratedContentFrame() const {
     return HasAnyStateBits(NS_FRAME_GENERATED_CONTENT);
+  }
+
+  /**
+   * Return a generated content root frame, i.e., a frame for a generated child
+   * of the first non-generated content ancestor.
+   */
+  const nsIFrame* GetGeneratedRootFrame() const;
+
+  /**
+   * Return a generated content root frame, i.e., a frame for a generated child
+   * of the first non-generated content ancestor.
+   */
+  nsIFrame* GetGeneratedRootFrame() {
+    return const_cast<nsIFrame*>(
+        const_cast<const nsIFrame*>(this)->GetGeneratedRootFrame());
   }
 
   /**

@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import mozilla.components.compose.base.text.Text
 import mozilla.components.compose.menu.data.MenuItem
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.MenuItemsGroup
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.store.MenuAction as MenuStoreAction
@@ -20,14 +21,14 @@ import mozilla.components.compose.menu.store.MenuState
 import mozilla.components.compose.menu.store.MenuStore
 import mozilla.components.lib.state.Middleware
 import org.junit.Test
-import org.mozilla.fenix.components.menu.FenixMenuItem.CustomizeReaderView
 import org.mozilla.fenix.components.menu.MenuBuilder
 import org.mozilla.fenix.components.menu.MenuHost
 import org.mozilla.fenix.components.menu.MenuItemEventRouter
 import org.mozilla.fenix.components.menu.MenuItemProvider
 import org.mozilla.fenix.components.menu.MenuItemsRegistry
-import org.mozilla.fenix.components.menu.MenuPresentationMode.Row
-import org.mozilla.fenix.components.menu.MenuSectionConfiguration
+import org.mozilla.fenix.components.menu.configuration.FenixMenuItem.CustomizeReaderView
+import org.mozilla.fenix.components.menu.configuration.MenuPresentationMode.Row
+import org.mozilla.fenix.components.menu.configuration.MenuSectionConfiguration
 import org.mozilla.fenix.components.menu.fake.FakeMenuHost
 import org.mozilla.fenix.components.menu.store.MenuAction
 
@@ -54,7 +55,7 @@ class MenuMiddlewareTest {
             val store = createStore(provider)
             testDispatcher.scheduler.advanceUntilIdle()
 
-            provider.itemFlow.value = null
+            provider.itemsFlow.value = emptyList()
             testDispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(emptyList(), store.state.menuGroups)
@@ -133,7 +134,7 @@ class MenuMiddlewareTest {
     }
 
     private class ReactingMenuItemProvider(private val reactingTo: MenuEvent?) : MenuItemProvider {
-        override val itemFlow = MutableStateFlow<MenuItem?>(readerViewItem)
+        override val itemsFlow = MutableStateFlow<List<MenuItem>>(listOf(readerViewItem))
 
         val events = mutableListOf<MenuEvent>()
 
@@ -149,7 +150,7 @@ class MenuMiddlewareTest {
 
         val readerViewItem =
             StandardMenuItem(
-                title = Text.String("Customize reader view"),
+                title = MenuItemTitle(Text.String("Customize reader view")),
                 onClickEvent = MenuAction.CustomizeReaderView,
             )
     }

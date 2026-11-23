@@ -110,7 +110,7 @@ UniquePtr<SurfaceFactory> SurfaceFactory::Create(
 
     case layers::TextureType::MacIOSurface:
 #ifdef XP_MACOSX
-      return MakeUnique<SurfaceFactory_IOSurface>(gl);
+      return std::make_unique<SurfaceFactory_IOSurface>(gl);
 #else
       break;
 #endif
@@ -120,15 +120,6 @@ UniquePtr<SurfaceFactory> SurfaceFactory::Create(
       if (gl.GetContextType() == GLContextType::EGL &&
           widget::DMABufDevice::IsDMABufWebGLEnabled()) {
         return SurfaceFactory_DMABUF::Create(gl);
-      }
-#endif
-      break;
-
-    case layers::TextureType::AndroidNativeWindow:
-#ifdef MOZ_WIDGET_ANDROID
-      MOZ_ASSERT(!gfx::gfxVars::UseWebRenderANGLE());
-      if (!gfx::gfxVars::UseWebRenderANGLE()) {
-        return MakeUnique<SurfaceFactory_SurfaceTexture>(gl);
       }
 #endif
       break;

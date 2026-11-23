@@ -169,7 +169,7 @@ jobs:
       expected-build-id: ${{ needs.mac.outputs.expected-build-id }}
       platform: Darwin
       arch: aarch64
-      runner: macos-14
+      runner: macos-15
 
   aggregate-runtime-manifest-v2:
     name: Aggregate Runtime Build Manifest v2

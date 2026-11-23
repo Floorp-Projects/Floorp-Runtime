@@ -232,6 +232,9 @@ add_task(async function test_ipprotection_events_on_toggle() {
  * Tests the excluded site state UI.
  */
 add_task(async function test_status_card_excluded() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.ipProtection.features.siteInclusions", false]],
+  });
   let sandbox = sinon.createSandbox();
   sandbox
     .stub(IPPSiteRuleManager, "getRule")
@@ -272,6 +275,54 @@ add_task(async function test_status_card_excluded() {
   Assert.ok(turnOffVPNButtonEl, "Button to turn off VPN should be present");
 
   await closePanel();
+  await cleanupStatusCardTest();
+  sandbox.restore();
+  await SpecialPowers.popPrefEnv();
+});
+
+/**
+ * Tests that an excluded site shows the connected state when site inclusions
+ * are enabled.
+ */
+add_task(async function test_status_card_excluded_site_inclusions_enabled() {
+  let sandbox = sinon.createSandbox();
+  sandbox
+    .stub(IPPSiteRuleManager, "getRule")
+    .returns(IPPPrincipalRules.EXCLUDED);
+
+  await setupStatusCardTest();
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.ipProtection.features.siteInclusions", true]],
+  });
+
+  let content = await openPanel({
+    location: mockLocation,
+    isProtectionEnabled: true,
+    bandwidthUsage: mockBandwidthUsage,
+  });
+
+  let statusBoxEl = content.statusCardEl.statusBoxEl;
+  Assert.ok(statusBoxEl, "Status box should be present");
+  await checkStatusBoxAriaLabel(statusBoxEl);
+
+  Assert.equal(
+    statusBoxEl.type,
+    "connected",
+    "Status box should have connected type"
+  );
+  Assert.equal(
+    statusBoxEl.headerL10nId,
+    "ipprotection-connection-status-connected-1",
+    "Status box should show the connected header"
+  );
+  Assert.equal(
+    content.statusCardEl.actionButtonEl.dataset.l10nId,
+    "ipprotection-button-turn-vpn-off-1",
+    "Button should use the regular turn off label"
+  );
+
+  await closePanel();
+  await SpecialPowers.popPrefEnv();
   await cleanupStatusCardTest();
   sandbox.restore();
 });
@@ -487,68 +538,6 @@ add_task(async function test_bandwidth_states() {
     await closePanel();
     await cleanupStatusCardTest();
   }
-});
-
-/**
- * Tests that the "new" badge is visible when showLocationButtonBadge is true.
- */
-add_task(async function test_location_button_badge_visible() {
-  await setupStatusCardTest();
-
-  let content = await openPanel({
-    location: mockLocation,
-    isProtectionEnabled: true,
-    bandwidthUsage: mockBandwidthUsage,
-    showLocationButtonBadge: true,
-  });
-
-  let statusCard = content.statusCardEl;
-  Assert.ok(statusCard, "ipprotection-status-card should be present");
-
-  let locationButton = statusCard.locationButtonEl;
-  Assert.ok(locationButton, "Location selection button should be present");
-
-  let badge = locationButton.querySelector("moz-badge[type='new']");
-  Assert.ok(
-    badge,
-    "Badge should be present when showLocationButtonBadge is true"
-  );
-  Assert.ok(
-    BrowserTestUtils.isVisible(badge),
-    "Badge should be visible when showLocationButtonBadge is true"
-  );
-
-  await closePanel();
-  await cleanupStatusCardTest();
-});
-
-/**
- * Tests that the "new" badge is absent when showLocationButtonBadge is false.
- */
-add_task(async function test_location_button_badge_hidden() {
-  await setupStatusCardTest();
-
-  let content = await openPanel({
-    location: mockLocation,
-    isProtectionEnabled: true,
-    bandwidthUsage: mockBandwidthUsage,
-    showLocationButtonBadge: false,
-  });
-
-  let statusCard = content.statusCardEl;
-  Assert.ok(statusCard, "ipprotection-status-card should be present");
-
-  let locationButton = statusCard.locationButtonEl;
-  Assert.ok(locationButton, "Location selection button should be present");
-
-  let badge = locationButton.querySelector("moz-badge[type='new']");
-  Assert.ok(
-    !badge,
-    "Badge should not be present when showLocationButtonBadge is false"
-  );
-
-  await closePanel();
-  await cleanupStatusCardTest();
 });
 
 /**

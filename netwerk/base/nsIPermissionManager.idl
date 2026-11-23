@@ -68,7 +68,9 @@ interface nsIPermissionManager : nsISupports
    * specified expiration time.
    *
    * EXPIRE_POLICY is a special expiration status. It is set when the permission
-   * is set by reading an enterprise policy. These permissions cannot be overridden.
+   * is set by reading an enterprise policy. These permissions cannot be
+   * overridden, and removeFromPrincipal ignores them. The policy engine removes
+   * them by calling addFromPrincipal with UNKNOWN_ACTION and EXPIRE_POLICY.
    */
   const uint32_t EXPIRE_NEVER = 0;
   const uint32_t EXPIRE_SESSION = 1;
@@ -106,6 +108,19 @@ interface nsIPermissionManager : nsISupports
    *               permissions to be matched.
    */
   Array<nsIPermission> getAllByTypes(in Array<ACString> types);
+
+  /**
+   * Get all custom permissions whose OriginAttributes match the given
+   * OriginAttributesPattern. Pattern fields the permission manager does not
+   * isolate by (see the permissions.isolateBy.* prefs) are ignored. Not
+   * available in the content process.
+   *
+   * @param patternAsJSON  an OriginAttributesPattern serialized as JSON.
+   * @param types  an array of case-sensitive ASCII strings, identifying the
+   *               permissions to be matched. If empty, all types match.
+   */
+  Array<nsIPermission> getAllForOriginAttributesPattern(
+      in AString patternAsJSON, in Array<ACString> types);
 
   /**
    * Get all custom permissions of a specific type and that were modified after

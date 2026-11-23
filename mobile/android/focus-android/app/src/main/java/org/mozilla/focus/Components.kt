@@ -44,6 +44,7 @@ import mozilla.components.feature.search.middleware.AdsTelemetryMiddleware
 import mozilla.components.feature.search.middleware.SearchMiddleware
 import mozilla.components.feature.search.region.RegionMiddleware
 import mozilla.components.feature.search.storage.SearchEngineSelectorConfig
+import mozilla.components.feature.search.telemetry.SerpTelemetryRepository
 import mozilla.components.feature.search.telemetry.ads.AdsTelemetry
 import mozilla.components.feature.search.telemetry.incontent.InContentTelemetry
 import mozilla.components.feature.session.SessionUseCases
@@ -72,6 +73,7 @@ import mozilla.components.support.remotesettings.DefaultRemoteSettingsSyncSchedu
 import mozilla.components.support.remotesettings.RemoteSettingsServer
 import mozilla.components.support.remotesettings.RemoteSettingsService
 import mozilla.components.support.remotesettings.into
+import mozilla.components.support.utils.BuildMetadata
 import mozilla.components.support.utils.DateTimeProvider
 import mozilla.components.support.utils.DefaultDateTimeProvider
 import mozilla.components.support.utils.DefaultDownloadFileUtils
@@ -143,6 +145,18 @@ class Components(
 
     val fileUploadsDirCleaner: FileUploadsDirCleaner by lazy {
         FileUploadsDirCleaner(applicationScope) { context.cacheDir }
+    }
+
+    /**
+     * Retained so that its [mozilla.appservices.remotesettings.RemoteSettingsClient] stays reachable for the lifetime
+     * of the process. application-services only holds a weak reference to each client and skips collections whose
+     * client has been collected, so a short-lived repository would opt `search-telemetry-v2` out of syncing entirely.
+     */
+    val serpTelemetryRepository by lazy {
+        SerpTelemetryRepository(
+            collectionName = GleanMetricsService.COLLECTION_NAME,
+            remoteSettingsService = remoteSettingsService,
+        )
     }
 
     val remoteSettingsSyncScheduler by lazy {
@@ -270,6 +284,8 @@ class Components(
 
     val customTabsUseCases: CustomTabsUseCases by lazy { CustomTabsUseCases(store, sessionUseCases.loadUrl) }
 
+    val buildMetadata: BuildMetadata by lazy { BuildMetadata.fromAssets(context.assets) }
+
     val crashReporter: CrashReporter by lazy { createCrashReporter(context) }
 
     val metrics: GleanMetricsService by lazy { GleanMetricsService(context) }
@@ -307,7 +323,7 @@ class Components(
     val appLinksInterceptor by lazy {
         AppLinksInterceptor(
             context,
-            launchInApp = {
+            launchInApp = { _ ->
                 context.settings.openLinksInExternalApp
             },
         )
@@ -407,7 +423,7 @@ private fun getLocaleTag(context: Context): String {
 
 /** Gets a [SearchEngineSelectorConfig] for the app and device. */
 private fun getSearchEngineSelectorConfig(context: Context): SearchEngineSelectorConfig? {
-    if (!context.settings.useRemoteSearchConfiguration) {
+    if (!context.settings.useRemoteSearchConfiguration && !context.settings.useSearchConfigV3) {
         return null
     }
 
@@ -437,6 +453,7 @@ private fun getSearchEngineSelectorConfig(context: Context): SearchEngineSelecto
         experiment = "",
         updateChannel = updateChannel,
         service = context.components.remoteSettingsService,
+        useSearchConfigV3 = context.settings.useSearchConfigV3,
     )
 }
 

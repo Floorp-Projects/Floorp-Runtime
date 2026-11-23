@@ -49,7 +49,8 @@ internal val WALLET_SCHEMES: Array<String> =
  * @property title The title of the dialog.
  * @property message The message body of the dialog.
  * @property showCheckbox Whether to show the "always open" checkbox.
- * @property sourceUrl The original URL that triggered the redirect.
+ * @property sourceUrl The URL of the page the redirect was requested from, or [destinationUrl] when the redirect was
+ *   not requested from a page.
  * @property destinationUrl The URL that will be opened in the external app.
  * @property firefoxUrl The URL that would be opened if staying in Firefox.
  * @property uniqueIdentifier The unique identifier for the app/intent.
@@ -79,15 +80,15 @@ data class RedirectDialogData(
  * @param sessionId The session ID to observe.
  * @param dialog Function to create custom redirect dialogs. Receives [RedirectDialogData]. If this is null, then
  *   [SimpleRedirectDialogFragment] is used.
- * @param launchInApp If {true} then launch app links in third party app(s). Default to false because of security
- *   concerns.
+ * @param launchInApp Given the request url, returns {true} if the link should be launched in a third party app. Default
+ *   returns false because of security concerns.
  * @param useCases These use cases allow for the detection of, and opening of links that other apps have registered to
  *   open.
  * @param failedToLaunchAction Action to perform when failing to launch in third party app.
  * @param loadUrlUseCase Used to load URL if user decides not to launch in third party app.
  * @param engineSupportedSchemes Set of URI schemes the engine supports.
  * @param mainDispatcher [CoroutineDispatcher] used for store observation
- * @param shouldPrompt If {true} then user should be prompted before launching app links.
+ * @param shouldPrompt Given the link url, returns {true} if the user should be prompted before launching app links.
  * @param alwaysOpenCheckboxAction Action to perform when user checked the always open checkbox in the prompt.
  */
 class AppLinksFeature(
@@ -96,13 +97,13 @@ class AppLinksFeature(
     private val fragmentManager: FragmentManager,
     private val sessionId: String? = null,
     private val dialog: ((data: RedirectDialogData) -> RedirectDialogFragment)? = null,
-    private val launchInApp: () -> Boolean = { false },
+    private val launchInApp: (String) -> Boolean = { false },
     private val useCases: AppLinksUseCases = AppLinksUseCases(context, launchInApp),
     private val failedToLaunchAction: (fallbackUrl: String?) -> Unit = {},
     private val loadUrlUseCase: SessionUseCases.DefaultLoadUrlUseCase? = null,
     private val engineSupportedSchemes: Set<String> = ENGINE_SUPPORTED_SCHEMES,
     private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main,
-    private val shouldPrompt: () -> Boolean = { true },
+    private val shouldPrompt: (url: String) -> Boolean = { true },
     private val alwaysOpenCheckboxAction: (() -> Unit)? = null,
 ) : LifecycleAwareFeature {
 
@@ -125,6 +126,7 @@ class AppLinksFeature(
                                 appIntent = it.appIntent,
                                 fallbackUrl = it.fallbackUrl,
                                 appName = it.appName,
+                                sourceUrl = it.sourceUrl,
                             )
                             store.dispatch(ContentAction.ConsumeAppIntentAction(sessionState.id))
                         }
@@ -147,13 +149,14 @@ class AppLinksFeature(
         appIntent: Intent?,
         fallbackUrl: String?,
         appName: String?,
+        sourceUrl: String?,
     ) {
         if (appIntent == null) return
 
         val isPrivate = sessionState.content.private
         val isWallet = isWalletLink(url, appIntent)
 
-        if (shouldBypassPrompt(isPrivate, isWallet)) {
+        if (shouldBypassPrompt(url, isPrivate, isWallet)) {
             openApp(appIntent)
             return
         }
@@ -171,15 +174,17 @@ class AppLinksFeature(
             isPrivate = isPrivate,
             isWallet = isWallet,
             fragmentManager = fragmentManager,
+            sourceUrl = sourceUrl ?: url,
         )
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun shouldBypassPrompt(
+        url: String,
         isPrivate: Boolean,
         isWallet: Boolean,
     ): Boolean {
-        val shouldShowPrompt = isPrivate || isWallet || shouldPrompt()
+        val shouldShowPrompt = isPrivate || isWallet || shouldPrompt(url)
         return !shouldShowPrompt
     }
 
@@ -244,13 +249,13 @@ class AppLinksFeature(
         isPrivate: Boolean,
         isWallet: Boolean,
         fragmentManager: FragmentManager?,
+        sourceUrl: String,
     ) {
         if (fragmentManager == null) {
             return
         }
 
         val packageName = appIntent.component?.packageName ?: appIntent.getPackage() ?: ""
-        val sourceUrl = sessionState.content.url
         getOrCreateDialog(isPrivate, isWallet, url, appName, packageName, sourceUrl, fallbackUrl)
             .apply {
                 onConfirmRedirect = { isCheckboxTicked ->

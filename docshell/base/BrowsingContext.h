@@ -14,6 +14,7 @@
 #include "mozilla/Maybe.h"
 #include "mozilla/RefPtr.h"
 #include "mozilla/Span.h"
+#include "mozilla/WeakPtr.h"
 
 #include "mozilla/dom/BindingDeclarations.h"
 #include "mozilla/dom/LocationBase.h"
@@ -70,6 +71,7 @@ class ContentParent;
 class Element;
 struct LoadingSessionHistoryInfo;
 class Location;
+class NavigationReactivationData;
 template <typename>
 struct Nullable;
 class PreviousSessionHistoryInfo;
@@ -290,6 +292,9 @@ struct EmbedderColorSchemes {
   /* DevTools override for forced-colors */                                    \
   FIELD(ForcedColorsOverride, dom::ForcedColorsOverride,                       \
         {.mTopOnly = true, .mCanSet = CanSet::Unrestricted})                   \
+  /* DevTools override for prefers-contrast */                                 \
+  FIELD(PrefersContrastOverride, dom::PrefersContrastOverride,                 \
+        {.mTopOnly = true, .mCanSet = CanSet::Unrestricted})                   \
   /* DevTools multiplier for animations playback rate */                       \
   FIELD(AnimationsPlayBackRateMultiplier, double,                              \
         {.mTopOnly = true, .mCanSet = CanSet::Unrestricted, .mDefault = [] {   \
@@ -376,7 +381,9 @@ struct EmbedderColorSchemes {
 // Trees of BrowsingContexts should only ever contain nodes of the
 // same BrowsingContext::Type. This is enforced by asserts in the
 // BrowsingContext::Create* methods.
-class BrowsingContext : public nsILoadContext, public nsWrapperCache {
+class BrowsingContext : public nsILoadContext,
+                        public nsWrapperCache,
+                        public SupportsWeakPtr {
   MOZ_DECL_SYNCED_CONTEXT(BrowsingContext, MOZ_EACH_BC_FIELD)
   NS_INLINE_DECL_STATIC_IID(NS_DOM_BROWSINGCONTEXT_IID)
 
@@ -981,6 +988,7 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
     // deserialized before other BrowsingContext in the BrowsingContextGroup
     // have been initialized.
     uint64_t mParentId = 0;
+    uint64_t mOpenerInnerWindowId = 0;
     already_AddRefed<WindowContext> GetParent();
     uint64_t GetOpenerId() const { return mFields.Get<IDX_OpenerId>(); }
     uint64_t GetBrowserId() const { return mFields.Get<IDX_BrowserId>(); }
@@ -1179,18 +1187,24 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
     return GetPrefersReducedMotionOverride();
   }
 
+  dom::PrefersContrastOverride PrefersContrastOverride() const {
+    return GetPrefersContrastOverride();
+  }
+
   double AnimationsPlayBackRateMultiplier() const {
     return Top()->GetAnimationsPlayBackRateMultiplier();
   }
 
   bool IsInBFCache() const;
   bool IsEnteringBFCache() const { return mIsEnteringBFCache; }
-  void DeactivateDocuments();
+  // aForUnload means that the old document unloads instead of entering BFCache.
+  void DeactivateDocuments(const SessionHistoryInfo* aPageSwapTargetInfo,
+                           NavigationType aNavigationType,
+                           bool aForUnload = false);
 
   MOZ_CAN_RUN_SCRIPT
   void ReactivateDocuments(
-      const Maybe<SessionHistoryInfo>& aReactivatedEntry,
-      const nsTArray<SessionHistoryInfo>& aNewSHEs,
+      const nsTArray<NavigationReactivationData>& aReactivationData,
       const Maybe<PreviousSessionHistoryInfo>& aPreviousEntryForActivation);
 
   MOZ_CAN_RUN_SCRIPT
@@ -1394,11 +1408,12 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
   void DidSet(FieldIndex<IDX_PrefersReducedMotionOverride>,
               dom::PrefersReducedMotionOverride aOldValue);
 
+  void DidSet(FieldIndex<IDX_PrefersContrastOverride>,
+              dom::PrefersContrastOverride aOldValue);
+
   void DidSet(FieldIndex<IDX_AnimationsPlayBackRateMultiplier>,
               double aOldValue);
 
-  template <typename Callback>
-  void WalkPresContexts(Callback&&);
   void PresContextAffectingFieldChanged();
 
   void DidSet(FieldIndex<IDX_LanguageOverride>, nsCString&& aOldValue);
@@ -1504,6 +1519,8 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
     }
   }
 
+  static void UnregisterBrowserId(BrowsingContext* aBrowsingContext);
+
   // Allow if the process attemping to set field is the same as the owning
   // process. Deprecated. New code that might use this should generally be moved
   // to WindowContext or be settable only by the parent process.
@@ -1530,6 +1547,10 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
 
   // Unique id identifying BrowsingContext
   const uint64_t mBrowsingContextId;
+
+  // The key under which this context was last added to the current top by
+  // BrowserId map.
+  Maybe<uint64_t> mCurrentTopBrowserIdKey;
 
   RefPtr<BrowsingContextGroup> mGroup;
   RefPtr<WindowContext> mParentWindow;

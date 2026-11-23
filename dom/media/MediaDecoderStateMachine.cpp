@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "AudioSegment.h"
@@ -2021,6 +2022,13 @@ class MediaDecoderStateMachine::AccurateSeekingState
                     MEDIA_PLAYBACK);
                 SLOG("OnSeekRejected wait promise resolved");
                 mWaitRequest.Complete();
+                // Reset the sought tracks in the reader again, as DoSeek() did,
+                // so that the retry does not find anything the reader started
+                // on them while waiting, such as recovery from a decoder error.
+                Reader()->ResetDecode(mSeekJob.mTarget->IsVideoOnly()
+                                          ? TrackSet(TrackInfo::kVideoTrack)
+                                          : TrackSet(TrackInfo::kAudioTrack,
+                                                     TrackInfo::kVideoTrack));
                 DemuxerSeek();
               },
               [this](const WaitForDataRejectValue& aRejection) {
@@ -3533,8 +3541,8 @@ already_AddRefed<MediaSink> MediaDecoderStateMachine::CreateAudioSink() {
 
   auto audioSinkCreator = [s = RefPtr<MediaDecoderStateMachine>(this), this]() {
     MOZ_ASSERT(OnTaskQueue());
-    UniquePtr<AudioSink> audioSink{new AudioSink(
-        mTaskQueue, mAudioQueue, Info().mAudio, mShouldResistFingerprinting)};
+    auto audioSink = std::make_unique<AudioSink>(
+        mTaskQueue, mAudioQueue, Info().mAudio, mShouldResistFingerprinting);
     mAudibleListener.DisconnectIfExists();
     mAudibleListener = audioSink->AudibleEvent().Connect(
         mTaskQueue, this, &MediaDecoderStateMachine::AudioAudibleChanged);
@@ -4264,7 +4272,7 @@ void MediaDecoderStateMachine::EnqueueFirstFrameLoadedEvent() {
   MediaDecoderEventVisibility visibility =
       firstFrameBeenLoaded ? MediaDecoderEventVisibility::Suppressed
                            : MediaDecoderEventVisibility::Observable;
-  mFirstFrameLoadedEvent.Notify(UniquePtr<MediaInfo>(new MediaInfo(Info())),
+  mFirstFrameLoadedEvent.Notify(std::make_unique<MediaInfo>(Info()),
                                 visibility);
 }
 

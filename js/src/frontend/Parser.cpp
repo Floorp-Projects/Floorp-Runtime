@@ -48,6 +48,7 @@
 #include "js/ErrorReport.h"           // JSErrorBase
 #include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
 #include "js/HashTable.h"
+#include "js/Prefs.h"        // JS::Prefs
 #include "js/RegExpFlags.h"  // JS::RegExpFlags
 #include "js/Stack.h"        // JS::NativeStackLimit
 #include "util/DifferentialTesting.h"
@@ -99,6 +100,22 @@ static bool StatementKindIsBraced(StatementKind kind) {
   return kind == StatementKind::Block || kind == StatementKind::Switch ||
          kind == StatementKind::Try || kind == StatementKind::Catch ||
          kind == StatementKind::Finally;
+}
+
+static bool GetInlinableNumber(ParseNode* node, double* initialValue) {
+  bool negate = false;
+
+  if (node->isKind(ParseNodeKind::NegExpr)) {
+    node = node->as<UnaryNode>().kid();
+    negate = true;
+  }
+  if (!node->isKind(ParseNodeKind::NumberExpr)) {
+    return false;
+  }
+
+  double literalValue = node->as<NumericLiteral>().value();
+  *initialValue = negate ? -literalValue : literalValue;
+  return true;
 }
 
 template <class ParseHandler, typename Unit>
@@ -8026,12 +8043,36 @@ bool GeneralParser<ParseHandler, Unit>::finishClassConstructor(
   bool hasPrivateBrand = classInitializedMembers.hasPrivateBrand();
   if (hasPrivateBrand || numMemberInitializers > 0) {
     // Now that we have full set of initializers, update the constructor.
+    bool hasInstanceDecorators = false;
+#ifdef ENABLE_DECORATORS
+    hasInstanceDecorators = classInitializedMembers.hasInstanceDecorators;
+#endif
+    // The names are only valid in this compilation: skip constructors that may
+    // be compiled later.
+    mozilla::Span<const InlinedField> inlinedFields;
+    if (!hasPrivateBrand && !hasInstanceDecorators &&
+        hasHeritage == HasHeritage::No && ctorbox->emitBytecode &&
+        classInitializedMembers.hasOnlyInlinableFields &&
+        !classInitializedMembers.inlinableFields.empty()) {
+      const auto& fields = classInitializedMembers.inlinableFields;
+      MOZ_ASSERT(fields.length() == classInitializedMembers.instanceFields);
+      InlinedField* copy =
+          this->alloc_.template newArrayUninitialized<InlinedField>(
+              fields.length());
+      if (!copy) {
+        js::ReportOutOfMemory(fc_);
+        return false;
+      }
+      std::copy(fields.begin(), fields.end(), copy);
+      inlinedFields = mozilla::Span(copy, fields.length());
+    }
     MemberInitializers initializers(
         hasPrivateBrand,
 #ifdef ENABLE_DECORATORS
         classInitializedMembers.hasInstanceDecorators,
 #endif
-        numMemberInitializers);
+        numMemberInitializers, !inlinedFields.IsEmpty());
+    ctorbox->setInlinedFields(inlinedFields);
     ctorbox->setMemberInitializers(initializers);
 
     // Field initialization need access to `this`.
@@ -8734,6 +8775,35 @@ GeneralParser<ParseHandler, Unit>::fieldInitializerOpt(
     handler_.checkAndSetIsDirectRHSAnonFunction(initializerExpr);
   } else {
     initializerExpr = MOZ_TRY(handler_.newRawUndefinedLiteral(propNamePos));
+  }
+
+  if constexpr (!std::is_same_v<ParseHandler, SyntaxParseHandler>) {
+    if (!isStatic && classInitializedMembers.hasOnlyInlinableFields &&
+        JS::Prefs::experimental_inline_simple_field_initializers()) {
+      // Computed names (`[expr] = 0;`) leave propAtom null. Index-like names
+      // need different bytecode than a plain InitProp.
+      uint32_t index;
+      bool isPrivate = propAtom && handler_.isPrivateName(propName);
+      bool isPlainName = propAtom && (isPrivate || !this->parserAtoms().isIndex(
+                                                       propAtom, &index));
+
+      double literalValue;
+      bool isInlinableNumber =
+          GetInlinableNumber(initializerExpr, &literalValue);
+      bool hasMaxInlinedFields =
+          classInitializedMembers.inlinableFields.length() >=
+          MemberInitializers::MaxInlinedFields;
+      if (isPlainName && isInlinableNumber && !hasMaxInlinedFields) {
+        if (!classInitializedMembers.inlinableFields.append(
+                InlinedField{propAtom, isPrivate, literalValue})) {
+          js::ReportOutOfMemory(fc_);
+          return errorResult();
+        }
+      } else {
+        classInitializedMembers.hasOnlyInlinableFields = false;
+        classInitializedMembers.inlinableFields.clearAndFree();
+      }
+    }
   }
 
   TokenPos wholeInitializerPos(propNamePos.begin, pos().end);
@@ -11383,8 +11453,7 @@ PerHandlerParser<ParseHandler>::stringLiteral() {
 template <class ParseHandler>
 typename ParseHandler::NodeResult
 PerHandlerParser<ParseHandler>::noSubstitutionTaggedTemplate() {
-  if (anyChars.hasInvalidTemplateEscape()) {
-    anyChars.clearInvalidTemplateEscape();
+  if (anyChars.currentToken().hasInvalidTemplateEscape()) {
     return handler_.newRawUndefinedLiteral(pos());
   }
 

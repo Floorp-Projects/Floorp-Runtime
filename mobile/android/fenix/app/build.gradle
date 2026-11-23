@@ -9,6 +9,7 @@ import static org.mozilla.conventions.BuildConfigKt.getBuildId
 plugins {
     id 'com.android.application'
     id 'org.mozilla.conventions.zip-test-reports'
+    id 'org.mozilla.android-test-keep-rules'
     id 'org.mozilla.nimbus-gradle-plugin'
     id 'ApkSizePlugin'
     id 'jacoco'
@@ -80,9 +81,11 @@ android {
     def releaseTemplate = {
         // We allow disabling optimization by passing `-PdisableOptimization` to gradle. This is used
         // in automation for UI testing non-debug builds.
-        shrinkResources = !project.hasProperty("disableOptimization")
+        def isUiTestBuildType = project.findProperty("testBuildType") == it.name
+        shrinkResources = !project.hasProperty("disableOptimization") && !isUiTestBuildType
         minifyEnabled = !project.hasProperty("disableOptimization")
         proguardFiles = [getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro']
+        testProguardFiles 'proguard-rules-android-test.pro'
         matchingFallbacks = ['release'] // Use on the "release" build type in dependencies (AARs)
 
         // Present in release builds.
@@ -197,6 +200,7 @@ android {
                 // is a band-aid solution and eventually we should try to find and fix the leaks
                 // instead. :)
                 forkEvery = 80
+                maxParallelForks = (project.findProperty("testForks") ?: "1").toInteger()
                 maxHeapSize = "3072m"
                 minHeapSize = "1024m"
             }
@@ -474,6 +478,7 @@ dependencies {
     implementation project(':components:compose-base')
     implementation project(':components:compose-browser-toolbar')
     implementation project(':components:compose-cfr')
+    implementation project(':components:compose-draggable')
     implementation project(':components:compose-menu')
     implementation project(':components:concept-awesomebar')
     implementation project(':components:concept-base')
@@ -572,6 +577,7 @@ dependencies {
     implementation project(':components:lib-push-firebase')
     implementation project(':components:lib-state')
     implementation project(':components:lib-accelerometer-sensormanager')
+    implementation project(':components:lib-installation-blockstore')
     implementation project(':components:lib-integrity-googleplay')
     implementation project(':components:lib-llm-mlpa')
     implementation project(':components:lib-shake')
@@ -607,6 +613,8 @@ dependencies {
     implementation libs.androidx.exifinterface
     implementation libs.androidx.fragment
     implementation libs.androidx.fragment.compose
+    implementation libs.androidx.glance.appwidget
+    implementation libs.androidx.glance.preview
     implementation libs.androidx.lifecycle.common
     implementation libs.androidx.lifecycle.livedata
     implementation libs.androidx.lifecycle.process
@@ -643,7 +651,15 @@ dependencies {
     ksp libs.androidx.room.compiler
 
     debugImplementation libs.androidx.compose.ui.tooling
+    debugImplementation libs.androidx.glance.appwidget.preview
     debugImplementation libs.leakcanary
+
+    // Declares androidx.activity.ComponentActivity in the app under test, which the host-less
+    // Compose rules launch. Only added when building a non-debug variant for UI tests, so that
+    // it never reaches a shipping build.
+    if (project.hasProperty("testBuildType") && project.property("testBuildType") != "debug") {
+        addProvider("${project.property('testBuildType')}Implementation", libs.androidx.compose.ui.test.manifest)
+    }
 
     // Exclude Mockito to prevent classpath conflicts with MockK in tests.
     testImplementation (project(':components:support-test')) {
@@ -653,6 +669,7 @@ dependencies {
     testImplementation project(':components:support-test-libstate')
     testImplementation testFixtures(project(':components:support-utils'))
     testImplementation testFixtures(project(':components:feature-tabgroups-storage'))
+    testImplementation testFixtures(project(':components:feature-tabdata-coordinator'))
 
     testImplementation ComponentsDependencies.mozilla_appservices_full_megazord_libsForTests
 

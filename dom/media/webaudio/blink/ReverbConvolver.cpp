@@ -28,6 +28,8 @@
 
 #include "ReverbConvolver.h"
 
+#include <memory>
+
 #include "ReverbConvolverStage.h"
 
 using namespace mozilla;
@@ -108,9 +110,9 @@ ReverbConvolver::ReverbConvolver(const float* impulseResponseData,
     // at the same time
     int renderPhase = convolverRenderPhase + stagePhase;
 
-    UniquePtr<ReverbConvolverStage> stage(new ReverbConvolverStage(
+    auto stage = std::make_unique<ReverbConvolverStage>(
         response, totalResponseLength, reverbTotalLatency, stageOffset,
-        stageSize, fftSize, renderPhase, &m_accumulationBuffer));
+        stageSize, fftSize, renderPhase, &m_accumulationBuffer);
 
     bool isBackgroundStage = false;
 

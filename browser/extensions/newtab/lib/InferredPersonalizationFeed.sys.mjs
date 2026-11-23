@@ -7,14 +7,19 @@
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
+  GeolocationUtils:
+    "moz-src:///browser/components/urlbar/private/GeolocationUtils.sys.mjs",
   PersistentCache: "resource://newtab/lib/PersistentCache.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
 });
 
 import { FeatureModel } from "resource://newtab/lib/InferredModel/FeatureModel.sys.mjs";
+import { LocationInterestGrid } from "resource://newtab/lib/InferredModel/LocationInterestGrid.sys.mjs";
 
 import {
   FORMAT,
+  CLICK_FEATURE,
+  SPECIAL_FEATURE_CLICK,
   AggregateResultKeys,
   DEFAULT_INFERRED_MODEL_DATA,
   DEFAULT_USER_CTR,
@@ -44,6 +49,10 @@ const PREF_DEBUG_OVERRIDE =
 
 const DEBUG_OVERRIDE_COARSE_VALUE_DICTIONARY_KEY =
   "debug_override_interest_values";
+
+// set once a client starts on location interests, so the sticky experiment
+// branch keeps using them after the client starts clicking
+const LOCATION_INIT_STARTED_KEY = "location_init_started";
 
 function timeMSToSeconds(timeMS) {
   return Math.round(timeMS / 1000);
@@ -118,9 +127,16 @@ export class InferredPersonalizationFeed {
   /** @type {Store} */
   store = null;
 
+  locationInterestVector = null;
+
+  locationPrivateInferredInterests = null;
+
+  shouldUseLocationVector = false;
+
   constructor() {
     this.loaded = false;
     this.cache = this.PersistentCache(CACHE_KEY, true);
+    this.locationInterestGrid = new LocationInterestGrid();
   }
 
   async reset() {
@@ -289,6 +305,120 @@ export class InferredPersonalizationFeed {
     return features;
   }
 
+  computeShouldUseLocationVector(
+    hasContentClicks,
+    coarseInferredInterests = {}
+  ) {
+    const hasTopicInterest = Object.entries(coarseInferredInterests).some(
+      ([name, value]) =>
+        name !== SPECIAL_FEATURE_CLICK &&
+        name !== "timeZoneOffset" &&
+        name !== "model_id" &&
+        Number.isFinite(value) &&
+        value > 0
+    );
+    return !(hasContentClicks && hasTopicInterest);
+  }
+
+  async updateLocationInterestVectors({
+    model,
+    modelId,
+    clickDataPerInterval,
+    indexSchema,
+    coarseInferredInterests,
+  }) {
+    this.locationInterestVector = null;
+    this.locationPrivateInferredInterests = null;
+    this.shouldUseLocationVector = false;
+    // experiment gate, we only ping for location if in experiment
+    const locationConfig =
+      this.store.getState().Prefs.values?.trainhopConfig?.locationInitInferred;
+    if (!locationConfig?.enabled) {
+      return;
+    }
+
+    // check if we are going to use the location vector before computing
+    // first check if they have ever clicked, then check if they have a non-zero coarse interest
+    // do not use location vector if at least 1 click and 1 nonzero topic value in interests
+    const hasContentClicks = clickDataPerInterval.some(interval =>
+      interval.some(
+        row =>
+          row[indexSchema[AggregateResultKeys.FEATURE]] === CLICK_FEATURE &&
+          row[indexSchema[AggregateResultKeys.VALUE]] > 0
+      )
+    );
+    this.shouldUseLocationVector = this.computeShouldUseLocationVector(
+      hasContentClicks,
+      coarseInferredInterests
+    );
+    // sticky: a client that started on location interests keeps them, even
+    // after clicking. clients that already had clicks never start on them.
+    if (locationConfig.sticky && this.cache) {
+      const started = await this.cache.get(LOCATION_INIT_STARTED_KEY);
+      if (this.shouldUseLocationVector && !started) {
+        await this.cache.set(LOCATION_INIT_STARTED_KEY, true);
+      } else if (!this.shouldUseLocationVector && started) {
+        this.shouldUseLocationVector = true;
+      }
+    }
+    if (!this.shouldUseLocationVector) {
+      // early return if we aren't going to use the vector anyway
+      return;
+    }
+
+    // lookup up the location in our topic grid
+    const locationTopics = await this.getLocationInterestTopics(
+      // the location ping to merino
+      await lazy.GeolocationUtils.geolocation().catch(error => {
+        console.error("Unable to retrieve geolocation", error);
+        return null;
+      })
+    );
+    if (!locationTopics) {
+      return;
+    }
+
+    // transform interests to the current model's format
+    this.locationInterestVector = model.transformLocationTopicsToInterestVector(
+      locationTopics,
+      coarseInferredInterests
+    );
+    if (!this.locationInterestVector) {
+      this.shouldUseLocationVector = false;
+      return;
+    }
+
+    // privatize the interest vector for DiffPriv
+    this.locationPrivateInferredInterests =
+      model.supportsCoarsePrivateInterests()
+        ? {
+            values: Object.values(
+              model.computePrivateLocationInterestVector(
+                this.locationInterestVector
+              )
+            ),
+            model_id: modelId,
+          }
+        : null;
+  }
+
+  async getLocationInterestTopics(geolocation) {
+    try {
+      if (!geolocation?.location) {
+        return null;
+      }
+      const { latitude, longitude, radius } = geolocation.location;
+      return await this.locationInterestGrid.lookup({
+        latitude,
+        longitude,
+        radius,
+      });
+    } catch (error) {
+      console.error("Unable to load location interest vector", error);
+      return null;
+    }
+  }
+
   /**
    * The model computes interest vectors based on aggregated click and impression data over specific time intervals. The feed queries the database for this aggregated data, which is grouped by feature and card format, for each time interval defined by the model. The schema object defines how to interpret the columns of the aggregated data results when computing the interest vectors.
    *
@@ -320,10 +450,8 @@ export class InferredPersonalizationFeed {
       applyPostProcessing: isClickModel,
     });
 
-    if (isClickModel) {
-      return interests;
-    }
-
+    /** @type {{[key: string]: any}} */
+    let result = interests;
     if (
       model.modelType === MODEL_TYPE.CLICK_IMP_PAIR ||
       model.modelType === MODEL_TYPE.CTR
@@ -349,7 +477,7 @@ export class InferredPersonalizationFeed {
               schema
             )
           : null;
-        const inferredInterests = model.computeCTRInterestVectors({
+        result = model.computeCTRInterestVectors({
           clicks: clickTotals,
           impressions: ivImpressions,
           model_id,
@@ -357,18 +485,33 @@ export class InferredPersonalizationFeed {
           debugOverrideCoarseValueDictionary,
           averageCtr,
         });
-        return inferredInterests;
+      } else {
+        const res = {
+          c: interests.inferredInterests,
+          i: ivImpressions,
+          model_id,
+        };
+        result = { inferredInterests: res };
       }
-      const res = {
-        c: interests.inferredInterests,
-        i: ivImpressions,
-        model_id,
-      };
-      return { inferredInterests: res };
+    } else if (!isClickModel) {
+      // unsupported modelType
+      result = {};
     }
 
-    // unsupported modelType
-    return {};
+    await this.updateLocationInterestVectors({
+      model,
+      modelId,
+      clickDataPerInterval: aggClickPerInterval,
+      indexSchema: schema,
+      coarseInferredInterests: result.coarseInferredInterests,
+    });
+    // location interests do not override actual interests so the location
+    // interests are never sent to BQ and only sent to merino
+    result.locationPrivateInferredInterests =
+      this.locationPrivateInferredInterests;
+    // boolean saying if this vector should be sent to merino
+    result.shouldUseLocationVector = this.shouldUseLocationVector;
+    return result;
   }
 
   async loadInterestVector(isStartup = false) {
@@ -429,6 +572,10 @@ export class InferredPersonalizationFeed {
         coarseInferredInterests: interest_vector.data.coarseInferredInterests,
         coarsePrivateInferredInterests:
           interest_vector.data.coarsePrivateInferredInterests,
+        locationPrivateInferredInterests:
+          interest_vector.data.locationPrivateInferredInterests ?? null,
+        shouldUseLocationVector:
+          interest_vector.data.shouldUseLocationVector ?? false,
         inferredTelemetrySettingsOverrides,
       },
       meta: {

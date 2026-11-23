@@ -332,11 +332,11 @@ class nsGlobalWindowOuter final : public mozilla::dom::EventTarget,
                                                     bool aIsFullscreen) final;
   MOZ_CAN_RUN_SCRIPT void FullscreenWillChange(bool aIsFullscreen) final;
   MOZ_CAN_RUN_SCRIPT void FinishFullscreenChange(bool aIsFullscreen) final;
-  void ForceFullScreenInWidget() final;
   void MacFullscreenMenubarOverlapChanged(
       mozilla::DesktopCoord aOverlapAmount) final;
-  bool SetWidgetFullscreen(FullscreenReason aReason, bool aIsFullscreen,
-                           nsIWidget* aWidget);
+  MOZ_CAN_RUN_SCRIPT bool TryMakeWidgetFullscreen(FullscreenReason aReason,
+                                                  bool aIsFullscreen,
+                                                  nsIWidget* aWidget);
   bool Fullscreen() const;
 
   // nsIInterfaceRequestor
@@ -955,8 +955,6 @@ class nsGlobalWindowOuter final : public mozilla::dom::EventTarget,
 
   nsresult GetInterfaceInternal(const nsIID& aIID, void** aSink);
 
-  void MaybeAllowStorageForOpenedWindow(nsIURI* aURI);
-
   void MaybeResetWindowName(Document* aNewDocument);
 
  public:
@@ -1003,7 +1001,6 @@ class nsGlobalWindowOuter final : public mozilla::dom::EventTarget,
   // in-process request.
   mozilla::Maybe<FullscreenRequest> mInProcessFullscreenRequest;
 
-  bool mForceFullScreenInWidget : 1;
   bool mIsClosed : 1;
   bool mInClose : 1;
   // mHavePendingClose means we've got a termination function set to

@@ -26,6 +26,8 @@ support-files = [
 
 ["test_aboutmemory7.xhtml"]
 
+["test_aboutmemory8.xhtml"]
+
 ["test_collectorLogAnalyzer.xhtml"]
 
 ["test_dumpGCAndCCLogsToFile.xhtml"]
@@ -33,8 +35,5 @@ support-files = [
 ["test_memoryReporters.xhtml"]
 
 ["test_memoryReporters2.xhtml"]
-skip-if = [
-  "standalone", # Bug 2026600
-]
 
 ["test_sqliteMultiReporter.xhtml"]

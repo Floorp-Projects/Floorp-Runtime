@@ -15,6 +15,8 @@ support-files = [
   "html_zstd-test-page.html",
   "html_image-tooltip-test-page.html",
   "html_cache-test-page.html",
+  "html_connection-allowlist-test-page.html",
+  "html_connection-allowlist-test-page.html^headers^",
   "html_cors-test-page.html",
   "html_csp-frame-test-page.html",
   "html_csp-resend-test-page.html",
@@ -130,6 +132,8 @@ support-files = [
 
 ["browser_net_block-before-network.js"]
 
+["browser_net_block-connection-allowlist.js"]
+
 ["browser_net_block-context.js"]
 
 ["browser_net_block-csp.js"]
@@ -141,15 +145,14 @@ support-files = [
 ["browser_net_block-pattern.js"]
 
 ["browser_net_block-serviceworker.js"]
-skip-if = [
-  "os == 'mac' && os_version == '14.70' && arch == 'x86_64'", # Bug 1980084
-]
 
 ["browser_net_block.js"]
 
 ["browser_net_brotli.js"]
 
 ["browser_net_cache_details.js"]
+
+["browser_net_cache_details_revalidated.js"]
 
 ["browser_net_cache_svg_size.js"]
 

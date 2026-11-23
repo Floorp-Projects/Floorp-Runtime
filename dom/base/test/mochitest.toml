@@ -263,6 +263,8 @@ skip-if = [
 
 ["test_anonymousContent_api.html"]
 
+["test_anonymousContent_id_table.html"]
+
 ["test_anonymousContent_append_after_reflow.html"]
 
 ["test_anonymousContent_canvas.html"]
@@ -411,9 +413,6 @@ skip-if = [
 ["test_explicit_user_agent.html"]
 
 ["test_find.html"]
-skip-if = [
-  "os == 'win' && opt && standalone", # Bug 2026600
-]
 
 ["test_find_bug1601118.html"]
 
@@ -542,8 +541,6 @@ skip-if = [
   "headless",
   "os == 'linux' && os_version == '22.04' && arch == 'x86_64' && display == 'wayland'",
   "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11'",
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64'",
-  "os == 'mac' && os_version == '14.70' && arch == 'x86_64'", # Bug 1929448
   "os == 'mac' && os_version == '15.30' && arch == 'aarch64'", # Bug 2019401
 ]
 
@@ -659,12 +656,7 @@ support-files = ["file_selection_change_null_presshell.html"]
 ["test_setInterval_from_start.html"]
 
 ["test_setInterval_uncatchable_exception.html"]
-skip-if = [
-  "asan",
-  "ccov",
-  "opt",
-  "tsan",
-]
+run-if = ["debug"]
 
 ["test_setTimeoutWith0.html"]
 
@@ -712,8 +704,6 @@ skip-if = [
 
 ["test_suppressed_microtasks.html"]
 skip-if = [
-  "asan",
-  "debug",
   "os == 'android'", # The test needs to run reasonably fast.
 ]
 

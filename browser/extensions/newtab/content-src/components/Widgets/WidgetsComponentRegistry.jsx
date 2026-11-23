@@ -13,6 +13,10 @@ import { Crossword } from "./Crossword/Crossword";
 import { Stocks } from "./Stocks/Stocks";
 import { PictureOfTheDay } from "./PictureOfTheDay/PictureOfTheDay";
 import { RecentSearches } from "./RecentSearches/RecentSearches";
+import { Horoscopes } from "./Horoscopes/Horoscopes";
+import { Travel } from "./Travel/Travel";
+import { Solitaire } from "./Solitaire/Solitaire";
+import { FramedWidgetCard } from "./FramedWidgetCard";
 import { WIDGET_REGISTRY, resolveWidgetSize } from "common/WidgetsRegistry.mjs";
 
 const weatherEntry = WIDGET_REGISTRY.find(w => w.id === "weather");
@@ -47,8 +51,18 @@ export const WIDGET_ROW_COMPONENTS = {
   stocks: Stocks,
   pictureOfTheDay: PictureOfTheDay,
   recentSearches: RecentSearches,
+  horoscopes: Horoscopes,
+  travel: Travel,
+  solitaire: Solitaire,
 };
 
 export const WIDGET_SIDEBAR_COMPONENTS = {
   weather: WeatherSidebarWidget,
+  privacy: Privacy,
+};
+
+// Cards for WIDGET_REGISTRY entries without a row component, by their `card`.
+// Entries without one use MozWidgetCard.
+export const WIDGET_CARD_COMPONENTS = {
+  FramedWidgetCard,
 };

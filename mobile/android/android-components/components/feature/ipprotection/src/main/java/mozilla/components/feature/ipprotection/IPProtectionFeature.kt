@@ -22,13 +22,13 @@ import mozilla.components.ExperimentalAndroidComponentsApi
 import mozilla.components.concept.engine.Engine
 import mozilla.components.concept.engine.ipprotection.IPProtectionDelegate
 import mozilla.components.concept.engine.ipprotection.IPProtectionHandler
+import mozilla.components.concept.engine.ipprotection.ProxyState
 import mozilla.components.concept.engine.ipprotection.ServiceState
-import mozilla.components.feature.ipprotection.IPProtectionFxaAuthFlow.Companion.SCOPE_IPPROTECTION
 import mozilla.components.feature.ipprotection.auth.IPProtectionAuthProvider
+import mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow.Companion.SCOPE_IPPROTECTION
 import mozilla.components.feature.ipprotection.store.ActivationOperation
 import mozilla.components.feature.ipprotection.store.IPProtectionAction
 import mozilla.components.feature.ipprotection.store.IPProtectionStore
-import mozilla.components.feature.ipprotection.store.InternalAction
 import mozilla.components.feature.ipprotection.store.state.AccountStatus
 import mozilla.components.feature.ipprotection.store.state.EligibilityStatus
 import mozilla.components.feature.ipprotection.store.state.LocationListUpdateState
@@ -43,7 +43,9 @@ import mozilla.components.support.base.log.logger.Logger
  * Feature that coordinates the IP protection proxy service. It observes [IPProtectionStore] for eligibility and account
  * state changes, registers with the [Engine] and forwards activate/deactivate requests back to the [Engine].
  *
- * See [IPProtectionFxaAuthFlow] and [IPProtectionStorageSynchronizer] helpers that complement this feature.
+ * See [mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow] and
+ * [mozilla.components.feature.ipprotection.storage.IPProtectionStorageSynchronizer] helpers that complement this
+ * feature.
  *
  * Call [initialize] once at startup to begin observing. The feature manages its own lifecycle internally and does not
  * need to be stopped.
@@ -140,7 +142,9 @@ class IPProtectionFeature(
                             handler?.notifyAccountStatus(true)
                             handler?.enroll { enrollInfo ->
                                 store.dispatch(
-                                    InternalAction.FinishingEnrollment(success = enrollInfo.isEnrolledAndEntitled)
+                                    IPProtectionAction.AccountAction.FinishingEnrollment(
+                                        success = enrollInfo.isEnrolledAndEntitled
+                                    )
                                 )
                             }
                         }
@@ -176,7 +180,7 @@ class IPProtectionFeature(
                 .collect {
                     handler?.updateCountryList { error ->
                         if (error != null) {
-                            store.dispatch(IPProtectionAction.LocationUpdateFailed(error))
+                            store.dispatch(IPProtectionAction.LocationAction.LocationUpdateFailed(error))
                         }
                     }
                 }
@@ -188,12 +192,38 @@ class IPProtectionFeature(
             handler =
                 engine.registerIPProtectionDelegate(
                     object : IPProtectionDelegate {
-                        override fun onStateChanged(info: IPProtectionHandler.StateInfo) {
-                            store.dispatch(IPProtectionAction.EngineStateChanged(info))
+                        override fun onServiceStateChanged(serviceState: ServiceState) {
+                            store.dispatch(IPProtectionAction.ServiceAction.ServiceStateChanged(serviceState))
+                        }
+
+                        override fun onProxyStateChanged(
+                            proxyState: ProxyState,
+                            lastError: String?,
+                        ) {
+                            store.dispatch(
+                                IPProtectionAction.ProxyAction.ProxyStateChanged(
+                                    proxyState = proxyState,
+                                    lastError = lastError,
+                                )
+                            )
+                        }
+
+                        override fun onUsageChanged(
+                            remaining: Long,
+                            max: Long,
+                            resetTime: String?,
+                        ) {
+                            store.dispatch(
+                                IPProtectionAction.UsageAction.UsageChanged(
+                                    remaining = remaining,
+                                    max = max,
+                                    resetTime = resetTime,
+                                )
+                            )
                         }
 
                         override fun onCountryListChanged(countries: List<IPProtectionHandler.Country>) {
-                            store.dispatch(IPProtectionAction.CountryListChanged(countries))
+                            store.dispatch(IPProtectionAction.LocationAction.CountryListChanged(countries))
                         }
                     }
                 )
@@ -214,7 +244,9 @@ class IPProtectionFeature(
                                         e,
                                     )
                                     store.dispatch(
-                                        IPProtectionAction.AccountStateChanged(AccountStatus.NeedsAuthorization)
+                                        IPProtectionAction.AccountAction.AccountStateChanged(
+                                            AccountStatus.NeedsAuthorization
+                                        )
                                     )
                                     onComplete(null)
                                 }
@@ -266,14 +298,21 @@ class IPProtectionFeature(
         when (request) {
             is PendingActivationRequest.Activate -> {
                 when {
-                    error == null -> store.dispatch(IPProtectionAction.ActivationRequestCompleted(request))
-                    request.isLocationSwitch -> store.dispatch(IPProtectionAction.LocationSwitchFailed(error))
-                    else -> store.dispatch(IPProtectionAction.ToggleFailed(ActivationOperation.Activate, error))
+                    error == null ->
+                        store.dispatch(IPProtectionAction.ActivationAction.ActivationRequestCompleted(request))
+                    request.isLocationSwitch ->
+                        store.dispatch(IPProtectionAction.LocationAction.LocationSwitchFailed(error))
+                    else ->
+                        store.dispatch(
+                            IPProtectionAction.ActivationAction.ToggleFailed(ActivationOperation.Activate, error)
+                        )
                 }
             }
             is PendingActivationRequest.Deactivate -> {
                 if (error != null) {
-                    store.dispatch(IPProtectionAction.ToggleFailed(ActivationOperation.Deactivate, error))
+                    store.dispatch(
+                        IPProtectionAction.ActivationAction.ToggleFailed(ActivationOperation.Deactivate, error)
+                    )
                 }
             }
         }

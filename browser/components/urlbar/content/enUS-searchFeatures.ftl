@@ -184,14 +184,6 @@ firefox-suggest-onboarding-main-reject-option-description-3 = Leave the default 
 firefox-suggest-onboarding-main-submit-button = Save preferences
 firefox-suggest-onboarding-main-skip-link = Not now
 
-urlbar-firefox-suggest-contextual-opt-in-title-1 =
-  Find the best of the web, faster
-urlbar-firefox-suggest-contextual-opt-in-description-3 =
-  We’re building a better search experience. When you share search query data with { -vendor-short-name }, we can create more relevant suggestions from { -brand-short-name } and our partners.
-  <a data-l10n-name="learn-more-link">Learn more</a>
-urlbar-firefox-suggest-contextual-opt-in-allow = Allow suggestions
-urlbar-firefox-suggest-contextual-opt-in-dismiss = Not now
-
 ## Local search mode indicator labels in the urlbar
 
 urlbar-search-mode-bookmarks-en = Bookmarks
@@ -343,3 +335,24 @@ urlbar-result-dismissal-acknowledgment-sports = Thanks for your feedback. You wo
 # This a11y label is read by screen readers when an item in the row is selected.
 urlbar-result-aria-group-sports =
   .aria-label = Sports suggestions
+
+## These strings are used for temporal search suggestions in the urlbar.
+## Temporal search suggestions are curated searches related to the time of year,
+## like a holiday, shown when the urlbar is focused.
+
+# A label shown above temporal search suggestions.
+urlbar-group-temporal-seasonal =
+  .label = Seasonal searches
+
+# This string is shown in the result menu.
+urlbar-result-menu-dont-show-temporal-seasonal = Don’t show seasonal searches
+  .accesskey = D
+
+# A message that replaces a result when the user dismisses temporal search
+# suggestions.
+urlbar-temporal-seasonal-dismissal-acknowledgment = Thanks for your feedback. You won’t see seasonal searches anymore.
+
+# A checkbox in the address bar settings that controls whether seasonal search
+# suggestions are shown.
+addressbar-locbar-suggest-temporal-seasonal-option =
+  .label = Seasonal search suggestions

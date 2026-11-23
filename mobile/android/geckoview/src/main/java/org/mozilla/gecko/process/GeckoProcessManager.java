@@ -20,7 +20,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.mozilla.gecko.GeckoAppShell;
-import org.mozilla.gecko.GeckoNetworkManager;
 import org.mozilla.gecko.GeckoThread;
 import org.mozilla.gecko.IGeckoEditableChild;
 import org.mozilla.gecko.IGeckoEditableParent;
@@ -30,7 +29,6 @@ import org.mozilla.gecko.gfx.ISurfaceAllocator;
 import org.mozilla.gecko.gfx.RemoteSurfaceAllocator;
 import org.mozilla.gecko.mozglue.JNIObject;
 import org.mozilla.gecko.process.ServiceAllocator.PriorityLevel;
-import org.mozilla.gecko.util.ThreadUtils;
 import org.mozilla.gecko.util.XPCOMEventTarget;
 import org.mozilla.geckoview.GeckoResult;
 
@@ -47,6 +45,7 @@ public final class GeckoProcessManager {
 
   private boolean mIsolatedProcess = false;
   private boolean mAppZygote = false;
+  private volatile boolean mIsolatedGmp = false;
 
   public static GeckoProcessManager getInstance() {
     return INSTANCE;
@@ -420,54 +419,6 @@ public final class GeckoProcessManager {
     }
   }
 
-  private static final class SocketProcessConnection extends NonContentConnection {
-    private boolean mIsForeground = true;
-    private boolean mIsNetworkUp = true;
-
-    public SocketProcessConnection(@NonNull final ServiceAllocator allocator, final int childId) {
-      super(allocator, GeckoProcessType.SOCKET, childId);
-      GeckoProcessManager.INSTANCE.mConnections.enableNetworkNotifications();
-    }
-
-    public void onNetworkStateChange(final boolean isNetworkUp) {
-      mIsNetworkUp = isNetworkUp;
-      prioritize();
-    }
-
-    @Override
-    protected void onAppForeground() {
-      mIsForeground = true;
-      prioritize();
-    }
-
-    @Override
-    protected void onAppBackground() {
-      mIsForeground = false;
-      prioritize();
-    }
-
-    private static final PriorityLevel[][] sPriorityStates = initPriorityStates();
-
-    private static PriorityLevel[][] initPriorityStates() {
-      final PriorityLevel[][] states = new PriorityLevel[2][2];
-      // Background, no network
-      states[0][0] = PriorityLevel.IDLE;
-      // Background, network
-      states[0][1] = PriorityLevel.BACKGROUND;
-      // Foreground, no network
-      states[1][0] = PriorityLevel.IDLE;
-      // Foreground, network
-      states[1][1] = PriorityLevel.FOREGROUND;
-      return states;
-    }
-
-    private void prioritize() {
-      final PriorityLevel nextPriority =
-          sPriorityStates[mIsForeground ? 1 : 0][mIsNetworkUp ? 1 : 0];
-      setPriorityLevel(nextPriority);
-    }
-  }
-
   private static final class ContentConnection extends ChildConnection {
 
     public ContentConnection(
@@ -500,7 +451,6 @@ public final class GeckoProcessManager {
     private final ArrayDeque<ContentConnection> mNonStartedContentConnections;
     // Allocator for service IDs
     private final ServiceAllocator mServiceAllocator;
-    private boolean mIsObservingNetwork = false;
 
     public ConnectionManager() {
       mNonContentConnections = new ArrayMap<GeckoProcessType, NonContentConnection>();
@@ -518,28 +468,8 @@ public final class GeckoProcessManager {
       }
     }
 
-    private void enableNetworkNotifications() {
-      if (mIsObservingNetwork) {
-        return;
-      }
-
-      mIsObservingNetwork = true;
-
-      // Ensure that GeckoNetworkManager is monitoring network events so that we can
-      // prioritize the socket process.
-      ThreadUtils.runOnUiThread(
-          () -> {
-            GeckoNetworkManager.getInstance().enableNotifications();
-          });
-
-      observeNetworkNotifications();
-    }
-
     @WrapForJNI(dispatchTo = "gecko")
     private static native void attachTo(ConnectionManager instance);
-
-    @WrapForJNI(dispatchTo = "gecko")
-    private native void observeNetworkNotifications();
 
     @WrapForJNI(calledFrom = "gecko")
     private void onBackground() {
@@ -549,11 +479,6 @@ public final class GeckoProcessManager {
     @WrapForJNI(calledFrom = "gecko")
     private void onForeground() {
       XPCOMEventTarget.runOnLauncherThread(() -> onAppForegroundInternal());
-    }
-
-    @WrapForJNI(calledFrom = "gecko")
-    private void onNetworkStateChange(final boolean isUp) {
-      XPCOMEventTarget.runOnLauncherThread(() -> onNetworkStateChangeInternal(isUp));
     }
 
     @Override
@@ -573,18 +498,6 @@ public final class GeckoProcessManager {
       for (final NonContentConnection conn : mNonContentConnections.values()) {
         conn.onAppForeground();
       }
-    }
-
-    private void onNetworkStateChangeInternal(final boolean isUp) {
-      XPCOMEventTarget.assertOnLauncherThread();
-
-      final SocketProcessConnection conn =
-          (SocketProcessConnection) mNonContentConnections.get(GeckoProcessType.SOCKET);
-      if (conn == null) {
-        return;
-      }
-
-      conn.onNetworkStateChange(isUp);
     }
 
     private void removeContentConnection(@NonNull final ChildConnection conn) {
@@ -705,9 +618,7 @@ public final class GeckoProcessManager {
 
       NonContentConnection connection = mNonContentConnections.get(type);
       if (connection == null) {
-        if (type == GeckoProcessType.SOCKET) {
-          connection = new SocketProcessConnection(mServiceAllocator, childId);
-        } else if (type == GeckoProcessType.GPU) {
+        if (type == GeckoProcessType.GPU) {
           connection = new GpuProcessConnection(mServiceAllocator, childId);
         } else {
           connection = new NonContentConnection(mServiceAllocator, type, childId);
@@ -795,6 +706,17 @@ public final class GeckoProcessManager {
   /** true if app Zygote preloading is enabled. */
   public boolean isAppZygoteEnabled() {
     return mAppZygote;
+  }
+
+  /** Sets whether the GMP plugin service runs on isolated process. */
+  @WrapForJNI(calledFrom = "any")
+  private static void setIsolatedGmpEnabled(final boolean enabled) {
+    INSTANCE.mIsolatedGmp = enabled;
+  }
+
+  /** true if the GMP plugin service runs on isolated process. */
+  public boolean isIsolatedGmpEnabled() {
+    return mIsolatedGmp;
   }
 
   public void crashChild(@NonNull final Selector selector) {

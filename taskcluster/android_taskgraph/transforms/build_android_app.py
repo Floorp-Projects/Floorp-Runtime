@@ -209,22 +209,41 @@ def add_sbom(config, tasks):
             f":app:writeRuntimeDependencies{variant[0].upper()}{variant[1:]}"
         )
         sbom = "/builds/worker/workspace/obj-build/sbom.json"
-        run.setdefault("post-gradlew", []).append([
-            "/builds/worker/checkouts/gecko/mach",
-            "sbom",
-            "--product-name",
-            "Fenix",
-            "--gradle-runtime-dependencies",
-            "/builds/worker/workspace/obj-build/gradle/build/mobile/android/fenix/"
-            f"app/sbom/{variant}-runtime-dependencies.json",
-            "-o",
-            sbom,
+        tooling_sbom = "/builds/worker/workspace/obj-build/sbom-build-tooling.json"
+        run.setdefault("post-gradlew", []).extend([
+            [
+                "/builds/worker/checkouts/gecko/mach",
+                "sbom",
+                "--product-name",
+                "Fenix",
+                "--gradle-runtime-dependencies",
+                "/builds/worker/workspace/obj-build/gradle/build/mobile/android/fenix/"
+                f"app/sbom/{variant}-runtime-dependencies.json",
+                "-o",
+                sbom,
+            ],
+            [
+                "/builds/worker/checkouts/gecko/mach",
+                "sbom",
+                "--product-name",
+                "Fenix",
+                "--build-tooling",
+                "-o",
+                tooling_sbom,
+            ],
         ])
-        task.setdefault("worker", {}).setdefault("artifacts", []).append({
-            "type": "file",
-            "name": "public/build/sbom.json",
-            "path": sbom,
-        })
+        task.setdefault("worker", {}).setdefault("artifacts", []).extend([
+            {
+                "type": "file",
+                "name": "public/build/sbom.json",
+                "path": sbom,
+            },
+            {
+                "type": "file",
+                "name": "public/build/sbom-build-tooling.json",
+                "path": tooling_sbom,
+            },
+        ])
         yield task
 
 
@@ -355,5 +374,15 @@ def add_artifacts(config, tasks):
                 ),
             })
             task["attributes"]["aab"] = artifact_template["name"]
+
+        artifacts.append({
+            "type": "file",
+            "name": "public/build/mapping.txt",
+            "path": (
+                "/builds/worker/workspace/obj-build/gradle/build/mobile/android/"
+                f"{source_project_name}/app/outputs/mapping/"
+                f"{variant_config['name']}/mapping.txt"
+            ),
+        })
 
         yield task

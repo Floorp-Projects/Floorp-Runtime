@@ -727,7 +727,7 @@ SurfaceFromElementResult ImageBitmap::SurfaceFrom(uint32_t aSurfaceFlags) {
 
   IntSize imageSize(mData->GetSize());
   IntRect imageRect(IntPoint(0, 0), imageSize);
-  bool hasCropRect = mPictureRect.IsEqualEdges(imageRect);
+  bool hasCropRect = !mPictureRect.IsEqualEdges(imageRect);
 
   bool wantExactSize =
       bool(aSurfaceFlags & nsLayoutUtils::SFE_EXACT_SIZE_SURFACE);
@@ -971,7 +971,7 @@ UniquePtr<ImageBitmapCloneData> ImageBitmap::ToCloneData() const {
     return nullptr;
   }
 
-  auto result = MakeUnique<ImageBitmapCloneData>();
+  auto result = std::make_unique<ImageBitmapCloneData>();
   result->mPictureRect = mPictureRect;
   result->mAlphaType = mAlphaType;
   result->mSurface = std::move(dataSurface);

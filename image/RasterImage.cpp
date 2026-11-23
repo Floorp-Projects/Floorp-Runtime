@@ -601,16 +601,16 @@ RasterImage::GetFrameAtSize(const IntSize& aSize, uint32_t aWhichFrame,
 }
 
 NS_IMETHODIMP_(bool)
-RasterImage::IsImageContainerAvailable(WindowRenderer* aRenderer,
-                                       uint32_t aFlags) {
+RasterImage::IsImageContainerAvailable(WindowRenderer* /*aRenderer*/,
+                                       uint32_t /*aFlags*/) {
   return LoadHasSize();
 }
 
 NS_IMETHODIMP_(ImgDrawResult)
 RasterImage::GetImageProvider(WindowRenderer* aRenderer,
                               const gfx::IntSize& aSize,
-                              const SVGImageContext& aSVGContext,
-                              const Maybe<ImageIntRegion>& aRegion,
+                              const SVGImageContext& /*aSVGContext*/,
+                              const Maybe<ImageIntRegion>& /*aRegion*/,
                               uint32_t aFlags,
                               WebRenderImageProvider** aProvider) {
   MOZ_ASSERT(NS_IsMainThread());
@@ -722,7 +722,8 @@ bool RasterImage::SetMetadata(const ImageMetadata& aMetadata,
   if (LoadHasSize() && aMetadata.HasAnimation() && !mAnimationState) {
     // We're becoming animated, so initialize animation stuff.
     mAnimationState.emplace(mAnimationMode);
-    mFrameAnimator = MakeUnique<FrameAnimator>(this, mSize.ToUnknownSize());
+    mFrameAnimator =
+        std::make_unique<FrameAnimator>(this, mSize.ToUnknownSize());
 
     if (!StaticPrefs::image_mem_animated_discardable_AtStartup()) {
       // We don't support discarding animated images (See bug 414259).
@@ -1144,16 +1145,15 @@ LookupResult RasterImage::RequestDecodeForSizeInternal(
 static bool LaunchDecodingTask(IDecodingTask* aTask, RasterImage* aImage,
                                uint32_t aFlags, bool aHaveSourceData) {
   if (aHaveSourceData) {
-    nsCString uri(aImage->GetURIString());
-
     // If we have all the data, we can sync decode if requested.
     if (aFlags & imgIContainer::FLAG_SYNC_DECODE) {
-      DecodePool::Singleton()->SyncRunIfPossible(aTask, uri);
+      DecodePool::Singleton()->SyncRunIfPossible(aTask, aImage->GetURI());
       return true;
     }
 
     if (aFlags & imgIContainer::FLAG_SYNC_DECODE_IF_FAST) {
-      return DecodePool::Singleton()->SyncRunIfPreferred(aTask, uri);
+      return DecodePool::Singleton()->SyncRunIfPreferred(aTask,
+                                                         aImage->GetURI());
     }
   }
 
@@ -1598,7 +1598,7 @@ void RasterImage::NotifyProgress(
     const OrientedIntRect& aInvalidRect /* = OrientedIntRect() */,
     const Maybe<uint32_t>& aFrameCount /* = Nothing() */,
     DecoderFlags aDecoderFlags /* = DefaultDecoderFlags() */,
-    SurfaceFlags aSurfaceFlags /* = DefaultSurfaceFlags() */) {
+    SurfaceFlags /*aSurfaceFlags*/ /* = DefaultSurfaceFlags() */) {
   MOZ_ASSERT(NS_IsMainThread());
 
   // Ensure that we stay alive long enough to finish notifying.
@@ -1772,7 +1772,7 @@ void RasterImage::PropagateUseCounters(dom::Document*) {
 }
 
 IntSize RasterImage::OptimalImageSizeForDest(const gfxSize& aDest,
-                                             uint32_t aWhichFrame,
+                                             uint32_t /*aWhichFrame*/,
                                              SamplingFilter aSamplingFilter,
                                              uint32_t aFlags) {
   MOZ_ASSERT(aDest.width >= 0 || ceil(aDest.width) <= INT32_MAX ||

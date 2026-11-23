@@ -118,9 +118,9 @@ class nsAHttpTransaction : public nsSupportsWeakReference {
   virtual void SetProxyConnectFailed() = 0;
 
   // called to retrieve the request headers of the transaction. Returns a
-  // const pointer so that the transaction's immutable snapshot of the
-  // request head (see nsHttpTransaction::AsyncRead) cannot be mutated by
-  // callers. Internal state mutations must go through the owning transaction.
+  // const pointer so that callers cannot mutate it. nsHttpTransaction does not
+  // snapshot the request head: this points at the request head of the
+  // channel, which nsHttpRequestHead protects with its own lock.
   virtual const nsHttpRequestHead* RequestHead() = 0;
 
   // determine the number of real http/1.x transactions on this
@@ -152,6 +152,10 @@ class nsAHttpTransaction : public nsSupportsWeakReference {
   // its IO functions all the time.
   virtual bool IsNullTransaction() { return false; }
   virtual NullHttpTransaction* QueryNullTransaction() { return nullptr; }
+
+  // True only for the speculative transaction Happy Eyeballs uses to drive an
+  // outer proxy connection; lets StartSpdy defer wildcard/reset handling to it.
+  virtual bool IsHappyEyeballsTransaction() { return false; }
 
   // If we used rtti this would be the result of doing
   // dynamic_cast<nsHttpTransaction *>(this).. i.e. it can be nullptr for
@@ -260,6 +264,9 @@ class nsAHttpTransaction : public nsSupportsWeakReference {
 
   virtual void InvokeCallback() {}
   virtual bool IsForFallback() { return false; }
+  // The transaction validating an alt-svc mapping, which must reach the
+  // alternate rather than fall back to the origin.
+  virtual bool IsAltSvcValidation() { return false; }
 };
 
 #define NS_DECL_NSAHTTPTRANSACTION                                             \

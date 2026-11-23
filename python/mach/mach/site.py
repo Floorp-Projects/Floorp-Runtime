@@ -8,6 +8,7 @@
 import ast
 import enum
 import functools
+import glob
 import os
 import platform
 import shutil
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import textwrap
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,12 +25,14 @@ from typing import Callable, Optional
 
 from mozfile import json
 from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
 
 from mach.filelock import FileLock, Timeout
 from mach.requirements import (
     MachEnvRequirements,
     UnexpectedFlexibleRequirementException,
 )
+from mach.util import resource_marker
 
 
 class SiteLockTimeout(Exception):
@@ -395,6 +399,7 @@ class MachSiteManager:
                 self._pthfile_lines(environment),
                 self._requirements,
                 self._metadata,
+                self._topsrcdir,
             )
 
     def ensure(self, *, force=False):
@@ -682,13 +687,14 @@ class CommandSiteManager:
                     self._log(
                         f"Creating the '{self._site_name}' site at {self.virtualenv_root}"
                     )
-                    _create_venv_with_pthfile(
-                        self._virtualenv,
-                        self._pthfile_lines(),
-                        self._populate_virtualenv,
-                        self._requirements,
-                        self._metadata,
-                    )
+                    with resource_marker("Mach", f"create {self._site_name} site"):
+                        _create_venv_with_pthfile(
+                            self._virtualenv,
+                            self._pthfile_lines(),
+                            self._populate_virtualenv,
+                            self._requirements,
+                            self._metadata,
+                        )
         except Timeout:
             raise SiteLockTimeout(lock_file, self._site_name, timeout)
 
@@ -939,6 +945,7 @@ class CommandSiteManager:
             pthfile_lines,
             self._requirements,
             self._metadata,
+            self._topsrcdir,
         )
 
 
@@ -1030,7 +1037,7 @@ class PythonVirtualenv:
 
         return dirs
 
-    def pip_install_with_constraints(self, pip_args):
+    def pip_install_with_constraints(self, pip_args, excludes=()):
         """Create a pip constraints file or existing packages
 
         When pip installing an incompatible package, pip will follow through with
@@ -1044,7 +1051,11 @@ class PythonVirtualenv:
         Note: pip_args is expected to contain either the requested package or
               requirements file.
         """
-        existing_packages = self._resolve_installed_packages()
+        existing_packages = {
+            name: version
+            for name, version in self._resolve_installed_packages().items()
+            if name not in excludes
+        }
 
         if existing_packages:
             with tempfile.TemporaryDirectory() as tempdir:
@@ -1085,15 +1096,19 @@ class PythonVirtualenv:
         # self.python_path. However, this seems more risk than it's worth.
 
         try:
-            install_result = subprocess.run(  # noqa PLW1510
-                pip_command(
-                    python_executable=self.python_path,
-                    subcommand="install",
-                    args=pip_install_args,
-                ),
-                check=kwargs.pop("check", True),
-                **kwargs,
-            )
+            with resource_marker(
+                "uv pip install" if use_uv() else "pip install",
+                " ".join(pip_install_args),
+            ):
+                install_result = subprocess.run(  # noqa PLW1510
+                    pip_command(
+                        python_executable=self.python_path,
+                        subcommand="install",
+                        args=pip_install_args,
+                    ),
+                    check=kwargs.pop("check", True),
+                    **kwargs,
+                )
         except subprocess.CalledProcessError as cpe:
             if not self._quiet:
                 # We print the stdout/stderr on a failed install here so that we don't
@@ -1149,7 +1164,7 @@ class RequirementsValidationResult:
     def from_packages(cls, packages, requirements):
         result = cls()
         for pkg in requirements.pypi_requirements:
-            installed_version = packages.get(pkg.requirement.name)
+            installed_version = packages.get(canonicalize_name(pkg.requirement.name))
             if not installed_version or not pkg.requirement.specifier.contains(
                 installed_version
             ):
@@ -1158,7 +1173,7 @@ class RequirementsValidationResult:
                 result.provides_any_package = True
 
         for pkg in requirements.pypi_optional_requirements:
-            installed_version = packages.get(pkg.requirement.name)
+            installed_version = packages.get(canonicalize_name(pkg.requirement.name))
             if installed_version and not pkg.requirement.specifier.contains(
                 installed_version
             ):
@@ -1315,19 +1330,30 @@ def resolve_requirements(topsrcdir, site_name):
 
 def _resolve_installed_packages(python_executable):
     result = subprocess.run(
-        pip_command(
-            python_executable=python_executable,
-            subcommand="list",
-            args=["--format", "json"],
-            non_uv_args=["--disable-pip-version-check"],
-        ),
+        [
+            python_executable,
+            "-c",
+            textwrap.dedent(
+                """
+                import importlib.metadata, json
+                print(json.dumps([
+                    [d.metadata["Name"], d.version]
+                    for d in importlib.metadata.distributions()
+                    if d.metadata["Name"]
+                ]))
+                """
+            ),
+        ],
         text=True,
         capture_output=True,
         check=True,
     )
 
-    installed_packages = json.loads(result.stdout)
-    return {package["name"]: package["version"] for package in installed_packages}
+    packages = {}
+    for name, version in json.loads(result.stdout):
+        # Keep the first copy found on sys.path, since that is the one Python imports.
+        packages.setdefault(canonicalize_name(name), version)
+    return packages
 
 
 def _ensure_python_exe(python_exe_root: Path):
@@ -1486,6 +1512,20 @@ def _deprioritize_venv_packages(virtualenv, populate_virtualenv):
     ]
 
 
+def _remove_virtualenv(virtualenv_root):
+    if os.path.exists(virtualenv_root):
+        # Moving first keeps the venv intact on failure. On Windows, loaded DLLs
+        # block deleting the moved copy, but not moving it.
+        old_dir = tempfile.mkdtemp(
+            prefix=f"{os.path.basename(virtualenv_root)}.old-",
+            dir=os.path.dirname(virtualenv_root),
+        )
+        os.rename(virtualenv_root, os.path.join(old_dir, "venv"))
+
+    for old_dir in glob.glob(f"{glob.escape(virtualenv_root)}.old-*"):
+        shutil.rmtree(old_dir, ignore_errors=True)
+
+
 def _create_venv_with_pthfile(
     target_venv,
     pthfile_lines,
@@ -1494,8 +1534,7 @@ def _create_venv_with_pthfile(
     metadata,
 ):
     virtualenv_root = target_venv.prefix
-    if os.path.exists(virtualenv_root):
-        shutil.rmtree(virtualenv_root)
+    _remove_virtualenv(virtualenv_root)
 
     os.makedirs(virtualenv_root)
     metadata.write(is_finalized=False)
@@ -1550,7 +1589,13 @@ def _create_venv_with_pthfile(
             requirements_list = [
                 str(req.requirement) for req in requirements.pypi_requirements
             ]
-            target_venv.pip_install(requirements_list)
+            target_venv.pip_install_with_constraints(
+                requirements_list,
+                excludes={
+                    canonicalize_name(req.requirement.name)
+                    for req in requirements.pypi_requirements
+                },
+            )
         target_venv.install_optional_packages(requirements.pypi_optional_requirements)
 
     metadata.write(is_finalized=True)
@@ -1561,6 +1606,7 @@ def _is_venv_up_to_date(
     expected_pthfile_lines,
     requirements,
     expected_metadata,
+    topsrcdir,
 ):
     if not os.path.exists(target_venv.prefix):
         return SiteUpToDateResult(False, f'"{target_venv.prefix}" does not exist')
@@ -1574,7 +1620,15 @@ def _is_venv_up_to_date(
 
     # Modifications to any of the requirements manifest files mean the virtualenv should be rebuilt:
     metadata_mtime = os.path.getmtime(metadata_file)
-    for dep_file in requirements.requirements_paths:
+    dep_files = [
+        *requirements.requirements_paths,
+        __file__,
+        os.path.join(os.path.dirname(__file__), "requirements.py"),
+    ]
+    uv_lock = os.path.join(topsrcdir, "third_party", "python", "uv.lock")
+    if os.path.exists(uv_lock):
+        dep_files.append(uv_lock)
+    for dep_file in dep_files:
         if os.path.getmtime(dep_file) > metadata_mtime:
             return SiteUpToDateResult(
                 False, f'"{dep_file}" has changed since the virtualenv was created'

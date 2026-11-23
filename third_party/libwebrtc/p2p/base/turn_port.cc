@@ -21,8 +21,8 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/memory/memory.h"
-#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "api/candidate.h"
 #include "api/local_network_access_permission.h"
@@ -362,8 +362,8 @@ void TurnPort::PrepareAddress() {
   }
 
   if (!AllowedTurnPort(server_address_.address.port())) {
-    // This can only happen after a 300 ALTERNATE SERVER, since the port can't
-    // be created with a disallowed port number.
+    // This shouldn't happen, since disallowed port numbers are rejected both
+    // when the port is created and in SetAlternateServer().
     RTC_LOG(LS_ERROR) << ToString()
                       << ": Attempt to start allocation with disallowed port# "
                       << server_address_.address.port();
@@ -393,9 +393,16 @@ void TurnPort::PrepareAddress() {
       static_cast<int>(server_address_.address.GetIPAddressType()),
       static_cast<int>(IPAddressType::kMaxValue));
 
+  MaybeRequestLocalNetworkAccessPermissionForServer(
+      [this] { OnLocalNetworkAccessPermissionGranted(); });
+}
+
+void TurnPort::MaybeRequestLocalNetworkAccessPermissionForServer(
+    absl::AnyInvocable<void() &&> on_granted) {
   MaybeRequestLocalNetworkAccessPermission(
       server_address_.address,
-      [this](LocalNetworkAccessPermissionStatus status) {
+      [this, on_granted = std::move(on_granted)](
+          LocalNetworkAccessPermissionStatus status) mutable {
         if (status != LocalNetworkAccessPermissionStatus::kGranted) {
           RTC_LOG(LS_ERROR)
               << ToString() << ": Permission denied to connect to TURN server "
@@ -406,7 +413,7 @@ void TurnPort::PrepareAddress() {
           return;
         }
 
-        OnLocalNetworkAccessPermissionGranted();
+        std::move(on_granted)();
       });
 }
 
@@ -516,6 +523,11 @@ bool TurnPort::CreateTurnClientSocket() {
         }
       });
 
+  // A closed socket is fatal for all protocols, not just the connection
+  // oriented ones.
+  socket_->SubscribeCloseEvent(
+      this, [this](AsyncPacketSocket* s, int err) { OnSocketClose(s, err); });
+
   // TCP and UDP with DTLS port is ready to send stun requests after the socket
   // is connected, while pure UDP port is ready to do so once the socket is
   // created.
@@ -524,8 +536,6 @@ bool TurnPort::CreateTurnClientSocket() {
       server_address_.proto == PROTO_DTLS) {
     socket_->SubscribeConnect(
         this, [this](AsyncPacketSocket* socket) { OnSocketConnect(socket); });
-    socket_->SubscribeCloseEvent(
-        this, [this](AsyncPacketSocket* s, int err) { OnSocketClose(s, err); });
   } else {
     state_ = STATE_CONNECTED;
   }
@@ -645,7 +655,7 @@ Connection* TurnPort::CreateConnection(const Candidate& remote_candidate,
   // If the remote endpoint signaled us an mDNS candidate, we do not form a pair
   // with the relay candidate to avoid IP leakage in the CreatePermission
   // request.
-  if (absl::EndsWith(remote_candidate.address().hostname(), LOCAL_TLD)) {
+  if (IsMdnsHostname(remote_candidate.address().hostname())) {
     return nullptr;
   }
 
@@ -859,6 +869,26 @@ bool TurnPort::SetAlternateServer(const SocketAddress& address) {
     return false;
   }
 
+  // Also block redirects to the unspecified address (0.0.0.0 or ::). Sending
+  // to it reaches the local host on some platforms, so allowing it would be a
+  // way around the loopback check above.
+  if (address.IsAnyIP()) {
+    RTC_LOG(LS_WARNING)
+        << ToString()
+        << ": Blocking attempted redirect to unspecified address.";
+    return false;
+  }
+
+  // Block redirects to ports that TURN servers aren't allowed to use. This is
+  // also checked by PrepareAddress(), but redirects for UDP don't go through
+  // PrepareAddress().
+  if (!AllowedTurnPort(address.port())) {
+    RTC_LOG(LS_WARNING) << ToString()
+                        << ": Blocking attempted redirect to disallowed port# "
+                        << address.port();
+    return false;
+  }
+
   RTC_LOG(LS_INFO) << ToString() << ": Redirecting from TURN server ["
                    << server_address_.address.ToSensitiveNameAndAddressString()
                    << "] to TURN server ["
@@ -939,7 +969,7 @@ void TurnPort::OnAllocateSuccess(const SocketAddress& address,
                                  const SocketAddress& stun_address) {
   state_ = STATE_READY;
 
-  SocketAddress related_address = stun_address;
+  const SocketAddress& related_address = stun_address;
 
   // For relayed candidate, Base is the candidate itself.
   AddAddress(address,          // Candidate address.
@@ -961,7 +991,7 @@ void TurnPort::OnAllocateError(int error_code, absl::string_view reason) {
       SafeTask(task_safety_.flag(), [this] { NotifyPortError(this); }));
   std::string address = GetLocalAddress().HostAsSensitiveURIString();
   int port = GetLocalAddress().port();
-  if (server_address_.proto == PROTO_TCP &&
+  if (server_address_.proto != PROTO_UDP &&
       server_address_.address.IsPrivateIP()) {
     address.clear();
     port = 0;
@@ -1002,9 +1032,10 @@ void TurnPort::Release() {
 
 void TurnPort::Close() {
   if (!ready()) {
-    OnAllocateError(
-        STUN_ERROR_SERVER_NOT_REACHABLE,
-        GetProtocol() != PROTO_UDP ? "Failed to establish connection" : "");
+    OnAllocateError(STUN_ERROR_SERVER_NOT_REACHABLE,
+                    GetProtocol() != PROTO_UDP
+                        ? "Failed to establish connection"
+                        : "Socket was closed");
   }
   request_manager_.Clear();
   // Stop the port from creating new connections.
@@ -1032,9 +1063,18 @@ bool TurnPort::AllowedTurnPort(int port) {
 
 void TurnPort::TryAlternateServer() {
   if (server_address().proto == PROTO_UDP) {
-    // Send another allocate request to alternate server, with the received
-    // realm and nonce values.
-    SendRequest(new TurnAllocateRequest(this), 0);
+    // The UDP socket is reused for the alternate server, so PrepareAddress()
+    // isn't called. Request the Local Network Access permission that it would
+    // otherwise request.
+    MaybeRequestLocalNetworkAccessPermissionForServer([this] {
+      // The socket may have been closed while the permission was pending.
+      if (!connected()) {
+        return;
+      }
+      // Send another allocate request to alternate server, with the received
+      // realm and nonce values.
+      SendRequest(new TurnAllocateRequest(this), 0);
+    });
   } else {
     // Since it's not UDP, we have to delete the connected socket and reconnect
     // with the alternate server. PrepareAddress will send stun binding once

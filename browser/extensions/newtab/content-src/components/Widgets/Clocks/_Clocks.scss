@@ -141,6 +141,17 @@
     }
   }
 
+  .clocks-search-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-small);
+
+    .clocks-location-wrapper {
+      flex: 1;
+      min-inline-size: 0;
+    }
+  }
+
   .clocks-location-wrapper {
     position: relative;
   }
@@ -153,26 +164,7 @@
   }
 
   .clocks-search-results {
-    position: absolute;
-    inset-block-start: calc(100% + var(--space-xxsmall));
-    inset-inline: 0;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xxsmall);
-    // 180px fits ~4–5 results before scrolling; no design token for this size.
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
-    max-block-size: 180px;
-    overflow-y: auto;
-    padding: var(--space-xsmall);
-    background: var(--newtab-background-color-secondary);
-    border: var(--border-width) solid var(--border-color);
-    border-radius: var(--border-radius-medium);
-    box-shadow: var(--box-shadow-level-4);
-
-    @media (prefers-contrast) {
-      background-color: var(--background-color-box);
-    }
+    @include widget-search-results;
   }
 
   .clocks-search-no-results {
@@ -182,7 +174,10 @@
     padding-block: var(--space-xsmall);
   }
 
+  .clocks-custom-city-input,
   .clocks-nickname-input {
+    --input-border-radius: var(--input-search-border-radius);
+
     min-inline-size: 0;
     inline-size: 100%;
   }
@@ -226,6 +221,11 @@
     flex: 1 1 0;
     min-block-size: 0;
     gap: 0;
+
+    // Focused only programmatically on open (tabindex -1), never by Tab.
+    &:focus {
+      outline: none;
+    }
   }
 
   .clocks-edit-item {
@@ -239,7 +239,7 @@
     // room for the future drag handle per the Figma layout.
     padding-inline-start: var(--space-xlarge);
     padding-inline-end: calc(var(--space-medium) * 4);
-    border-radius: var(--button-border-radius);
+    border-radius: var(--border-radius-small);
     transition: background-color 180ms ease;
 
     // Tall enough for a nicknamed row, so plain and nicknamed rows match.
@@ -248,7 +248,6 @@
 
   .clocks-edit-item:hover,
   .clocks-edit-item:focus-within {
-    // stylelint-disable-next-line stylelint-plugin-mozilla/no-base-design-tokens, stylelint-plugin-mozilla/use-design-tokens
     background-color: var(--button-background-color-menu-hover, #E7E1F8);
   }
 
@@ -307,7 +306,7 @@
 
   .clocks-edit-item-button:hover::part(button),
   .clocks-edit-item-button:focus-visible::part(button) {
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/no-base-design-tokens, stylelint-plugin-mozilla/use-design-tokens */
+    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
     border-color: rgb(255 255 255 / 90%);
   }
 
@@ -323,40 +322,7 @@
   }
 
   .clocks-search-result {
-    display: flex;
-    align-items: center;
-    gap: var(--space-small);
-    padding-inline: var(--space-small);
-    padding-block: var(--space-xsmall);
-    background: transparent;
-    border: none;
-    border-radius: var(--border-radius-small);
-    color: var(--text-color);
-    font: inherit;
-    text-align: start;
-    cursor: default;
-
-    &:hover,
-    &:focus {
-      background: var(--button-background-color-hover);
-    }
-
-    &:focus-visible {
-      outline: var(--focus-outline);
-      outline-offset: var(--focus-outline-offset);
-    }
-  }
-
-  .clocks-search-result-city,
-  .clocks-search-result-timezone {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .clocks-search-result-timezone {
-    color: var(--text-color-deemphasized);
-    font-size: var(--font-size-small);
+    @include widget-search-result('.clocks-search-result-city', '.clocks-search-result-timezone');
   }
 
   .clocks-list {
@@ -755,7 +721,6 @@
     }
 
     &[data-clock-count='3'] .clocks-time {
-      // stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, declaration-property-value-disallowed-list
       font-size: calc(var(--font-size-heading-large) - 3px);
     }
 

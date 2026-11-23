@@ -13,15 +13,15 @@ transforms:
 
 kind-dependencies:
     - toolchain
-    - build-fat-aar
+    - build
 
 task-defaults:
-    run-on-repo-type: [hg]
+    use-gradle-cache: true
     attributes:
         build_platform: android
         retrigger: true
     dependencies:
-        build-fat-aar: build-fat-aar-android-geckoview-fat-aar/opt
+        geckoview: build-android-x86_64/opt
     fetches:
         toolchain:
             - android-sdk-linux
@@ -30,10 +30,9 @@ task-defaults:
             - android-gradle-dependencies
             - linux64-jdk
             - android-robolectric-jars
-        build-fat-aar:
+        geckoview:
             - target.maven.zip
     run:
-        clone-with: hg
         using: gradlew
     treeherder:
         kind: test
@@ -72,11 +71,12 @@ tasks:
             pre-gradlew:
                 - ["cd", "mobile/android/fenix"]
                 - ['java', '-version']
-            gradlew: ['clean', 'testDebugUnitTest']
+            gradlew: ['clean', 'testDebugUnitTest', '-PtestForks=3']
         treeherder:
             platform: 'fenix-android-all/opt'
             symbol: fenix-debug(T)
             tier: 1
+        worker-type: b-linux
         worker:
             artifacts:
                 - name: public/reports/test-reports.zip

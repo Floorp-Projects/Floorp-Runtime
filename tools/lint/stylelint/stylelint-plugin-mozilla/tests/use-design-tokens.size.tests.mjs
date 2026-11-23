@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-// eslint-disable-next-line import/no-unresolved
+// eslint-disable-next-line import-x/no-unresolved
 import { testRule } from "stylelint-test-rule-node";
 import stylelint from "stylelint";
 import useDesignTokens from "../rules/use-design-tokens.mjs";
@@ -232,6 +232,24 @@ testRule({
       ),
       description:
         "Consider using a size design token instead of using a pixel value. This may be fixable by running the same command again with --fix.",
+    },
+    {
+      code: ".a { width: 40px; }",
+      fixed: ".a { width: var(--size-image-xsmall); }",
+      message: messages.rejected(
+        "40px",
+        ["size", "icon-size"],
+        "var(--size-image-xsmall)"
+      ),
+      description:
+        "A pixel value that a component token shares with the size scale is fixed to the scale token.",
+    },
+    {
+      code: ".a { width: 2px; }",
+      unfixable: true,
+      message: messages.rejected("2px", ["size", "icon-size"]),
+      description:
+        "A pixel value that only a component token has is not fixed to that token.",
     },
     {
       code: ".a { height: 0.75rem; }",

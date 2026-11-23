@@ -77,7 +77,7 @@ bool RDDChild::SendRequestMemoryReport(const uint32_t& aGeneration,
                                        const bool& aAnonymize,
                                        const bool& aMinimizeMemoryUsage,
                                        const Maybe<FileDescriptor>& aDMDFile) {
-  mMemoryReportRequest = MakeUnique<MemoryReportRequestHost>(aGeneration);
+  mMemoryReportRequest = std::make_unique<MemoryReportRequestHost>(aGeneration);
 
   PRDDChild::SendRequestMemoryReport(aGeneration, aAnonymize,
                                      aMinimizeMemoryUsage, aDMDFile)
@@ -214,6 +214,7 @@ void RDDChild::ActorDestroy(ActorDestroyReason aWhy) {
 
   gfxVars::RemoveReceiver(this);
   mHost->OnChannelClosed();
+  mHost = nullptr;
 }
 
 class DeferredDeleteRDDChild : public Runnable {

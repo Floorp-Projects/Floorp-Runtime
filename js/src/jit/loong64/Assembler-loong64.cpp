@@ -136,8 +136,6 @@ Register js::jit::toR(Instruction& i) {
   return Register::FromCode(i.encode() & RegMask);
 }
 
-void InstImm::extractImm16(BOffImm16* dest) { *dest = BOffImm16(*this); }
-
 void AssemblerLOONG64::finish() {
   MOZ_ASSERT(!isFinished);
   isFinished = true;
@@ -276,7 +274,15 @@ AssemblerLOONG64::Condition AssemblerLOONG64::SwapCmpOperandsCondition(
 }
 
 BOffImm16::BOffImm16(InstImm inst)
-    : data(inst.extractBitField(Imm16Shift + Imm16Bits - 1, Imm16Shift)) {}
+    : data(inst.extractBitField(Imm16Shift + Imm16Bits - 1, Imm16Shift)) {
+  MOZ_ASSERT(inst.hasBOffImm16());
+}
+
+BOffImm21::BOffImm21(InstImm inst)
+    : data(inst.extractBitField(Imm16Shift + Imm16Bits - 1, Imm16Shift) |
+           (inst.extractBitField(Imm5Bits - 1, 0) << Imm16Bits)) {
+  MOZ_ASSERT(inst.hasBOffImm21());
+}
 
 Instruction* BOffImm16::getDest(Instruction* src) const {
   return &src[(((int32_t)(data << 16)) >> 16) + 1];
@@ -504,23 +510,46 @@ InstImm AssemblerLOONG64::getBranchCode(JumpOrCall jumpOrCall) {
 }
 
 InstImm AssemblerLOONG64::getBranchCode(Register rj, Register rd, Condition c) {
-  // beq, bne
-  MOZ_ASSERT(c == AssemblerLOONG64::Equal || c == AssemblerLOONG64::NotEqual);
-  return InstImm(c == AssemblerLOONG64::Equal ? op_beq : op_bne, BOffImm16(0),
-                 rj, rd);
+  switch (c) {
+    case AssemblerLOONG64::Equal:
+      return InstImm(op_beq, BOffImm16(0), rj, rd);
+    case AssemblerLOONG64::NotEqual:
+      return InstImm(op_bne, BOffImm16(0), rj, rd);
+    case AssemblerLOONG64::Above:
+      // LHS >u RHS -> RHS <u LHS
+      return InstImm(op_bltu, BOffImm16(0), rd, rj);
+    case AssemblerLOONG64::AboveOrEqual:
+      return InstImm(op_bgeu, BOffImm16(0), rj, rd);
+    case AssemblerLOONG64::Below:
+      return InstImm(op_bltu, BOffImm16(0), rj, rd);
+    case AssemblerLOONG64::BelowOrEqual:
+      // LHS <=u RHS -> RHS >=u LHS
+      return InstImm(op_bgeu, BOffImm16(0), rd, rj);
+    case AssemblerLOONG64::GreaterThan:
+      // LHS >s RHS -> RHS <s LHS
+      return InstImm(op_blt, BOffImm16(0), rd, rj);
+    case AssemblerLOONG64::GreaterThanOrEqual:
+      return InstImm(op_bge, BOffImm16(0), rj, rd);
+    case AssemblerLOONG64::LessThan:
+      return InstImm(op_blt, BOffImm16(0), rj, rd);
+    case AssemblerLOONG64::LessThanOrEqual:
+      // LHS <=s RHS -> RHS >=s LHS
+      return InstImm(op_bge, BOffImm16(0), rd, rj);
+    default:
+      MOZ_CRASH("Condition not supported.");
+  }
 }
 
 InstImm AssemblerLOONG64::getBranchCode(Register rj, Condition c) {
-  // beq, bne, blt, bge
   switch (c) {
     case AssemblerLOONG64::Equal:
     case AssemblerLOONG64::Zero:
     case AssemblerLOONG64::BelowOrEqual:
-      return InstImm(op_beq, BOffImm16(0), rj, zero);
+      return InstImm(op_beqz, 0, rj, /* NotHasRd= */ true);
     case AssemblerLOONG64::NotEqual:
     case AssemblerLOONG64::NonZero:
     case AssemblerLOONG64::Above:
-      return InstImm(op_bne, BOffImm16(0), rj, zero);
+      return InstImm(op_bnez, 0, rj, /* NotHasRd= */ true);
     case AssemblerLOONG64::GreaterThan:
       return InstImm(op_blt, BOffImm16(0), zero, rj);
     case AssemblerLOONG64::GreaterThanOrEqual:
@@ -536,9 +565,10 @@ InstImm AssemblerLOONG64::getBranchCode(Register rj, Condition c) {
   }
 }
 
-// Code semantics must conform to compareFloatingpoint
-InstImm AssemblerLOONG64::getBranchCode(FPConditionBit cj) {
-  return InstImm(op_bcz, 0, cj, true);  // bcnez
+// Code semantics must conform to compareFloatingPoint
+InstImm AssemblerLOONG64::getBranchCode(FPConditionBit cj, Condition c) {
+  MOZ_ASSERT(c == Zero || c == NonZero);
+  return InstImm(op_bcz, 0, cj, c == NonZero);
 }
 
 // Arithmetic instructions
@@ -2936,6 +2966,31 @@ BufferOffset AssemblerLOONG64::as_vmsknz_b(FloatRegister vd, FloatRegister vj) {
   return emit(InstReg(op_vmsknz_b, vj, vd).encode());
 }
 
+BufferOffset AssemblerLOONG64::as_vsetnez_v(FPConditionBit cd,
+                                            FloatRegister vj) {
+  return emit(InstReg(op_vsetnez_v, vj, cd).encode());
+}
+
+BufferOffset AssemblerLOONG64::as_vsetallnez_b(FPConditionBit cd,
+                                               FloatRegister vj) {
+  return emit(InstReg(op_vsetallnez_b, vj, cd).encode());
+}
+
+BufferOffset AssemblerLOONG64::as_vsetallnez_h(FPConditionBit cd,
+                                               FloatRegister vj) {
+  return emit(InstReg(op_vsetallnez_h, vj, cd).encode());
+}
+
+BufferOffset AssemblerLOONG64::as_vsetallnez_w(FPConditionBit cd,
+                                               FloatRegister vj) {
+  return emit(InstReg(op_vsetallnez_w, vj, cd).encode());
+}
+
+BufferOffset AssemblerLOONG64::as_vsetallnez_d(FPConditionBit cd,
+                                               FloatRegister vj) {
+  return emit(InstReg(op_vsetallnez_d, vj, cd).encode());
+}
+
 BufferOffset AssemblerLOONG64::as_vfsqrt_s(FloatRegister vd, FloatRegister vj) {
   return emit(InstReg(op_vfsqrt_s, vj, vd).encode());
 }
@@ -3959,6 +4014,49 @@ template std::optional<int64_t>
 AssemblerLOONG64::EncodeSimdCompareImmediate<int64_t>(const SimdConstant& rhs,
                                                       Condition cond);
 
+template <uint32_t Scale>
+/* static */ std::optional<int32_t> AssemblerLOONG64::EncodeVldreplImmediate(
+    int64_t offset) {
+  static_assert(Scale <= 3);
+  constexpr int64_t kUnit = INT64_C(1) << Scale;
+  if (offset % kUnit != 0) {
+    return std::nullopt;
+  }
+  const int64_t value = offset / kUnit;
+  return is_intN(value, 12 - Scale)
+             ? std::make_optional(static_cast<int32_t>(value))
+             : std::nullopt;
+}
+template std::optional<int32_t> AssemblerLOONG64::EncodeVldreplImmediate<0>(
+    int64_t offset);
+template std::optional<int32_t> AssemblerLOONG64::EncodeVldreplImmediate<1>(
+    int64_t offset);
+template std::optional<int32_t> AssemblerLOONG64::EncodeVldreplImmediate<2>(
+    int64_t offset);
+template std::optional<int32_t> AssemblerLOONG64::EncodeVldreplImmediate<3>(
+    int64_t offset);
+
+template <uint32_t Scale>
+/* static */ std::optional<int32_t>
+AssemblerLOONG64::EncodeVstelmOffsetImmediate(int64_t offset) {
+  static_assert(Scale <= 3);
+  constexpr int64_t kUnit = INT64_C(1) << Scale;
+  if (offset % kUnit != 0) {
+    return std::nullopt;
+  }
+  const int64_t value = offset / kUnit;
+  return is_intN(value, 8) ? std::make_optional(static_cast<int32_t>(value))
+                           : std::nullopt;
+}
+template std::optional<int32_t>
+AssemblerLOONG64::EncodeVstelmOffsetImmediate<0>(int64_t offset);
+template std::optional<int32_t>
+AssemblerLOONG64::EncodeVstelmOffsetImmediate<1>(int64_t offset);
+template std::optional<int32_t>
+AssemblerLOONG64::EncodeVstelmOffsetImmediate<2>(int64_t offset);
+template std::optional<int32_t>
+AssemblerLOONG64::EncodeVstelmOffsetImmediate<3>(int64_t offset);
+
 /* ========================================================================= */
 
 void AssemblerLOONG64::bind(Label* label, BufferOffset boff) {
@@ -4077,44 +4175,45 @@ void AssemblerLOONG64::ToggleToCmp(CodeLocationLabel inst_) {
 // simple.
 Instruction* Instruction::next() { return this + 1; }
 
-InstImm AssemblerLOONG64::invertBranch(InstImm branch, BOffImm16 skipOffset) {
+InstImm AssemblerLOONG64::invertBranch(InstImm branch, int32_t skipOffset) {
   uint32_t rj = 0;
-  OpcodeField opcode = (OpcodeField)((branch.extractBitField(31, 26)) << 26);
+  const OpcodeField opcode =
+      static_cast<OpcodeField>((branch.extractBitField(31, 26)) << 26);
   switch (opcode) {
     case op_beq:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm16(BOffImm16(skipOffset));
       branch.setOpcode(op_bne, 6);
       return branch;
     case op_bne:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm16(BOffImm16(skipOffset));
       branch.setOpcode(op_beq, 6);
       return branch;
     case op_bge:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm16(BOffImm16(skipOffset));
       branch.setOpcode(op_blt, 6);
       return branch;
     case op_bgeu:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm16(BOffImm16(skipOffset));
       branch.setOpcode(op_bltu, 6);
       return branch;
     case op_blt:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm16(BOffImm16(skipOffset));
       branch.setOpcode(op_bge, 6);
       return branch;
     case op_bltu:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm16(BOffImm16(skipOffset));
       branch.setOpcode(op_bgeu, 6);
       return branch;
     case op_beqz:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm21(BOffImm21(skipOffset));
       branch.setOpcode(op_bnez, 6);
       return branch;
     case op_bnez:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm21(BOffImm21(skipOffset));
       branch.setOpcode(op_beqz, 6);
       return branch;
     case op_bcz:
-      branch.setBOffImm16(skipOffset);
+      branch.setBOffImm21(BOffImm21(skipOffset));
       rj = branch.extractRJ();
       if (rj & 0x8) {
         branch.setRJ(rj & 0x17);
@@ -4253,10 +4352,10 @@ void Assembler::bind(InstImm* inst, uintptr_t branch, uintptr_t target) {
   int64_t offset = target - branch;
   InstImm inst_beq = InstImm(op_beq, BOffImm16(0), zero, zero);
 
-  // If encoded offset is 4, then the jump must be short
-  if (BOffImm16(inst[0]).decode() == 4) {
-    MOZ_ASSERT(BOffImm16::IsInRange(offset));
-    inst[0].setBOffImm16(BOffImm16(offset));
+  // If encoded offset is 4, then the jump must be short.
+  if (inst[0].isShortJump() && inst[0].extractShortJumpOffset() == 4) {
+    MOZ_ASSERT(inst[0].isShortJumpInRange(offset));
+    inst[0].setShortJumpOffset(offset);
     inst[1].makeNop();  // because before set INVALID_OFFSET
     return;
   }
@@ -4275,10 +4374,10 @@ void Assembler::bind(InstImm* inst, uintptr_t branch, uintptr_t target) {
     return;
   }
 
-  if (BOffImm16::IsInRange(offset)) {
+  if (inst[0].isShortJumpInRange(offset)) {
     bool conditional = inst[0].encode() != inst_beq.encode();
 
-    inst[0].setBOffImm16(BOffImm16(offset));
+    inst[0].setShortJumpOffset(offset);
     if (conditional) {
       // Skip the trailing nop on the fallthrough path.
       inst[1] = InstImm(op_bge, BOffImm16(2 * sizeof(uint32_t)), zero, zero);
@@ -4294,7 +4393,7 @@ void Assembler::bind(InstImm* inst, uintptr_t branch, uintptr_t target) {
     inst[0] = InstImm(op_pcaddu18i, si20, scratch, false);
     inst[1] = InstImm(op_jirl, BOffImm16(offs16), scratch, zero);
   } else {
-    inst[0] = invertBranch(inst[0], BOffImm16(3 * sizeof(uint32_t)));
+    inst[0] = invertBranch(inst[0], 3 * sizeof(uint32_t));
     Register scratch = temps.Acquire();
     const auto [si20, offs16] = SplitJump36Offset(offset - sizeof(uint32_t));
     inst[1] = InstImm(op_pcaddu18i, si20, scratch, false);
@@ -4334,11 +4433,16 @@ uint64_t Assembler::ExtractLoad64Value(Instruction* inst0) {
   InstImm* i2 = (InstImm*)i1->next();
   InstImm* i3 = (InstImm*)i2->next();
 
-  MOZ_ASSERT((i0->extractBitField(31, 25)) == ((uint32_t)op_lu12i_w >> 25));
-  MOZ_ASSERT((i1->extractBitField(31, 22)) == ((uint32_t)op_ori >> 22));
-  MOZ_ASSERT((i2->extractBitField(31, 25)) == ((uint32_t)op_lu32i_d >> 25));
+  const uint32_t rd_code = i0->extractRD();
 
-  if ((i3->extractBitField(31, 22)) == ((uint32_t)op_lu52i_d >> 22)) {
+  MOZ_ASSERT((i0->extractBitField(31, 25)) == ((uint32_t)op_lu12i_w >> 25));
+  MOZ_ASSERT((i1->extractBitField(31, 22)) == ((uint32_t)op_ori >> 22) &&
+             i1->extractRJ() == rd_code && i1->extractRD() == rd_code);
+  MOZ_ASSERT((i2->extractBitField(31, 25)) == ((uint32_t)op_lu32i_d >> 25) &&
+             i2->extractRD() == rd_code);
+
+  if ((i3->extractBitField(31, 22)) == ((uint32_t)op_lu52i_d >> 22) &&
+      i3->extractRJ() == rd_code && i3->extractRD() == rd_code) {
     // Li64
     uint64_t value =
         (uint64_t(i0->extractBitField(Imm20Bits + Imm20Shift - 1, Imm20Shift))
@@ -4365,17 +4469,22 @@ uint64_t Assembler::ExtractLoad64Value(Instruction* inst0) {
 }
 
 void Assembler::UpdateLoad64Value(Instruction* inst0, uint64_t value) {
-  // Todo: with ma_liPatchable
+  // Sync with ma_liPatchable()
   InstImm* i0 = (InstImm*)inst0;
   InstImm* i1 = (InstImm*)i0->next();
   InstImm* i2 = (InstImm*)i1->next();
   InstImm* i3 = (InstImm*)i2->next();
 
-  MOZ_ASSERT((i0->extractBitField(31, 25)) == ((uint32_t)op_lu12i_w >> 25));
-  MOZ_ASSERT((i1->extractBitField(31, 22)) == ((uint32_t)op_ori >> 22));
-  MOZ_ASSERT((i2->extractBitField(31, 25)) == ((uint32_t)op_lu32i_d >> 25));
+  const uint32_t rd_code = i0->extractRD();
 
-  if ((i3->extractBitField(31, 22)) == ((uint32_t)op_lu52i_d >> 22)) {
+  MOZ_ASSERT((i0->extractBitField(31, 25)) == ((uint32_t)op_lu12i_w >> 25));
+  MOZ_ASSERT((i1->extractBitField(31, 22)) == ((uint32_t)op_ori >> 22) &&
+             i1->extractRJ() == rd_code && i1->extractRD() == rd_code);
+  MOZ_ASSERT((i2->extractBitField(31, 25)) == ((uint32_t)op_lu32i_d >> 25) &&
+             i2->extractRD() == rd_code);
+
+  if ((i3->extractBitField(31, 22)) == ((uint32_t)op_lu52i_d >> 22) &&
+      i3->extractRJ() == rd_code && i3->extractRD() == rd_code) {
     // Li64
     *i0 = InstImm(op_lu12i_w, (int32_t)((value >> 12) & 0xfffff),
                   Register::FromCode(i0->extractRD()), false);

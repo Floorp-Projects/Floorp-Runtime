@@ -15,6 +15,10 @@
 
 #include "mozIStorageFunction.h"
 
+#include "nsCOMPtr.h"
+#include "nsString.h"
+#include "nsTSubstring.h"
+
 class mozIStorageConnection;
 
 namespace mozilla {
@@ -203,6 +207,8 @@ class MatchAutoCompleteFunction final : public mozIStorageFunction {
  */
 class CalculateFrecencyFunction final : public mozIStorageFunction {
  public:
+  CalculateFrecencyFunction();
+
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_MOZISTORAGEFUNCTION
 
@@ -216,6 +222,21 @@ class CalculateFrecencyFunction final : public mozIStorageFunction {
 
  private:
   ~CalculateFrecencyFunction() = default;
+
+  /**
+   * Builds the SQL used to calculate frecency, with the number of sampled
+   * visits inlined as the LIMIT.
+   *
+   * @param aNumSampledVisits
+   *        The maximum number of visits to sample.
+   */
+  static nsCString BuildFrecencySQL(uint32_t aNumSampledVisits);
+
+  /**
+   * The SQL used to calculate frecency. It only depends on prefs fixed at
+   * startup, so it's built once.
+   */
+  const nsCString mSQL;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -237,6 +258,8 @@ class CalculateFrecencyFunction final : public mozIStorageFunction {
  */
 class CalculateAltFrecencyFunction final : public mozIStorageFunction {
  public:
+  CalculateAltFrecencyFunction();
+
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_MOZISTORAGEFUNCTION
 
@@ -250,6 +273,21 @@ class CalculateAltFrecencyFunction final : public mozIStorageFunction {
 
  private:
   ~CalculateAltFrecencyFunction() = default;
+
+  /**
+   * Builds the SQL used to calculate frecency, with the number of sampled
+   * visits inlined as the LIMIT.
+   *
+   * @param aNumSampledVisits
+   *        The maximum number of visits to sample.
+   */
+  static nsCString BuildFrecencySQL(uint32_t aNumSampledVisits);
+
+  /**
+   * The SQL used to calculate frecency. It only depends on prefs fixed at
+   * startup, so it's built once.
+   */
+  const nsCString mSQL;
 };
 
 /**

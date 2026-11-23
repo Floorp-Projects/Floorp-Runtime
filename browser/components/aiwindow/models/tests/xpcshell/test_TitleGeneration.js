@@ -6,6 +6,10 @@ const { generateChatTitle } = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/models/TitleGeneration.sys.mjs"
 );
 
+const { AuthProvider } = ChromeUtils.importESModule(
+  "moz-src:///browser/components/aiwindow/models/AuthProvider.sys.mjs"
+);
+
 const {
   openAIEngine,
   MODEL_FEATURES,
@@ -35,13 +39,14 @@ const MODEL = "test-model";
 const FAKE_RECORDS = [
   {
     feature: MODEL_FEATURES.TITLE_GENERATION,
-    version: "1.0",
+    version: "2.0",
     model: MODEL,
     is_default: true,
     parameters: {},
     service_type: "ai",
     purpose: "title-generation",
-    prompts: "Summarize: {current_tab}",
+    prompts:
+      "Summarize: {current_tab}\n{#assistant_response}Reply: {assistant_response}\n{/assistant_response}",
   },
 ];
 
@@ -77,7 +82,7 @@ function setupStubs(engineRunStub, existingSb) {
     get: sb.stub().resolves(FAKE_RECORDS),
   });
   sb.stub(openAIEngine, "build").resolves(fakeEngineInstance);
-  sb.stub(openAIEngine, "getFxAccountToken").resolves(null);
+  sb.stub(AuthProvider, "getToken").resolves(null);
 
   return { sb, fakeEngineInstance };
 }
@@ -430,21 +435,23 @@ add_task(async function test_generateChatTitle_with_assistant_response() {
       "Should return the generated title"
     );
 
+    // The reply is context in the system prompt, so the conversation ends on
+    // a user turn carrying only the user's message (providers such as Mistral
+    // reject one that ends on an assistant message).
     const callArgs = fakeEngineInstance.run.firstCall.args[0];
-    Assert.equal(
-      callArgs.args.length,
-      3,
-      "Should have system, user, and assistant messages when assistantResponse is provided"
+    Assert.deepEqual(
+      callArgs.args.map(m => m.role),
+      ["system", "user"],
+      "Should send only a system and a user message when assistantResponse is provided"
     );
     Assert.equal(
-      callArgs.args[2].role,
-      "assistant",
-      "Third message should be assistant"
+      callArgs.args[1].content,
+      message,
+      "User message should be only the user's message"
     );
-    Assert.equal(
-      callArgs.args[2].content,
-      assistantResponse,
-      "Assistant message should contain the provided response"
+    Assert.ok(
+      callArgs.args[0].content.includes(`Reply: ${assistantResponse}`),
+      "System prompt should include the assistant reply as context"
     );
   } finally {
     sb.restore();

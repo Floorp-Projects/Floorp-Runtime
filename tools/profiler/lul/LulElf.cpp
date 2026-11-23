@@ -81,6 +81,16 @@
 #  define EM_AARCH64 183
 #endif
 
+// Old Linux header doesn't define EM_RISCV.
+#ifndef EM_RISCV
+#  define EM_RISCV 243
+#endif
+
+// Old Linux header doesn't define EM_LOONGARCH.
+#ifndef EM_LOONGARCH
+#  define EM_LOONGARCH 258
+#endif
+
 // This namespace contains helper functions.
 namespace {
 
@@ -172,6 +182,12 @@ bool DwarfCFIRegisterNames(const typename ElfClass::Ehdr* elf_header,
       return true;
     case EM_AARCH64:
       *num_dw_regnames = DwarfCFIToModule::RegisterNames::ARM64();
+      return true;
+    case EM_LOONGARCH:
+      *num_dw_regnames = DwarfCFIToModule::RegisterNames::LOONGARCH();
+      return true;
+    case EM_RISCV:
+      *num_dw_regnames = DwarfCFIToModule::RegisterNames::RISCV();
       return true;
     default:
       MOZ_ASSERT(0);
@@ -344,9 +360,9 @@ typename ElfClass::Addr GetLoadingAddress(
 template <typename ElfClass>
 bool LoadSymbols(const string& obj_file, const bool big_endian,
                  const typename ElfClass::Ehdr* elf_header,
-                 const bool read_gnu_debug_link,
+                 const bool /*read_gnu_debug_link*/,
                  LoadSymbolsInfo<ElfClass>* info, SecMap* smap, void* rx_avma,
-                 size_t rx_size, UniqueStringUniverse* usu,
+                 size_t /*rx_size*/, UniqueStringUniverse* usu,
                  void (*log)(const char*)) {
   typedef typename ElfClass::Phdr Phdr;
   typedef typename ElfClass::Shdr Shdr;
@@ -458,6 +474,10 @@ const char* ElfArchitecture(const typename ElfClass::Ehdr* elf_header) {
       return "sparcv9";
     case EM_X86_64:
       return "x86_64";
+    case EM_LOONGARCH:
+      return "loongarch";
+    case EM_RISCV:
+      return "riscv";
     default:
       return nullptr;
   }

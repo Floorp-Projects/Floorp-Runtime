@@ -37,7 +37,7 @@ using namespace mozilla;
 using namespace mozilla::gfx;
 
 nsPageFrame* NS_NewPageFrame(PresShell* aPresShell, ComputedStyle* aStyle) {
-  return new (aPresShell) nsPageFrame(aStyle, aPresShell->GetPresContext());
+  return new nsPageFrame(aStyle, aPresShell->GetPresContext());
 }
 
 NS_IMPL_FRAMEARENA_HELPERS(nsPageFrame)
@@ -902,7 +902,7 @@ double nsPageFrame::GetPageOrientationRotation(nsSharedPageData* aPD) const {
 
 void nsPageFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
                                    const nsDisplayListSet& aLists) {
-  nsDisplayList content(aBuilder);
+  nsDisplayList content;
   nsDisplayListSet set(&content, &content, &content, &content, &content,
                        &content);
   {
@@ -1020,8 +1020,7 @@ nsIFrame* NS_NewPageBreakFrame(PresShell* aPresShell, ComputedStyle* aStyle) {
   NS_ASSERTION(aPresShell->GetPresContext()->IsPaginated(),
                "created a page break frame while not printing");
 
-  return new (aPresShell)
-      nsPageBreakFrame(aStyle, aPresShell->GetPresContext());
+  return new nsPageBreakFrame(aStyle, aPresShell->GetPresContext());
 }
 
 NS_IMPL_FRAMEARENA_HELPERS(nsPageBreakFrame)

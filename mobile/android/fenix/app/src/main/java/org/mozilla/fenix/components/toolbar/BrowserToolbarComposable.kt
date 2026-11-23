@@ -111,6 +111,8 @@ class BrowserToolbarComposable(
                 val shouldShowTabGroupsStrip: Boolean = remember {
                     customTabSession == null && settings.shouldShowTabGroupsStrip
                 }
+                val isSearchActive = appStore.observeAsComposableState { it.searchState.isSearchActive }.value
+                val hasBottomStrip = (shouldShowTabStripAtBottom && !isSearchActive) || shouldShowTabGroupsStrip
                 val customColors = browserScreenStore.observeAsComposableState { it.customTabColors }
                 val shouldUseBottomToolbar = remember { settings.shouldUseBottomToolbar }
 
@@ -180,21 +182,24 @@ class BrowserToolbarComposable(
                                     if (customTabSession == null) {
                                         searchSuggestionsContent(Modifier.weight(1f))
                                     }
-                                    if (shouldShowTabStripAtBottom) {
-                                        Box(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
-                                            tabStripContent()
+                                    TopDividerColumn(showDivider = hasBottomStrip, modifier = Modifier.fillMaxWidth()) {
+                                        if (shouldShowTabStripAtBottom) {
+                                            Box(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+                                                tabStripContent()
+                                            }
                                         }
+                                        if (shouldShowTabGroupsStrip) {
+                                            tabGroupsStripContent()
+                                        }
+                                        BrowserToolbar(
+                                            store = toolbarStore,
+                                            cfr = toolbarCFR,
+                                            useMinimalBottomToolbarWhenEnteringText =
+                                                settings.shouldUseMinimalBottomToolbarWhenEnteringText,
+                                            showDivider = !hasBottomStrip,
+                                        )
+                                        navigationBarContent?.invoke()
                                     }
-                                    if (shouldShowTabGroupsStrip) {
-                                        tabGroupsStripContent()
-                                    }
-                                    BrowserToolbar(
-                                        store = toolbarStore,
-                                        cfr = toolbarCFR,
-                                        useMinimalBottomToolbarWhenEnteringText =
-                                            settings.shouldUseMinimalBottomToolbarWhenEnteringText,
-                                    )
-                                    navigationBarContent?.invoke()
                                 }
                         }
                     }

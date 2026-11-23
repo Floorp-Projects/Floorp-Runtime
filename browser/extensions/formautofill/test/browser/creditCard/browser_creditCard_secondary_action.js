@@ -12,6 +12,21 @@ const DELETE_TOOLTIP = AC_L10N.formatValueSync(
   "autocomplete-delete-payment-method"
 );
 
+// Checks every autocomplete event since the last reset shares one flow id.
+function assertOneFlow() {
+  const events = [
+    Glean.autocomplete.dropdownShown,
+    Glean.autocomplete.dropdownClosed,
+    Glean.autocomplete.recordInteraction,
+    Glean.autocomplete.recordDialogInteraction,
+  ].flatMap(metric => metric.testGetValue() ?? []);
+  const flowIds = new Set(events.map(e => e.extra.flow_id));
+  is(flowIds.size, 1, "Every event shares one flow id");
+  const [flowId] = flowIds;
+  ok(flowId, "The shared flow id is not empty");
+  return flowId;
+}
+
 add_setup(async function setup_storage() {
   await setStorage(TEST_CREDIT_CARD_1);
 });
@@ -45,7 +60,16 @@ add_task(async function test_trash_button_when_pref_enabled() {
   await BrowserTestUtils.withNewTab(
     { gBrowser, url: CC_URL },
     async browser => {
+      Services.fog.testResetFOG();
       await openPopupOn(browser, "#cc-number");
+      const shownEvents = Glean.autocomplete.dropdownShown.testGetValue();
+      is(shownEvents?.length, 1, "One dropdown shown event is recorded");
+      is(
+        shownEvents[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+
       const rowItem = getDisplayedPopupItems(browser)[0].querySelector(
         "autocomplete-row-item"
       );
@@ -74,6 +98,24 @@ add_task(async function test_trash_button_when_pref_enabled() {
         "The secondary action shows the trash icon"
       );
       await closePopup(browser);
+      const closedEvents = Glean.autocomplete.dropdownClosed.testGetValue();
+      is(closedEvents?.length, 1, "One dropdown closed event is recorded");
+      is(
+        closedEvents[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+      is(
+        closedEvents[0].extra.close_reason,
+        "dismissed",
+        "Blurring the field records a dismissed close"
+      );
+      ok(closedEvents[0].extra.flow_id, "The event carries a flow id");
+      is(
+        closedEvents[0].extra.flow_id,
+        shownEvents[0].extra.flow_id,
+        "The closed event's flow id matches the shown event for the same dropdown"
+      );
     }
   );
   await SpecialPowers.popPrefEnv();
@@ -106,12 +148,24 @@ async function clickTrashButton(rowItem) {
 // Opens the dropdown on a selected row with device sign in stubbed out, so the
 // tests below never depend on a real OS prompt. `verifyArgs` records what the
 // parent asked for, and `restore` puts the real implementation back.
-async function openDeleteTarget(browser, { verified = true } = {}) {
+// `hidesDropdown` closes the dropdown first, as a real OS prompt does.
+async function openDeleteTarget(
+  browser,
+  { verified = true, hidesDropdown = false } = {}
+) {
   const originalVerify = FormAutofillUtils.verifyUserOSAuth;
   const verifyArgs = [];
-  FormAutofillUtils.verifyUserOSAuth = (...args) => {
+  FormAutofillUtils.verifyUserOSAuth = async (...args) => {
     verifyArgs.push(args);
-    return Promise.resolve(verified);
+    if (hidesDropdown) {
+      const popup = browser.autoCompletePopup;
+      popup.hidePopup();
+      await TestUtils.waitForCondition(
+        () => popup.state == "closed",
+        "Wait for the dropdown to close before device sign in resolves"
+      );
+    }
+    return verified;
   };
 
   await openPopupOn(browser, "#cc-number");
@@ -172,11 +226,45 @@ add_task(async function test_delete_asks_for_device_sign_in_then_confirms() {
         }
       );
 
+      Services.fog.testResetFOG();
       await clickTrashButton(rowItem);
       await dialogClosed;
       await TestUtils.waitForCondition(
         () => browser.autoCompletePopup.popupOpen,
         "Wait for the dropdown to come back after the confirmation"
+      );
+
+      const events = Glean.autocomplete.recordDialogInteraction.testGetValue();
+      is(events?.length, 1, "One dialog interaction event is recorded");
+      is(
+        events[0].extra.interaction_type,
+        "cancel",
+        "Cancelling the dialog records a cancel interaction"
+      );
+      is(
+        events[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+      is(events[0].extra.update_type, "delete", "The update type is delete");
+
+      const clickEvents = Glean.autocomplete.recordInteraction.testGetValue();
+      is(clickEvents?.length, 1, "One interaction event is recorded");
+      is(
+        clickEvents[0].extra.interaction_type,
+        "delete",
+        "The trash button records a delete interaction"
+      );
+      is(
+        clickEvents[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+      ok(clickEvents[0].extra.flow_id, "The interaction has a flow id");
+      is(
+        events[0].extra.flow_id,
+        clickEvents[0].extra.flow_id,
+        "The dialog event shares the interaction's flow id"
       );
 
       const { FormAutofill } = ChromeUtils.importESModule(
@@ -224,8 +312,10 @@ add_task(async function test_delete_skips_confirm_when_device_sign_in_fails() {
   await BrowserTestUtils.withNewTab(
     { gBrowser, url: CC_URL },
     async browser => {
+      Services.fog.testResetFOG();
       const { rowItem, verifyArgs, restore } = await openDeleteTarget(browser, {
         verified: false,
+        hidesDropdown: true,
       });
 
       await clickTrashButton(rowItem);
@@ -240,13 +330,53 @@ add_task(async function test_delete_skips_confirm_when_device_sign_in_fails() {
         "No confirmation is shown when device sign in is declined"
       );
       is(
+        Glean.autocomplete.recordDialogInteraction.testGetValue(),
+        null,
+        "No dialog interaction is recorded when device sign in is declined"
+      );
+      const clickEvents = Glean.autocomplete.recordInteraction.testGetValue();
+      is(clickEvents?.length, 1, "One interaction event is recorded");
+      is(
+        clickEvents[0].extra.interaction_type,
+        "delete",
+        "The trash button records a delete interaction before device sign in"
+      );
+      is(
+        clickEvents[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+      is(
         (await getCreditCards()).length,
         1,
         "Declining device sign in leaves the payment method in place"
       );
 
+      await TestUtils.waitForCondition(
+        () => browser.autoCompletePopup.popupOpen,
+        "Wait for the dropdown to come back after device sign in"
+      );
       restore();
       await closePopup(browser);
+      Assert.deepEqual(
+        Glean.autocomplete.dropdownShown
+          .testGetValue()
+          ?.map(e => e.extra.reopened_after_removal),
+        ["false", "true"],
+        "Only the automatic reopen is marked as reopened after a removal"
+      );
+      Assert.deepEqual(
+        Glean.autocomplete.dropdownClosed
+          .testGetValue()
+          ?.map(e => e.extra.close_reason),
+        ["removal_prompt", "dismissed"],
+        "The device sign in prompt and the final close are both recorded"
+      );
+      is(
+        assertOneFlow(),
+        clickEvents[0].extra.flow_id,
+        "The reopened dropdown keeps the interaction's flow id"
+      );
     }
   );
   Services.obs.removeObserver(observer, "common-dialog-loaded");
@@ -262,11 +392,42 @@ add_task(async function test_delete_removes_the_payment_method() {
   await BrowserTestUtils.withNewTab(
     { gBrowser, url: CC_URL },
     async browser => {
+      Services.fog.testResetFOG();
       const { rowItem, restore } = await openDeleteTarget(browser);
       const rowCount = getDisplayedPopupItems(browser).length;
 
       await acceptRemoval(rowItem);
-      restore();
+
+      const events = Glean.autocomplete.recordInteraction.testGetValue();
+      is(events?.length, 1, "One interaction event is recorded");
+      is(
+        events[0].extra.interaction_type,
+        "delete",
+        "The trash button records a delete interaction"
+      );
+      is(
+        events[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+      const dialogEvents =
+        Glean.autocomplete.recordDialogInteraction.testGetValue();
+      is(dialogEvents?.length, 1, "One dialog interaction event is recorded");
+      is(
+        dialogEvents[0].extra.interaction_type,
+        "confirm",
+        "Accepting the dialog records a confirm interaction"
+      );
+      is(
+        dialogEvents[0].extra.record_type,
+        "payment",
+        "The event names the payment record type"
+      );
+      is(
+        dialogEvents[0].extra.update_type,
+        "delete",
+        "The update type is delete"
+      );
 
       const remaining = await getCreditCards();
       is(
@@ -287,6 +448,41 @@ add_task(async function test_delete_removes_the_payment_method() {
         () => getDisplayedPopupItems(browser).length == rowCount - 1,
         "Wait for the restored dropdown to drop the removed row"
       );
+
+      // The last payment method: nothing is left to show, so no reopen.
+      const item = getDisplayedPopupItems(browser)[0];
+      await selectFirstRow(browser, item);
+      await acceptRemoval(item.querySelector("autocomplete-row-item"));
+      restore();
+      await TestUtils.waitForCondition(
+        () => !browser.autoCompletePopup.popupOpen,
+        "Wait for the dropdown to stay closed after the last removal"
+      );
+      is(
+        Glean.autocomplete.recordInteraction.testGetValue()?.length,
+        2,
+        "Two interaction events are recorded"
+      );
+      is(
+        Glean.autocomplete.recordDialogInteraction.testGetValue()?.length,
+        2,
+        "Two dialog interaction events are recorded"
+      );
+      Assert.deepEqual(
+        Glean.autocomplete.dropdownShown
+          .testGetValue()
+          ?.map(e => e.extra.reopened_after_removal),
+        ["false", "true"],
+        "The dropdown is reopened only after the first removal"
+      );
+      Assert.deepEqual(
+        Glean.autocomplete.dropdownClosed
+          .testGetValue()
+          ?.map(e => e.extra.close_reason),
+        ["removal_prompt", "removal_prompt"],
+        "Each confirmation dialog closes the dropdown as removal_prompt"
+      );
+      assertOneFlow();
 
       await closePopup(browser);
     }

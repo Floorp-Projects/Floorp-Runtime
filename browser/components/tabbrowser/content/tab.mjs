@@ -2,8 +2,24 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+/* global FirefoxViewHandler, gBrowser, gMultiProcessBrowser, gSharedTabWarning,
+   isBlankPageURL, MozElements */
+
+const { XPCOMUtils } = ChromeUtils.importESModule(
+  "resource://gre/modules/XPCOMUtils.sys.mjs"
+);
 const lazy = XPCOMUtils.declareLazy({
+  BrowserUIUtils: "resource:///modules/BrowserUIUtils.sys.mjs",
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  ContextualIdentityService:
+    "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
+  SessionStore:
+    "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
   TabMetrics: "moz-src:///browser/components/tabbrowser/TabMetrics.sys.mjs",
+  closeTabByDblclick: {
+    pref: "browser.tabs.closeTabByDblclick",
+    default: false,
+  },
 });
 
 export class MozTabbrowserTab extends MozElements.MozTab {
@@ -55,6 +71,13 @@ export class MozTabbrowserTab extends MozElements.MozTab {
     this._hover = false;
     this._selectedOnFirstMouseDown = false;
     this._noteIconHover = false;
+
+    /**
+     * Set by Tabbrowser whenever the tabs are renumbered.
+     *
+     * @type {number}
+     */
+    this._index;
 
     /**
      * Describes how the tab ended up in this mute state. May be any of:
@@ -151,12 +174,14 @@ export class MozTabbrowserTab extends MozElements.MozTab {
     }
 
     this.textContent = "";
-    this.appendChild(this.constructor.fragment);
+    this.appendChild(
+      /** @type {typeof MozTabbrowserTab} */ (this.constructor).fragment
+    );
     this.initializeAttributeInheritance();
     this.setAttribute("context", "tabContextMenu");
     this._initialized = true;
 
-    if (!("_lastAccessed" in this)) {
+    if (!Object.hasOwn(this, "_lastAccessed")) {
       this.updateLastAccessed();
     }
 
@@ -167,7 +192,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
     // Tabs in the tab strip default to being at the top level (level 1)
     // Tabs in tab groups are one level down (level 2); this tab will
     // update its value when it moves in and out of tab groups.
-    this.setAttribute("aria-level", 1);
+    this.setAttribute("aria-level", "1");
   }
 
   /**
@@ -342,7 +367,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
       return false;
     }
 
-    if (!BrowserUIUtils.checkEmptyPageOrigin(browser)) {
+    if (!lazy.BrowserUIUtils.checkEmptyPageOrigin(browser)) {
       return false;
     }
 
@@ -368,7 +393,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
   get lastSeenActive() {
     const isForegroundWindow =
       this.documentGlobal ==
-      BrowserWindowTracker.getTopWindow({ allowPopups: true });
+      lazy.BrowserWindowTracker.getTopWindow({ allowPopups: true });
     // the timestamp for the selected tab in the active window is always now
     if (isForegroundWindow && this.selected) {
       return Date.now();
@@ -570,13 +595,8 @@ export class MozTabbrowserTab extends MozElements.MozTab {
 
   on_mousedown(event) {
     let eventMaySelectTab = true;
-    let tabContainer = this.container;
 
-    if (
-      tabContainer._closeTabByDblclick &&
-      event.button == 0 &&
-      event.detail == 1
-    ) {
+    if (lazy.closeTabByDblclick && event.button == 0 && event.detail == 1) {
       this._selectedOnFirstMouseDown = this.selected;
     }
 
@@ -748,9 +768,8 @@ export class MozTabbrowserTab extends MozElements.MozTab {
       event.stopPropagation();
     }
 
-    let tabContainer = this.container;
     if (
-      tabContainer._closeTabByDblclick &&
+      lazy.closeTabByDblclick &&
       this._selectedOnFirstMouseDown &&
       this.selected &&
       !event.target.classList.contains("tab-icon-overlay")
@@ -813,7 +832,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
     }
 
     // Prepare connection to host beforehand.
-    SessionStore.speculativeConnectOnTabHover(this);
+    lazy.SessionStore.speculativeConnectOnTabHover(this);
 
     this.dispatchEvent(new CustomEvent("TabHoverStart", { bubbles: true }));
 
@@ -982,7 +1001,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
       this.removeAttribute("usercontextid");
     }
 
-    ContextualIdentityService.setTabStyle(this);
+    lazy.ContextualIdentityService.setTabStyle(this);
   }
 
   updateA11yDescription() {
@@ -1026,7 +1045,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
           detail: this,
         })
       );
-      this.setAttribute("aria-level", 2);
+      this.setAttribute("aria-level", "2");
     }
   }
 
@@ -1044,7 +1063,7 @@ export class MozTabbrowserTab extends MozElements.MozTab {
       );
       // Tab could have moved to be ungrouped (level 1)
       // or to a different group (level 2).
-      this.setAttribute("aria-level", this.group ? 2 : 1);
+      this.setAttribute("aria-level", this.group ? "2" : "1");
       // `posinset` and `setsize` only need to be set explicitly
       // on grouped tabs so that a11y tools can tell users that a
       // given tab is "2 of 7" in the group, for example.
@@ -1055,13 +1074,13 @@ export class MozTabbrowserTab extends MozElements.MozTab {
 
   #updateOnTabSplit() {
     if (this.splitview) {
-      this.setAttribute("aria-level", 2);
+      this.setAttribute("aria-level", "2");
     }
   }
 
   #updateOnTabUnsplit() {
     if (!this.splitview) {
-      this.setAttribute("aria-level", 1);
+      this.setAttribute("aria-level", "1");
       // `posinset` and `setsize` only need to be set explicitly
       // on split view tabs so that a11y tools can tell users that a
       // given tab is "1 of 2" in the split view, for example.

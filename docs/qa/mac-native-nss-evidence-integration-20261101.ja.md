@@ -1,0 +1,17 @@
+# M1：NSS失敗時観測の接続（2026-11-01 JST 12時台）
+
+Floorp側のNSS観測器を上流XPCOM pipelineへ接続した。target build前後・child libs/resources再配置後・終了時に同OBJDIRの設定/graph/6libraryのreceiptを `summary.json.nssDynamicClosure` に残す。設定のbundle名はowned FDで読む2MiB以内の固定configに結び、libraryと合わせて総量64MiB、各観測30秒または既存work期限の残りに制限する。FD/pathの差替え・link・不正設定を拒否し、raw内容と絶対pathを出力しない。
+
+collectorの失敗は固定理由だけを残し、first failureや45ledgerのcountsを変更しない。既存groupの終了が未確認、またはwork期限経過なら読取を行わない。観測はadvisoryで、存在・hash/header一致から実NSS loadやMac42件/製品の合格を認定しない。`summary.json` は既存固定8パスの暗号化回収に含まれ、新しい任意file収集やraw公開は増やしていない。
+
+新sourceの全795 IDsを照合し、790成功・従来と同じ実Darwin専用5skip・0fail/0error。旧782 IDs全保持、全153source hashesは各実行と一致。最終batchの120秒driver timeoutは保存し、成功済み23件を再利用して未完了12件だけ4件ずつ分割し全成功した。795件は重複加算しない。設定FD/失敗時保存など新13件はこの全件に含む。公開診断7制御と、既存8パス暗号化回収で新summary field/first failureがbyte完全一致して復号される追加1制御も成功。Mac実観測・実loadは未実行。
+
+新sourceに対する公開制御は、元150source固定verifierで最初にsource-pin拒否となった記録を保持する。実行済みworkflowは変更せず、隔離候補のsource名集合153個とpipelineの厳密hashだけを更新し、判定式不変の7制御を確認した。この候補はまだ有効workflowではない。
+
+前回Floorp CI41242323807の全5jobs、Runtime shadow41242338846/job124658620651のcontracts312件/exit0/preflight PASSはsuccess。artifact13057713030/13057957400の前後API、完全ZIP、lineage、期限とlogsを照合済み。nativeQualificationはUNVERIFIED、publicationAuthorizedはfalse。
+
+SDK13011079529は最新APIと保存正規ZIP105157519bytes/hash8d1fc67bを今回も照合。producer41128679337/attempt1/head032085d9/job124313694921、期限2026-11-13T21:08:48Z。全49701memberの既存独立監査を同じbytesへ結ぶ。
+
+元native41187440235/attempt1/head3fae099d/job124497118586は消費済みfailure、fixture e9c88fbc、コンパイルsource7dd61974、harness cbe45a7d。42 UNVERIFIED+3 MANIFEST_DISABLED、正式executed/passed unknown、first failure mozilla-upstream-proof-incomplete、cleanupのgroup epoch限定を保持する。旧practical/ledgerは不変。
+
+今回は新native/manual rerun/SDK producerなし。新sourceのfixture/head・全pins/catalogを既存実行済みworkflowへ上書きしていない。次は実generated graphの宣言検査に結ぶ限定DSO target候補と、同xpcshellの実NSS load・実Mac fix-stacks probeを準備する。実graph宣言、直接失敗library、実Mac修正成功は未確認。全入力と固有branch/origin、SDK期限、345分work/360分job、失敗保存を凍結して次の必要な初回実行を直列で行う。

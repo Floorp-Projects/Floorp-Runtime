@@ -4,7 +4,7 @@
 "use strict";
 
 const { getPEMString } = ChromeUtils.importESModule(
-  "resource://gre/modules/psm/pippki.sys.mjs"
+  "moz-src:///security/manager/pki/pippki.sys.mjs"
 );
 
 var MockFilePicker = SpecialPowers.MockFilePicker;
@@ -45,10 +45,9 @@ var exportButton;
 var expectedCert;
 
 async function setupTest() {
-  await openPreferencesViaOpenPreferencesAPI(
-    SRD_PREF_VALUE ? "paneConnectionSecurity" : "privacy",
-    { leaveOpen: true }
-  );
+  await openPreferencesViaOpenPreferencesAPI("paneConnectionSecurity", {
+    leaveOpen: true,
+  });
   let certButton = gBrowser.selectedBrowser.contentDocument.getElementById(
     "viewCertificatesButton"
   );

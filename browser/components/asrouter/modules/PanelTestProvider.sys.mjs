@@ -32,11 +32,33 @@ const MESSAGES = () => [
         {
           id: "CAROUSEL",
           content: {
-            title: "New features built to help you do more",
+            corner_image: {
+              position: "bottom-right",
+              imageURL:
+                "https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021204417--kit-sit-look-up--5559ae6b-6311-4bd4-87d8-96dbd0a78e48.svg",
+              height: "206px",
+            },
+            zap_border: true,
+            zap_shadow: true,
+            screen_style: {
+              width: "800px",
+            },
+            dismiss_button: {
+              action: {
+                dismiss: true,
+              },
+            },
+            title: {
+              string_id: "welcome-back-onboarding-title",
+              marginBlockStart: "20px",
+            },
             tiles: {
               type: "single-select",
+              layout: "carousel",
               selected: "vertical-tabs",
-              pill_nav_label: { raw: "Feature highlights" },
+              pill_nav_label: {
+                raw: "Feature highlights",
+              },
               data: [
                 {
                   id: "split-view",
@@ -44,22 +66,25 @@ const MESSAGES = () => [
                   targeting: "firefoxVersion >= 150",
                   type: "carousel-card",
                   pill: {
-                    label: { raw: "Split View" },
+                    label: {
+                      raw: "Split View",
+                    },
                     icon: "chrome://browser/skin/split-view-left-16.svg",
                   },
                   icon: {
                     background:
-                      "url('chrome://activity-stream/content/data/content/assets/mr-kit-smart-window.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
-                    darkModeBackground:
-                      "url('chrome://activity-stream/content/data/content/assets/fox-doodle-backup-restore.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
+                      "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021144626--onboarding-welcome-back-vpn--34e79f8a-3a56-421b-9162-82afe2ee12dd.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
                   },
-                  label: { raw: "Split View" },
+                  label: {
+                    raw: "Split View",
+                  },
                   body: {
                     raw: "Two tabs side by side, right where you need them. Finally.",
                   },
                   tilebutton: {
                     label: {
-                      raw: "Try it now",
+                      string_id:
+                        "welcome-back-onboarding-card-tilebutton-label",
                     },
                     style: "secondary",
                     action: {
@@ -77,14 +102,18 @@ const MESSAGES = () => [
                   type: "carousel-card",
                   targeting: "firefoxVersion <= 140",
                   pill: {
-                    label: { raw: "Vertical Tabs" },
+                    label: {
+                      raw: "Vertical Tabs",
+                    },
                     icon: "chrome://browser/skin/tabs.svg",
                   },
                   icon: {
                     background:
-                      "url('chrome://activity-stream/content/data/content/assets/nuo-taborientation.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
+                      "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021144724--onboarding-welcome-back-tidy-tabs--e3059850-5427-4967-9829-958c04c15396.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
                   },
-                  label: { raw: "Vertical Tabs" },
+                  label: {
+                    raw: "Vertical Tabs",
+                  },
                   body: {
                     raw: "Stack your tabs down the side for calmer browsing.",
                   },
@@ -94,18 +123,25 @@ const MESSAGES = () => [
                   inert: true,
                   type: "carousel-card",
                   pill: {
-                    label: { raw: "Tab Groups" },
+                    label: {
+                      raw: "Tab Groups",
+                    },
                     icon: "chrome://browser/skin/tabbrowser/tab-groups.svg",
                   },
                   icon: {
                     background:
-                      "url('chrome://activity-stream/content/data/content/assets/euo-tab-orientation.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
+                      "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021144652--onboarding-welcome-back-pdf-tools--63356684-de7a-4dec-899e-630e218e4c9e.svg') center / cover no-repeat light-dark(rgb(240, 240, 244), rgb(43, 42, 51))",
                   },
-                  label: { raw: "Tab Groups" },
-                  body: { raw: "Keep related tabs together in named groups." },
+                  label: {
+                    raw: "Tab Groups",
+                  },
+                  body: {
+                    raw: "Keep related tabs together in named groups.",
+                  },
                   tilebutton: {
                     label: {
-                      raw: "Try it now",
+                      string_id:
+                        "welcome-back-onboarding-card-tilebutton-label",
                     },
                     style: "secondary",
                     action: {
@@ -120,13 +156,24 @@ const MESSAGES = () => [
               ],
             },
             primary_button: {
-              label: { raw: "Start browsing" },
+              label: {
+                string_id: "welcome-back-onboarding-primary-button-label",
+                paddingInline: "16px",
+                paddingBlock: "7px",
+              },
               action: {
                 dismiss: true,
               },
             },
-            secondary_button: {
-              label: { raw: "Learn more" },
+            additional_button: {
+              label: {
+                string_id: "welcome-back-onboarding-secondary-button-label",
+                fontSize: "0.75em",
+                paddingBlock: "4px",
+                paddingInline: "12px",
+                border: "none",
+              },
+              style: "secondary",
               action: {
                 dismiss: true,
               },
@@ -135,6 +182,9 @@ const MESSAGES = () => [
         },
       ],
     },
+    provider: "panel_local_testing",
+    targeting: 'providerCohorts.panel_local_testing == "SHOW_TEST"',
+    groups: [],
   },
   {
     weight: 100,
@@ -902,6 +952,22 @@ const MESSAGES = () => [
     targeting: "true",
   },
   {
+    id: "TEST_URLBAR_ACTION",
+    groups: [],
+    template: "urlbar_action",
+    content: {
+      key: "test",
+      keywords: ["fxmstest", "fxms test"],
+      label: "Open about:robots",
+      icon: "chrome://global/skin/icons/info.svg",
+      action: {
+        type: "OPEN_ABOUT_PAGE",
+        data: { args: "robots", where: "tab" },
+      },
+    },
+    targeting: "true",
+  },
+  {
     id: "MULTISTAGE_SPOTLIGHT_MESSAGE",
     groups: ["panel-test-provider"],
     template: "spotlight",
@@ -1068,85 +1134,6 @@ const MESSAGES = () => [
       ],
     },
     frequency: { lifetime: 3 },
-    trigger: { id: "defaultBrowserCheck" },
-  },
-  {
-    id: "PB_FOCUS_PROMO",
-    groups: ["panel-test-provider"],
-    template: "spotlight",
-    content: {
-      template: "multistage",
-      backdrop: "transparent",
-      screens: [
-        {
-          id: "PBM_FIREFOX_FOCUS",
-          order: 0,
-          content: {
-            logo: {
-              imageURL: "chrome://browser/content/assets/focus-logo.svg",
-              height: "48px",
-            },
-            title: {
-              string_id: "spotlight-focus-promo-title",
-            },
-            subtitle: {
-              string_id: "spotlight-focus-promo-subtitle",
-            },
-            dismiss_button: {
-              action: {
-                dismiss: true,
-              },
-            },
-            ios: {
-              action: {
-                data: {
-                  args: "https://app.adjust.com/167k4ih?campaign=firefox-desktop&adgroup=pb&creative=focus-omc172&redirect=https%3A%2F%2Fapps.apple.com%2Fus%2Fapp%2Ffirefox-focus-privacy-browser%2Fid1055677337",
-                  where: "tabshifted",
-                },
-                type: "OPEN_URL",
-                navigate: true,
-              },
-            },
-            android: {
-              action: {
-                data: {
-                  args: "https://app.adjust.com/167k4ih?campaign=firefox-desktop&adgroup=pb&creative=focus-omc172&redirect=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dorg.mozilla.focus",
-                  where: "tabshifted",
-                },
-                type: "OPEN_URL",
-                navigate: true,
-              },
-            },
-            email_link: {
-              action: {
-                data: {
-                  args: "https://mozilla.org",
-                  where: "tabshifted",
-                },
-                type: "OPEN_URL",
-                navigate: true,
-              },
-            },
-            tiles: {
-              type: "mobile_downloads",
-              data: {
-                QR_code: {
-                  image_url:
-                    "chrome://browser/content/assets/focus-qr-code.svg",
-                  alt_text: {
-                    string_id: "spotlight-focus-promo-qr-code",
-                  },
-                },
-                email: {
-                  link_text: "Email yourself a link",
-                },
-                marketplace_buttons: ["ios", "android"],
-              },
-            },
-          },
-        },
-      ],
-    },
     trigger: { id: "defaultBrowserCheck" },
   },
   {
@@ -2924,32 +2911,62 @@ const MESSAGES = () => [
       screens: [
         {
           id: "CARD_STACK_SCREEN_1",
+          targeting:
+            "('messaging-system-action.hnt-card-stack.screen'|preferenceValue(1)) <= 1",
           force_hide_steps_indicator: true,
           content: {
             position: "card-stack",
             background:
               "url('chrome://activity-stream/content/data/content/assets/br-set-default-fox-heart.svg') center / contain no-repeat",
+            card_stack_image: {
+              type: "float",
+            },
             title: { raw: "This is a card-stack headline" },
             subtitle: {
               raw: "This is a card-stack subtitle, lower in the visual hierarchy.",
             },
             primary_button: {
               label: { raw: "Primary action" },
-              action: { navigate: true },
+              action: {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "messaging-system-action.hnt-card-stack.screen",
+                    value: 2,
+                  },
+                },
+                navigate: true,
+              },
             },
             secondary_button: {
               label: { raw: "Dismiss" },
-              action: { navigate: true },
+              action: {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "messaging-system-action.hnt-card-stack.screen",
+                    value: 2,
+                  },
+                },
+                navigate: true,
+              },
             },
           },
         },
         {
           id: "CARD_STACK_SCREEN_2",
+          targeting:
+            "('messaging-system-action.hnt-card-stack.screen'|preferenceValue(1)) <= 2",
           force_hide_steps_indicator: true,
           content: {
             position: "card-stack",
             background:
-              "url('chrome://activity-stream/content/data/content/assets/br-import-fox-house.svg') center / contain no-repeat",
+              "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261014160437--hnt-import--84d11ab4-339b-45df-b94f-4202cd9cdc52.svg') center / contain no-repeat",
+            card_stack_image: {
+              type: "bleed",
+              background_uncropped:
+                "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021220131--hnt-import-uncropped--b8015f9d-bf0a-4b1e-9b83-f846bc7169d4.svg') center / contain no-repeat",
+            },
             title: {
               raw: "This is a card-stack headline, on the second screen",
             },
@@ -2958,18 +2975,89 @@ const MESSAGES = () => [
             },
             primary_button: {
               label: { raw: "Primary action" },
-              action: { navigate: true },
+              action: {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "messaging-system-action.hnt-card-stack.screen",
+                    value: 3,
+                  },
+                },
+                navigate: true,
+              },
             },
             secondary_button: {
               label: { raw: "Dismiss" },
-              action: { dismiss: true },
+              action: {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "messaging-system-action.hnt-card-stack.screen",
+                    value: 3,
+                  },
+                },
+                navigate: true,
+              },
+            },
+          },
+        },
+        {
+          id: "CARD_STACK_SCREEN_3",
+          targeting:
+            "('messaging-system-action.hnt-card-stack.screen'|preferenceValue(1)) <= 3",
+          force_hide_steps_indicator: true,
+          content: {
+            position: "card-stack",
+            background:
+              "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261014160552--hnt-pin-firefox--8240f52c-fc1e-4416-ae07-376063a2a9ac.svg') center / contain no-repeat",
+            card_stack_image: {
+              type: "banner",
+              background_medium:
+                "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021220423--hnt-pin-medium--b1a464e4-7d02-405d-88c4-297a43f198df.svg') center / contain no-repeat",
+              background_small:
+                "url('https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20261021220539--hnt-pin-small--b9b067c8-08ac-4776-8939-b504953a1b8b.svg') center / contain no-repeat",
+            },
+            title: {
+              raw: "This is a card-stack headline, on the third screen",
+            },
+            subtitle: {
+              raw: "This is a card-stack subtitle, on the third screen.",
+            },
+            primary_button: {
+              label: { raw: "Primary action" },
+              action: {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "messaging-system-action.hnt-card-stack.screen",
+                    value: 3,
+                  },
+                },
+                navigate: true,
+              },
+            },
+            secondary_button: {
+              label: { raw: "Dismiss" },
+              action: {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "messaging-system-action.hnt-card-stack.screen",
+                    value: 3,
+                  },
+                },
+                navigate: true,
+              },
             },
           },
         },
         // The unique "last card" layout (bug 2069997).
         {
-          id: "CARD_STACK_SCREEN_3",
+          id: "CARD_STACK_SCREEN_4",
+          targeting:
+            "('messaging-system-action.hnt-card-stack.screen'|preferenceValue(1)) <= 4",
           force_hide_steps_indicator: true,
+          auto_dismiss: { after: 5000 },
           content: {
             position: "card-stack",
             layout: "last-card",
@@ -2977,7 +3065,7 @@ const MESSAGES = () => [
             subtitle: { raw: "Say hello to a better web." },
             center_image: {
               imageURL:
-                "https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/20260923193621--fox-peeking--a7cb53ba-228f-4b81-a92f-6ad34474872b.svg",
+                "chrome://browser/content/asrouter/assets/hnt-center-animated-no-loop.svg",
               alt: "",
               marginBlock: "40px 0",
             },
@@ -3486,7 +3574,7 @@ const MESSAGES = () => [
               paddingInline: "40px",
             },
             background:
-              "center 80% / 70% no-repeat url('chrome://activity-stream/content/data/content/assets/br-set-default-fox-heart.svg'), linear-gradient(0deg, light-dark(rgb(252, 245, 240), var(--onboarding-dark-backdrop-color)) 0%, light-dark(rgb(250, 236, 241), var(--onboarding-dark-backdrop-color)) 57%, light-dark(rgb(245, 212, 245), var(--onboarding-dark-backdrop-color)) 100%)",
+              "center 80% / 70% no-repeat url('chrome://activity-stream/content/data/content/assets/br-set-default-fox-heart.svg'), var(--pinnable-sites-gradient)",
             hero_text: {
               title: {
                 raw: "Open your favorite sites like an app",
@@ -3703,6 +3791,163 @@ const MESSAGES = () => [
     targeting: "isAIWindow",
     frequency: {
       lifetime: 3,
+    },
+  },
+  {
+    id: "SMARTWINDOW_AITAB_SPLITVIEW_TEST",
+    template: "feature_callout",
+    groups: ["cfr", "smart-window-message"],
+    content: {
+      id: "SMARTWINDOW_AITAB_SPLITVIEW_TEST",
+      template: "multistage",
+      backdrop: "transparent",
+      transitions: false,
+      disableHistoryUpdates: true,
+      screens: [
+        {
+          id: "SMARTWINDOW_AITAB_SPLITVIEW_TEST_SCREEN",
+          force_hide_steps_indicator: true,
+          anchors: [
+            {
+              selector:
+                "#ai-window-box:not([collapsed]) #ai-window-browser::%document%ai-window::%shadow%#smartbar-wrapper",
+              panel_position: {
+                anchor_attachment: "topcenter",
+                callout_attachment: "bottomcenter",
+              },
+            },
+            {
+              selector: "#smartwindow-ask-button",
+              panel_position: {
+                anchor_attachment: "bottomcenter",
+                callout_attachment: "topright",
+              },
+            },
+          ],
+          content: {
+            position: "callout",
+            title: { raw: "Compare pages side by side" },
+            subtitle: {
+              raw: "Firefox can turn the pages you're looking into one page with a side-by-side table you can come back to. Use @ and find the pages you'd like to include.",
+            },
+            primary_button: {
+              label: { raw: "Try Now" },
+              action: {
+                type: "SUBMIT_SMARTWINDOW_PROMPT",
+                data: {
+                  prompt:
+                    "Compare the pages in my split view side by side in a table and put it in a page",
+                },
+                dismiss: true,
+              },
+            },
+            secondary_button: {
+              label: { raw: "Later" },
+              action: { dismiss: true },
+            },
+            dismiss_button: {
+              action: {
+                type: "BLOCK_MESSAGE",
+                data: { id: "SMARTWINDOW_AITAB_SPLITVIEW_TEST" },
+                dismiss: true,
+              },
+            },
+          },
+        },
+      ],
+    },
+    trigger: {
+      id: "splitViewUsed",
+    },
+    targeting: "isAIWindow && !activeNotifications",
+    frequency: {
+      lifetime: 3,
+      custom: [{ period: 604800000, cap: 1 }],
+    },
+  },
+  {
+    id: "SMARTWINDOW_AITAB_RECIPES_TEST",
+    template: "feature_callout",
+    groups: ["cfr", "smart-window-message"],
+    content: {
+      id: "SMARTWINDOW_AITAB_RECIPES_TEST",
+      template: "multistage",
+      backdrop: "transparent",
+      transitions: false,
+      disableHistoryUpdates: true,
+      screens: [
+        {
+          id: "SMARTWINDOW_AITAB_RECIPES_TEST_SCREEN",
+          force_hide_steps_indicator: true,
+          anchors: [
+            {
+              selector:
+                "#ai-window-box:not([collapsed]) #ai-window-browser::%document%ai-window::%shadow%#smartbar-wrapper",
+              panel_position: {
+                anchor_attachment: "topcenter",
+                callout_attachment: "bottomcenter",
+              },
+            },
+            {
+              selector: "#smartwindow-ask-button",
+              panel_position: {
+                anchor_attachment: "bottomcenter",
+                callout_attachment: "topright",
+              },
+            },
+          ],
+          content: {
+            position: "callout",
+            title: { raw: "Turn recipes into one shopping list" },
+            subtitle: {
+              raw: "Firefox can pull the ingredients from your recipe tabs into one page for easy access.",
+            },
+            primary_button: {
+              label: { raw: "Try Now" },
+              action: {
+                type: "SUBMIT_SMARTWINDOW_PROMPT",
+                data: {
+                  prompt:
+                    "Collect ingredients from recipes in my open tabs and put them in a page",
+                },
+                dismiss: true,
+              },
+            },
+            secondary_button: {
+              label: { raw: "Later" },
+              action: { dismiss: true },
+            },
+            dismiss_button: {
+              action: {
+                type: "BLOCK_MESSAGE",
+                data: { id: "SMARTWINDOW_AITAB_RECIPES_TEST" },
+                dismiss: true,
+              },
+            },
+          },
+        },
+      ],
+    },
+    trigger: {
+      id: "openURL",
+      patterns: [
+        "*://www.allrecipes.com/recipe/*",
+        "*://www.foodnetwork.com/recipes/*",
+        "*://cooking.nytimes.com/recipes/*",
+        "*://www.seriouseats.com/*-recipe-*",
+        "*://www.simplyrecipes.com/*-recipe-*",
+        "*://www.bonappetit.com/recipe/*",
+        "*://www.epicurious.com/recipes/food/views/*",
+        "*://www.budgetbytes.com/*",
+        "*://www.ricardocuisine.com/en/recipes/*",
+        "*://chatelaine.com/recipe/*",
+      ],
+      regexPatterns: ["^https?://[^?#]*recipe"],
+    },
+    targeting: "isAIWindow && !activeNotifications",
+    frequency: {
+      lifetime: 3,
+      custom: [{ period: 604800000, cap: 1 }],
     },
   },
 ];

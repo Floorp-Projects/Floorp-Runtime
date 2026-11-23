@@ -27,14 +27,22 @@ CSSMathNegate::CSSMathNegate(
 
 // static
 RefPtr<CSSMathNegate> CSSMathNegate::Create(
+    nsCOMPtr<nsISupports> aParent, UniquePtr<StyleNumericType> aNumericType,
+    RefPtr<CSSNumericValue> aValue) {
+  return MakeRefPtr<CSSMathNegate>(std::move(aParent),
+                                   WrapMovingNotNull(std::move(aNumericType)),
+                                   std::move(aValue));
+}
+
+// static
+RefPtr<CSSMathNegate> CSSMathNegate::Create(
     nsCOMPtr<nsISupports> aParent, const StyleMathNegate& aMathNegate) {
   RefPtr<CSSNumericValue> value =
       CSSNumericValue::Create(aParent, *aMathNegate.value);
 
-  return MakeRefPtr<CSSMathNegate>(
-      std::move(aParent),
-      WrapMovingNotNull(MakeUnique<StyleNumericType>(aMathNegate.numeric_type)),
-      std::move(value));
+  return Create(std::move(aParent),
+                std::make_unique<StyleNumericType>(aMathNegate.numeric_type),
+                std::move(value));
 }
 
 NS_IMPL_ISUPPORTS_CYCLE_COLLECTION_INHERITED_0(CSSMathNegate, CSSMathValue)
@@ -57,7 +65,8 @@ already_AddRefed<CSSMathNegate> CSSMathNegate::Constructor(
   // Step 1.
   RefPtr<CSSNumericValue> value = CSSNumericValue::Create(global, aArg);
 
-  auto numericType = MakeUnique<StyleNumericType>(value->GetNumericType());
+  auto numericType =
+      std::make_unique<StyleNumericType>(value->GetNumericType());
 
   // Step 2.
 
@@ -88,7 +97,8 @@ void CSSMathNegate::ToCssTextWithProperty(const CSSPropertyId& aPropertyId,
 }
 
 StyleMathNegate CSSMathNegate::ToStyleMathNegate() const {
-  auto value = MakeUnique<StyleNumericValue>(mValue->ToStyleNumericValue());
+  auto value =
+      std::make_unique<StyleNumericValue>(mValue->ToStyleNumericValue());
 
   return StyleMathNegate{GetNumericType(),
                          StyleBox<StyleNumericValue>(std::move(value))};

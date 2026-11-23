@@ -132,6 +132,18 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   static AVCodecID GetCodecId(const nsACString& aMimeType);
 
+#ifdef MOZ_WIDGET_ANDROID
+  // Returns true if MediaCodec can decode aCodec with aColorDepth.
+  static bool MediaCodecSupportsColorDepth(AVCodecID aCodec,
+                                           const nsACString& aMimeType,
+                                           gfx::ColorDepth aColorDepth);
+
+  // Whether or not platform decoding must be performed in the GPU process
+  // instead of this process. We only fallback to the RDD process if the GPU
+  // process is disabled.
+  static bool ShouldDecodeInGPUProcess();
+#endif
+
 #ifdef CUSTOMIZED_BUFFER_ALLOCATION
   int GetVideoBuffer(struct AVCodecContext* aCodecContext, AVFrame* aFrame,
                      int aFlags);
@@ -252,7 +264,6 @@ class FFmpegVideoDecoder<LIBAV_VER>
 #endif
 
 #if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
-  bool UploadSWDecodeToDMABuf() const;
   bool IsLinuxHDR() const;
   MediaResult InitVAAPIDecoder();
   MediaResult InitV4L2Decoder();
@@ -299,9 +310,6 @@ class FFmpegVideoDecoder<LIBAV_VER>
   bool mVulkanTilingSettled = false;
 #  endif
   bool mUsingV4L2 = false;
-  // If video overlay is used we want to upload SW decoded frames to
-  // DMABuf and present it as a external texture to rendering pipeline.
-  bool mUploadSWDecodeToDMABuf = false;
   VADisplay mDisplay = nullptr;
   UniquePtr<VideoFramePool<LIBAV_VER>> mVideoFramePool;
   static nsTArray<AVCodecID> mAcceleratedFormats;

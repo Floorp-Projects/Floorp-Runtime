@@ -50,6 +50,7 @@ Bookmarks.prototype = {
       if (!children) {
         throw new Error("Invalid Bookmarks.plist format");
       }
+      this.available = 0;
 
       let collection =
         dict.get("Title") == "com.apple.ReadingList"
@@ -209,6 +210,7 @@ Bookmarks.prototype = {
         let readingListTitle = await MigrationUtils.getLocalizedString(
           "migration-imported-safari-reading-list"
         );
+        this.available++;
         folderGuid = (
           await MigrationUtils.insertBookmarkWrapper({
             parentGuid: lazy.PlacesUtils.bookmarks.menuGuid,
@@ -279,6 +281,7 @@ Bookmarks.prototype = {
     for (const entry of entries) {
       let type = entry.get("WebBookmarkType");
       if (type == "WebBookmarkTypeList" && entry.has("Children")) {
+        this.available++;
         let convertedChildren = await this._convertEntries(
           entry.get("Children"),
           bookmarkURLToUUIDMap
@@ -290,6 +293,7 @@ Bookmarks.prototype = {
           children: convertedChildren.convertedEntries,
         });
       } else if (type == "WebBookmarkTypeLeaf" && entry.has("URLString")) {
+        this.available++;
         // Check we understand this URL before adding it:
         let url = entry.get("URLString");
         if (!URL.canParse(url)) {
@@ -344,7 +348,12 @@ Bookmarks.prototype = {
   },
 };
 
-async function GetHistoryResource() {
+/**
+ * @param {boolean} aShouldCheckForHistory
+ *   False if History.db must not be read yet, in which case the history is
+ *   presumed to exist.
+ */
+async function GetHistoryResource(aShouldCheckForHistory) {
   let dbPath = FileUtils.getDir("ULibDir", ["Safari", "History.db"]).path;
   let maxAge = msToNSDate(
     Date.now() - MigrationUtils.HISTORY_MAX_AGE_IN_MILLISECONDS
@@ -355,15 +364,17 @@ async function GetHistoryResource() {
   // directory, let's assume that there's history to import and give the
   // user the option to migrate it.
   let canReadHistory = false;
-  try {
-    // 'stat' is always allowed, but reading is somehow not, if the user hasn't
-    // allowed it:
-    await IOUtils.read(dbPath, { maxBytes: 1 });
-    canReadHistory = true;
-  } catch (ex) {
-    console.error(
-      "Cannot yet read from Safari profile directory. Will presume history exists for import."
-    );
+  if (aShouldCheckForHistory) {
+    try {
+      // 'stat' is always allowed, but reading is somehow not, if the user
+      // hasn't allowed it:
+      await IOUtils.read(dbPath, { maxBytes: 1 });
+      canReadHistory = true;
+    } catch (ex) {
+      console.error(
+        "Cannot yet read from Safari profile directory. Will presume history exists for import."
+      );
+    }
   }
 
   if (canReadHistory) {
@@ -405,6 +416,13 @@ async function GetHistoryResource() {
       let historyRows;
 
       try {
+        let availableRows = await MigrationUtils.getRowsFromDBWithoutLocks(
+          dbPath,
+          "Safari history",
+          "SELECT COUNT(*) FROM history_visits;"
+        );
+        this.available = availableRows[0].getResultByName("COUNT(*)");
+
         historyRows = await MigrationUtils.getRowsFromDBWithoutLocks(
           dbPath,
           "Safari history",
@@ -497,14 +515,17 @@ SearchStrings.prototype = {
   type: MigrationUtils.resourceTypes.OTHERDATA,
 
   migrate: function SS_migrate(aCallback) {
+    let resource = this;
     this._mainPreferencesPropertyList.read(
       MigrationUtils.wrapMigrateFunction(function migrateSearchStrings(aDict) {
         if (!aDict) {
           throw new Error("Could not get preferences dictionary");
         }
 
+        resource.available = 0;
         if (aDict.has("RecentSearchStrings")) {
           let recentSearchStrings = aDict.get("RecentSearchStrings");
+          resource.available = recentSearchStrings?.length ?? 0;
           if (recentSearchStrings && recentSearchStrings.length) {
             let changes = recentSearchStrings.map(searchString => ({
               op: "add",
@@ -523,6 +544,22 @@ SearchStrings.prototype = {
  * Safari migrator
  */
 export class SafariProfileMigrator extends MigratorBase {
+  /**
+   * True once the user has selected a folder in the file picker opened by
+   * getPermissions. Reset if that folder did not give access and the user
+   * then cancels the file picker.
+   *
+   * @type {boolean}
+   */
+  #hasUserSelectedSafariFolder = false;
+
+  #shouldAvoidReadingData() {
+    return (
+      !this.#hasUserSelectedSafariFolder &&
+      MigratorBase.needsFolderSelectionToReadData()
+    );
+  }
+
   static get key() {
     return "safari";
   }
@@ -564,7 +601,7 @@ export class SafariProfileMigrator extends MigratorBase {
       resources.push(new SearchStrings(prefs));
     }
 
-    resources.push(GetHistoryResource());
+    resources.push(GetHistoryResource(!this.#shouldAvoidReadingData()));
 
     resources = await Promise.all(resources);
 
@@ -588,6 +625,9 @@ export class SafariProfileMigrator extends MigratorBase {
   async hasPermissions() {
     if (this._hasPermissions) {
       return true;
+    }
+    if (this.#shouldAvoidReadingData()) {
+      return false;
     }
     // Check if we have access to some key files, but only if they exist.
     let historyTarget = FileUtils.getDir("ULibDir", ["Safari", "History.db"]);
@@ -631,7 +671,7 @@ export class SafariProfileMigrator extends MigratorBase {
       // The title (second arg) is not displayed on macOS, so leave it blank.
       fp.init(win?.browsingContext, "", Ci.nsIFilePicker.modeGetFolder);
       fp.filterIndex = 1;
-      fp.displayDirectory = FileUtils.getDir("ULibDir", [""]);
+      fp.displayDirectory = FileUtils.getDir("ULibDir", ["Safari"]);
       // Now wait for the filepicker to open and close. If the user picks
       // the Safari folder, macOS will grant us read access to everything
       // inside, so we don't need to check or do anything else with what's
@@ -639,8 +679,12 @@ export class SafariProfileMigrator extends MigratorBase {
       let result = await new Promise(resolve => fp.open(resolve));
       // Bail if the user cancels the dialog:
       if (result == Ci.nsIFilePicker.returnCancel) {
+        this.#hasUserSelectedSafariFolder = false;
         return false;
       }
+      this.#hasUserSelectedSafariFolder = true;
+      // Resources looked up before the folder was selected may be incomplete.
+      this._resourcesByProfile = null;
     }
     return true;
   }

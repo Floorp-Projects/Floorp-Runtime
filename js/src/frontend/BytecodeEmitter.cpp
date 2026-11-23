@@ -11097,6 +11097,55 @@ bool BytecodeEmitter::emitInitializeInstanceMembers(
     }
   }
 
+  if (memberInitializers.hasInlinedFields) {
+    MOZ_ASSERT(!isDerivedClassConstructor);
+    for (const InlinedField& field : sc->asFunctionBox()->inlinedFields()) {
+      if (!emitGetName(TaggedParserAtomIndex::WellKnown::dot_this_())) {
+        //              [stack] THIS
+        return false;
+      }
+      if (field.isPrivate) {
+        if (!emitGetPrivateName(field.name)) {
+          //            [stack] THIS KEY
+          return false;
+        }
+        // There is no private brand to check, this class has no private
+        // methods.
+        if (!emitCheckPrivateField(ThrowCondition::ThrowHas,
+                                   ThrowMsgKind::PrivateDoubleInit)) {
+          //            [stack] THIS KEY BOOL
+          return false;
+        }
+        if (!emit1(JSOp::Pop)) {
+          //            [stack] THIS KEY
+          return false;
+        }
+        if (!emitNumberOp(field.initialValue)) {
+          //            [stack] THIS KEY VALUE
+          return false;
+        }
+        if (!emit1(JSOp::InitHiddenElem)) {
+          //            [stack] THIS
+          return false;
+        }
+      } else {
+        if (!emitNumberOp(field.initialValue)) {
+          //            [stack] THIS VALUE
+          return false;
+        }
+        if (!emitAtomOp(JSOp::InitProp, field.name)) {
+          //            [stack] THIS
+          return false;
+        }
+      }
+      if (!emit1(JSOp::Pop)) {
+        //              [stack]
+        return false;
+      }
+    }
+    return true;
+  }
+
   size_t numInitializers = memberInitializers.numMemberInitializers;
   if (numInitializers > 0) {
     if (!emitGetName(TaggedParserAtomIndex::WellKnown::dot_initializers_())) {
@@ -12431,6 +12480,8 @@ bool BytecodeEmitter::emitClass(
                TaggedParserAtomIndex::WellKnown::dot_initializers_());
 #endif
 
+    ctor = &constructorScope->scopeBody()->as<ClassMethod>().method();
+
     auto needsInitializer = [](ParseNode* propdef) {
       return NeedsFieldInitializer(propdef, false) ||
              NeedsAccessorInitializer(propdef, false);
@@ -12450,7 +12501,8 @@ bool BytecodeEmitter::emitClass(
       }
 #endif
       // Any class with field initializers will have a constructor
-      if (!emitCreateMemberInitializers(ce, classMembers,
+      if (!ctor->funbox()->memberInitializers().hasInlinedFields &&
+          !emitCreateMemberInitializers(ce, classMembers,
                                         FieldPlacement::Instance
 #ifdef ENABLE_DECORATORS
                                         ,
@@ -12461,7 +12513,6 @@ bool BytecodeEmitter::emitClass(
       }
     }
 
-    ctor = &constructorScope->scopeBody()->as<ClassMethod>().method();
   } else {
     // The |.initializers| binding is never emitted when in self-hosting mode.
     MOZ_ASSERT(emitterMode == BytecodeEmitter::SelfHosting);

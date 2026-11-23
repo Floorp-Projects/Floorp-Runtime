@@ -20,17 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.semantics.CollectionInfo
-import androidx.compose.ui.semantics.collectionInfo
-import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import mozilla.components.compose.base.text.Text
 import mozilla.components.compose.base.theme.AcornTheme
 import mozilla.components.compose.menu.data.BannerMenuItem
 import mozilla.components.compose.menu.data.MenuItem
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.store.MenuEvent
 import mozilla.components.ui.icons.R as iconsR
@@ -53,13 +49,14 @@ internal fun MenuGridContainer(
     isSticky: Boolean = false,
     backgroundColor: Color = if (isSticky) MaterialTheme.colorScheme.surface else Color.Transparent,
 ) {
-    val displayedItems = items.filter { it !is BannerMenuItem && it.icon != null }
+    val displayedItems = items.displayedInGrid()
     Row(
         modifier =
-            modifier.fillMaxWidth().height(IntrinsicSize.Min).applyGridGroupStyle(isSticky, backgroundColor).semantics {
-                isTraversalGroup = true
-                collectionInfo = CollectionInfo(rowCount = 1, columnCount = displayedItems.size)
-            },
+            modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .applyGridGroupStyle(isSticky, backgroundColor)
+                .menuGridGroupSemantics(displayedItems.size),
         horizontalArrangement =
             Arrangement.spacedBy(if (isSticky) AcornTheme.layout.space.static50 else AcornTheme.layout.space.static25),
         verticalAlignment = Alignment.CenterVertically,
@@ -97,7 +94,7 @@ private fun RowScope.GridGroupContent(
             }
 
         MenuGridItem(
-            title = item.title,
+            title = item.title.text,
             contentDescription = item.contentDescription,
             onClickEvent = item.onClickEvent,
             onInteraction = onInteraction,
@@ -112,31 +109,6 @@ private fun RowScope.GridGroupContent(
     }
 }
 
-@Composable
-private fun getGridItemShape(
-    index: Int,
-    total: Int,
-): Shape {
-    if (total == 1) {
-        return MaterialTheme.shapes.extraLarge
-    }
-    return when (index) {
-        0 ->
-            MaterialTheme.shapes.extraLarge.copy(
-                topEnd = MaterialTheme.shapes.extraSmall.topEnd,
-                bottomEnd = MaterialTheme.shapes.extraSmall.bottomEnd,
-            )
-
-        total - 1 ->
-            MaterialTheme.shapes.extraLarge.copy(
-                topStart = MaterialTheme.shapes.extraSmall.topStart,
-                bottomStart = MaterialTheme.shapes.extraSmall.bottomStart,
-            )
-
-        else -> MaterialTheme.shapes.extraSmall
-    }
-}
-
 @PreviewLightDark
 @Composable
 private fun MenuGridContainerPreview() = AcornTheme {
@@ -144,27 +116,27 @@ private fun MenuGridContainerPreview() = AcornTheme {
         items =
             listOf(
                 StandardMenuItem(
-                    title = Text.String("Back"),
+                    title = MenuItemTitle(Text.String("Back")),
                     contentDescription = Text.String("Back"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_back_24),
                     onClickEvent = object : MenuEvent {},
                     state = MenuItemState.DISABLED,
                 ),
                 StandardMenuItem(
-                    title = Text.String("Forward"),
+                    title = MenuItemTitle(Text.String("Forward")),
                     contentDescription = Text.String("Forward"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_forward_24),
                     onClickEvent = object : MenuEvent {},
                     state = MenuItemState.DISABLED,
                 ),
                 StandardMenuItem(
-                    title = Text.String("Share"),
+                    title = MenuItemTitle(Text.String("Share")),
                     contentDescription = Text.String("Share"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_share_android_24),
                     onClickEvent = object : MenuEvent {},
                 ),
                 StandardMenuItem(
-                    title = Text.String("Refresh"),
+                    title = MenuItemTitle(Text.String("Refresh")),
                     contentDescription = Text.String("Refresh"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_arrow_clockwise_24),
                     onClickEvent = object : MenuEvent {},
@@ -182,25 +154,25 @@ private fun MenuGridContainerNotStickyPreview() = AcornTheme {
         items =
             listOf(
                 StandardMenuItem(
-                    title = Text.String("History"),
+                    title = MenuItemTitle(Text.String("History")),
                     contentDescription = Text.String("History"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_history_24),
                     onClickEvent = object : MenuEvent {},
                 ),
                 StandardMenuItem(
-                    title = Text.String("Save"),
+                    title = MenuItemTitle(Text.String("Save")),
                     contentDescription = Text.String("Save"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_save_24),
                     onClickEvent = object : MenuEvent {},
                 ),
                 StandardMenuItem(
-                    title = Text.String("Downloads"),
+                    title = MenuItemTitle(Text.String("Downloads")),
                     contentDescription = Text.String("Downloads"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_download_24),
                     onClickEvent = object : MenuEvent {},
                 ),
                 StandardMenuItem(
-                    title = Text.String("Passwords"),
+                    title = MenuItemTitle(Text.String("Passwords")),
                     contentDescription = Text.String("Passwords"),
                     icon = MenuItemIconRes(iconsR.drawable.mozac_ic_lock_24),
                     onClickEvent = object : MenuEvent {},

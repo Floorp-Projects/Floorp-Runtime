@@ -35,6 +35,8 @@ async function cleanupStorage(selRecords) {
 add_setup(async function () {
   // Security codes are only handled once the feature is rolled out. Roll it out
   // for the whole file so each task can toggle CVV_PREF on its own.
+  // The security code is supported only while the Rust store serves.
+  await switchCreditCardStore({ rust: true });
   await SpecialPowers.pushPrefEnv({ set: [[SUPPORTED_PREF, "on"]] });
 });
 
@@ -92,7 +94,7 @@ add_task(async function test_indicationShownForSavedSecurityCode() {
     let l10nAttrs = win.document.l10n.getAttributes(option);
     is(
       l10nAttrs.id,
-      "credit-card-label-with-security-code",
+      "credit-card-label-with-security-code-2",
       "The label is wrapped by the security code string"
     );
     ok(
@@ -107,7 +109,7 @@ add_task(async function test_indicationShownForSavedSecurityCode() {
 
     await win.document.l10n.translateElements([option]);
     ok(
-      option.textContent.includes("CVV saved"),
+      option.textContent.includes("CVV •••"),
       `The row indicates a saved security code: ${option.textContent}`
     );
     ok(
@@ -147,7 +149,7 @@ add_task(async function test_noIndicationForEmptySecurityCode() {
 
     await win.document.l10n.translateElements([option]);
     ok(
-      !option.textContent.includes("CVV saved"),
+      !option.textContent.includes("CVV •••"),
       `The row carries no indication: ${option.textContent}`
     );
 
@@ -173,7 +175,7 @@ add_task(async function test_noIndicationWithoutSavedSecurityCode() {
 
     await win.document.l10n.translateElements([option]);
     ok(
-      !option.textContent.includes("CVV saved"),
+      !option.textContent.includes("CVV •••"),
       `The row carries no indication: ${option.textContent}`
     );
 

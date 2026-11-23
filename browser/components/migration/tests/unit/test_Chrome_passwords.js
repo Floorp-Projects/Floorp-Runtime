@@ -257,7 +257,7 @@ add_task(async function setup() {
   } else {
     throw new Error("Not implemented");
   }
-  const dirSvcFile = do_get_file(dirSvcPath);
+  const dirSvcFile = await copyFixtureDir(dirSvcPath);
   registerFakePath(pathId, dirSvcFile);
 
   info(PathUtils.join(dirSvcFile.path, ...profilePathSegments));
@@ -377,9 +377,9 @@ add_task(async function test_importExistingLogins() {
     "Check there are still the same number of logins after re-importing the data"
   );
   Assert.equal(
-    logins.length,
     MigrationUtils._importQuantities.logins,
-    "Check telemetry matches the actual import."
+    TEST_LOGINS.length - newLogins.length,
+    "Check telemetry only counts the logins that were newly added."
   );
 
   for (let i = 0; i < newLogins.length; i++) {

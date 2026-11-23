@@ -12,13 +12,7 @@ add_setup(async () => {
 async function showOpenTabsPanel() {
   await SidebarTestUtils.showPanel(window, "viewOpenTabsSidebar");
   const { contentDocument } = SidebarController.browser;
-  const component = contentDocument.querySelector("sidebar-opentabs");
-  Assert.ok(component, "Open tabs panel element exists.");
-  Assert.ok(
-    BrowserTestUtils.isVisible(SidebarController.sidebarContainer),
-    "Open tabs panel is shown."
-  );
-  return component;
+  return contentDocument.querySelector("sidebar-opentabs");
 }
 
 function getTabList(component) {
@@ -61,6 +55,28 @@ add_task(async function test_opentabs_lists_current_window_tabs() {
 
   BrowserTestUtils.removeTab(tab1);
   BrowserTestUtils.removeTab(tab2);
+  SidebarTestUtils.closePanel(window);
+});
+
+add_task(async function test_opentabs_row_tooltip() {
+  const tab = await BrowserTestUtils.openNewForegroundTab(
+    gBrowser,
+    "data:text/html,<title>Tooltip Test</title>"
+  );
+  const url = tab.linkedBrowser.currentURI.spec;
+
+  const component = await showOpenTabsPanel();
+  const tabList = getTabList(component);
+  await waitForRowCount(tabList, getVisibleTabCount());
+
+  const row = [...tabList.rowEls].find(rowEl => rowEl.tabElement === tab);
+  await assertRowTooltip(
+    row,
+    `Tooltip Test\n${url}`,
+    "Tooltip shows the tab title and URL."
+  );
+
+  BrowserTestUtils.removeTab(tab);
   SidebarTestUtils.closePanel(window);
 });
 

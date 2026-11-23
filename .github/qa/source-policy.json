@@ -8,11 +8,11 @@
     },
     {
       "path": ".github/patches/upstream/bootstrap.py.patch",
-      "sha256": "678754694a8ca39628604b5c98edb97eebea869a10110f265e56bb284f6df7d3"
+      "sha256": "cc270547668afd90872c114c35e5d3679c0b37d19b7020a6d906747f01c479b0"
     },
     {
       "path": ".github/patches/upstream/brandingFileIcon.patch",
-      "sha256": "55d5bc554135564b6324b8206de28c21e87712c6d4a10093936cc0c228409fa0"
+      "sha256": "5982fc47bf96701305fc150ea4a01d6ebc0592ef2a342480feaf746e41a983ff"
     },
     {
       "path": ".github/patches/upstream/browser-installer-windows-nsis-shared.nsh.patch",
@@ -29,6 +29,10 @@
     {
       "path": ".github/patches/upstream/config-external-nspr-pr-moz.build.patch",
       "sha256": "e0fc458b8d8025a87f80692f53db3089b5825006b59a049bfd4023f9683daf2f"
+    },
+    {
+      "path": ".github/patches/upstream/fdh-windows-private-profile-token.patch",
+      "sha256": "121cd0eb12896e6365043369c58c37d53dcde3f129bbfa745e87639c5309a0f0"
     },
     {
       "path": ".github/patches/upstream/fluent-brand-test.patch",

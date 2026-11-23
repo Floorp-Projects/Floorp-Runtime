@@ -139,6 +139,7 @@ nsresult txMozillaTextOutput::createResultDocument(bool aLoadedAsData) {
       mDocument->GetReadyStateEnum() == Document::READYSTATE_UNINITIALIZED,
       "Bad readyState");
   mDocument->SetReadyStateInternal(Document::READYSTATE_LOADING);
+  mDocument->SetMayStartLayout(false);
   bool hasHadScriptObject = false;
   nsIScriptGlobalObject* sgo =
       mSourceDocument->GetScriptHandlingObject(hasHadScriptObject);
@@ -217,7 +218,8 @@ nsresult txMozillaTextOutput::createResultDocument(bool aLoadedAsData) {
     }
 
     rv = mTextParent->AsElement()->SetAttr(kNameSpaceID_None, nsGkAtoms::id,
-                                           u"transformiixResult"_ns, false);
+                                           u"transformiixResult"_ns, false,
+                                           IsKnownNewAttr::Yes);
     NS_ENSURE_SUCCESS(rv, rv);
 
     body->AppendChildTo(mTextParent, false, error);

@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from mozfile import json
@@ -16,10 +17,99 @@ from mozshellutil import quote as shell_quote
 
 from mozbuild.rust_commands import (
     CargoInvocation,
+    applies_library_lto,
     compose_cargo_build_edge_argv,
     compose_env,
     load_cargo_spec,
 )
+
+
+def workspace_packages(manifest_path, substs, topobjdir):
+    """Map each workspace member's name to its ``cargo metadata`` entry."""
+    output = subprocess.check_output(
+        [
+            substs.get("CARGO"),
+            "metadata",
+            "--no-deps",
+            *substs.get("MOZ_CARGO_FROZEN_ARGS"),
+            "--format-version",
+            "1",
+            "--manifest-path",
+            manifest_path,
+        ],
+        cwd=topobjdir,
+    )
+    return {package["name"]: package for package in json.loads(output)["packages"]}
+
+
+def narrow_test_edge(command, crates, packages):
+    """Return the Cargo test edge command narrowed to ``crates``, and whether
+    to enable ``mozilla-central-workspace-hack``.
+
+    ``command`` is a directory's Cargo test edge command, which runs
+    ``cargo test -p A -p B ... --features F,G`` for every crate in its
+    ``RUST_TESTS``. ``crates`` are the edge's crates that were selected for
+    testing. ``packages`` maps each workspace member's name to its
+    ``cargo metadata`` entry.
+
+    We remove the two kinds of feature Cargo rejects.
+
+    - A plain feature that none of the ``-p`` packages declares.
+    - A ``dep/feature`` whose ``dep`` is neither one of those packages nor one
+      of their direct dependencies.
+
+    A listed crate without tests keeps its ``-p``. ``gkrust`` is in
+    ``RUST_TESTS`` only so that Cargo accepts ``gkrust_features``, and
+    removing its ``-p`` would filter those features out too.
+    """
+    names = list(crates) + [
+        name
+        for name in command.names
+        if name not in crates
+        and name in packages
+        and not any(t["test"] or t["doctest"] for t in packages[name]["targets"])
+    ]
+
+    selected = [packages[name] for name in names if name in packages]
+    declared_features = {f for package in selected for f in package["features"]}
+    feature_owners = set(names) | {
+        dependency.get("rename") or dependency["name"]
+        for package in selected
+        for dependency in package["dependencies"]
+    }
+
+    def accepted(feature):
+        owner, slash, _ = feature.partition("/")
+        return owner in feature_owners if slash else feature in declared_features
+
+    narrowed = replace(
+        command,
+        names=tuple(names),
+        features=tuple(f for f in command.features if accepted(f)),
+    )
+    return narrowed, "mozilla-central-workspace-hack" in declared_features
+
+
+def check_networking(command, substs, topobjdir):
+    # When we are building in --enable-release mode; we add an additional check to confirm
+    # that we are not importing any networking-related functions in rust code. This reduces
+    # the chance of proxy bypasses originating from rust code.
+    # The check only works when rust code is built with -Clto but without MOZ_LTO_RUST_CROSS.
+    # Sanitizers and sancov also fail because compiler-rt hooks network functions.
+    if (
+        substs.get("OS_ARCH") != "Linux"
+        or substs.get("MOZ_PROFILE_GENERATE")
+        or substs.get("RUST_SANCOV_FLAGS")
+        or substs.get("MOZ_ASAN")
+        or substs.get("MOZ_TSAN")
+        or substs.get("MOZ_UBSAN")
+        or substs.get("MOZ_LTO_RUST_CROSS")
+        or not applies_library_lto(command.kind, command.lto, substs)
+    ):
+        return 0
+    from mozbuild.action import check_binary
+
+    return check_binary.main(["--networking", str(Path(topobjdir, command.outputs[0]))])
 
 
 def copy_program_pdbs(command, topobjdir):
@@ -64,6 +154,14 @@ def main(argv):
     )
 
     invocation = CargoInvocation.from_environ(os.environ)
+    workspace_hack = True
+    if command.kind == "test" and invocation.test_crates:
+        crates = [name for name in command.names if name in invocation.test_crates]
+        if not crates:
+            return 0
+        packages = workspace_packages(command.manifest_path, substs, topobjdir)
+        command, workspace_hack = narrow_test_edge(command, crates, packages)
+
     env = compose_env(command, substs, os.environ, invocation, topsrcdir, topobjdir)
     cargo_argv = compose_cargo_build_edge_argv(
         command,
@@ -72,6 +170,7 @@ def main(argv):
         timings=args.timings,
         keep_going=args.keep_going,
         single_job=args.single_job,
+        workspace_hack=workspace_hack,
     )
     if invocation.verbose:
         print(shell_quote(*cargo_argv), flush=True)
@@ -86,6 +185,7 @@ def main(argv):
     ).returncode
     if returncode == 0:
         copy_program_pdbs(command, topobjdir)
+        returncode = check_networking(command, substs, topobjdir)
     return returncode
 
 

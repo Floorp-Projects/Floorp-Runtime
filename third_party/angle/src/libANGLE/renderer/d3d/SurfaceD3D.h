@@ -29,7 +29,7 @@ class SurfaceD3D : public SurfaceImpl
     ~SurfaceD3D() override;
     void releaseSwapChain();
 
-    egl::Error initialize(const egl::Display *display) override;
+    egl::Error initialize(const egl::ThreadSafeDisplay *display) override;
 
     egl::Error swap(const gl::Context *context, SurfaceSwapFeedback *feedback) override;
     egl::Error postSubBuffer(const gl::Context *context,
@@ -44,7 +44,7 @@ class SurfaceD3D : public SurfaceImpl
     egl::Error releaseTexImage(const gl::Context *context, EGLint buffer) override;
     egl::Error getSyncValues(EGLuint64KHR *ust, EGLuint64KHR *msc, EGLuint64KHR *sbc) override;
     egl::Error getMscRate(EGLint *numerator, EGLint *denominator) override;
-    void setSwapInterval(const egl::Display *display, EGLint interval) override;
+    void setSwapInterval(const egl::ThreadSafeDisplay *display, EGLint interval) override;
     void setFixedWidth(EGLint width) override;
     void setFixedHeight(EGLint height) override;
 
@@ -56,25 +56,20 @@ class SurfaceD3D : public SurfaceImpl
     // D3D implementations
     SwapChainD3D *getSwapChain() const;
 
-    egl::Error resetSwapChain(const egl::Display *display);
+    egl::Error resetSwapChain(const egl::ThreadSafeDisplay *display);
 
     egl::Error checkForOutOfDateSwapChain(DisplayD3D *displayD3D);
 
     angle::Result getAttachmentRenderTarget(const gl::Context *context,
                                             GLenum binding,
-                                            const gl::OwnImageIndex &ownImageIndex,
+                                            const gl::ImageIndex &imageIndex,
                                             GLsizei samples,
                                             FramebufferAttachmentRenderTarget **rtOut) override;
     angle::Result initializeContents(const gl::Context *context,
                                      GLenum binding,
-                                     const gl::OwnImageIndex &ownImageIndex) override;
+                                     const gl::ImageIndex &imageIndex) override;
 
     const angle::Format *getClientBufferTextureColorFormat() const override;
-
-    egl::Error attachToFramebuffer(const gl::Context *context,
-                                   gl::Framebuffer *framebuffer) override;
-    egl::Error detachFromFramebuffer(const gl::Context *context,
-                                     gl::Framebuffer *framebuffer) override;
 
   protected:
     SurfaceD3D(const egl::SurfaceState &state,
@@ -111,7 +106,7 @@ class SurfaceD3D : public SurfaceImpl
     EGLint mSwapInterval;
 
     HANDLE mShareHandle;
-    IUnknown *mD3DTexture;
+    angle::ComPtr<IUnknown> mD3DTexture;
 
     EGLenum mBuftype;
 };

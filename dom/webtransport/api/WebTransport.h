@@ -25,6 +25,7 @@
 
 namespace mozilla::dom {
 
+class Headers;
 class WebTransportError;
 class WebTransportDatagramDuplexStream;
 class WebTransportIncomingStreamsAlgorithms;
@@ -91,11 +92,18 @@ class WebTransport final : public nsISupports, public nsWrapperCache {
   void NewDatagramReceived(nsTArray<uint8_t>&& aData,
                            const mozilla::TimeStamp& aTimeStamp);
 
+  void OnDatagramReady(uint64_t aDatagramId);
+
   void RemoteClosed(bool aCleanly, const uint32_t& aCode,
                     const nsACString& aReason,
                     const Maybe<WebTransportStatsData>& aStats);
 
   void SetNegotiatedProtocol(const nsACString& aProtocol);
+  void SetResponseHeaders(
+      nsTArray<mozilla::ipc::WebTransportHeader>&& aHeaders);
+
+  // WebIDL
+  Headers* GetResponseHeaders() { return mResponseHeaders; }
 
   void OnStreamResetOrStopSending(uint64_t aStreamId,
                                   const StreamResetOrStopSendingError& aError);
@@ -111,15 +119,22 @@ class WebTransport final : public nsISupports, public nsWrapperCache {
       const WebTransportOptions& aOptions, ErrorResult& aError);
 
   already_AddRefed<Promise> GetStats(ErrorResult& aError);
-  already_AddRefed<Promise> ExportKeyingMaterial(
-      const BufferSource& aLabel, const Optional<BufferSource>& aContext,
-      ErrorResult& aError);
+  already_AddRefed<Promise> ExportKeyingMaterial(const BufferSource& aLabel,
+                                                 const BufferSource& aContext,
+                                                 uint32_t aOutputLength,
+                                                 ErrorResult& aError);
 
   already_AddRefed<Promise> Ready() { return do_AddRef(mReady); }
   WebTransportReliabilityMode Reliability();
   WebTransportCongestionControl CongestionControl();
   static bool SupportsReliableOnly(const GlobalObject& aGlobal);
   void GetProtocol(nsAString& aProtocol);
+  Nullable<uint16_t> GetAnticipatedConcurrentIncomingUnidirectionalStreams();
+  void SetAnticipatedConcurrentIncomingUnidirectionalStreams(
+      const Nullable<uint16_t>& aValue);
+  Nullable<uint16_t> GetAnticipatedConcurrentIncomingBidirectionalStreams();
+  void SetAnticipatedConcurrentIncomingBidirectionalStreams(
+      const Nullable<uint16_t>& aValue);
   already_AddRefed<Promise> Draining() { return do_AddRef(mDraining); }
   already_AddRefed<Promise> Closed() { return do_AddRef(mClosed); }
   MOZ_CAN_RUN_SCRIPT void Close(const WebTransportCloseInfo& aOptions,
@@ -194,6 +209,9 @@ class WebTransport final : public nsISupports, public nsWrapperCache {
       mIncomingUnidirectionalAlgorithm;
   WebTransportReliabilityMode mReliability;
   nsString mProtocol;
+  RefPtr<Headers> mResponseHeaders;
+  Nullable<uint16_t> mAnticipatedConcurrentIncomingUnidirectionalStreams;
+  Nullable<uint16_t> mAnticipatedConcurrentIncomingBidirectionalStreams;
   // Incoming streams get queued here.  Use a TArray though it's working as
   // a FIFO - rarely will there be more than one entry in these arrays, so
   // the overhead of mozilla::Queue is unneeded

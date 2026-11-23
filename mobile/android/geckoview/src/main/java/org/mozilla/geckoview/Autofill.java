@@ -33,6 +33,9 @@ import org.mozilla.gecko.util.ThreadUtils;
 
 /** Autofill functionality for forms and input fields. */
 public class Autofill {
+  /** Public constructor for Autofill. */
+  public Autofill() {}
+
   private static final boolean DEBUG = false;
 
   /** Autofill notification type definitions. */
@@ -467,7 +470,9 @@ public class Autofill {
     public void fillViewStructure(
         @NonNull final View view, @NonNull final ViewStructure structure, final int flags) {
       ThreadUtils.assertOnUiThread();
-      fillViewStructure(getRoot(), view, structure, flags);
+      final Node focused = getFocused();
+      final Node root = focused != null ? focused.getRoot() : null;
+      fillViewStructure(root != null ? root : getRoot(), view, structure, flags);
     }
 
     /**
@@ -670,11 +675,6 @@ public class Autofill {
      *
      * @return The dimensions of this node.
      */
-    /**
-     * Gets the dimensions of this node in CSS coordinates.
-     *
-     * @return The dimensions of this node
-     */
     @AnyThread
     @NonNull
     Rect getDimensions() {
@@ -692,11 +692,6 @@ public class Autofill {
       return mScreenRect;
     }
 
-    /**
-     * Set the dimensions of this node in screen coordinates.
-     *
-     * @param screenRect The dimensions of this node.
-     */
     /**
      * Sets the screen coordinates for this node.
      *

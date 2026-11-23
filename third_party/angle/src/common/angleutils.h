@@ -23,11 +23,13 @@
 #include <climits>
 #include <cstdarg>
 #include <cstddef>
+#include <iterator>
 #include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "common/unsafe_buffers.h"
@@ -35,9 +37,9 @@
 namespace angle
 {
 
-#if defined(ANGLE_ENABLE_D3D11)
+#if defined(ANGLE_PLATFORM_WINDOWS)
 using Microsoft::WRL::ComPtr;
-#endif  // defined(ANGLE_ENABLE_D3D11)
+#endif
 
 // Forward declaration. Implementation in system_utils.h
 using ThreadId = std::thread::id;
@@ -62,7 +64,7 @@ constexpr char kPerfMonitorExtensionName[] = "GL_AMD_performance_monitor";
 struct PerfMonitorCounterInfo
 {
     PerfMonitorCounterInfo() = default;
-    PerfMonitorCounterInfo(const char *name) : name(name) {}
+    PerfMonitorCounterInfo(std::string_view name) : name(name) {}
 
     std::string name;
 };
@@ -163,6 +165,21 @@ struct PerfMonitorTriplet
     FN(pendingSubmissionGarbageObjects)            \
     FN(graphicsDriverUniformsUpdated)
 
+#define ANGLE_VK_API_PERF_COUNTER_GROUPS_X(FN) \
+    FN(Command)                                \
+    FN(Submit)                                 \
+    FN(Surface)                                \
+    FN(Wait)                                   \
+    FN(Other)
+
+#define ANGLE_VK_API_PERF_COUNTER_TYPES_X(FN) \
+    FN(WallTimeNs)                            \
+    FN(Samples)
+
+#define ANGLE_VK_API_PERF_COUNTER_TYPES_WITH_PARAM_X(FN, PARAM) \
+    FN(WallTimeNs, PARAM)                                       \
+    FN(Samples, PARAM)
+
 #define ANGLE_DECLARE_PERF_COUNTER(COUNTER) uint64_t COUNTER;
 
 struct VulkanPerfCounters
@@ -172,6 +189,64 @@ struct VulkanPerfCounters
 
 #undef ANGLE_DECLARE_PERF_COUNTER
 
+#define ANGLE_DECLARE_VK_API_PERF_COUNTER_ENUM(NAME) NAME,
+
+enum class VulkanApiPerfCounterGroup
+{
+    ANGLE_VK_API_PERF_COUNTER_GROUPS_X(ANGLE_DECLARE_VK_API_PERF_COUNTER_ENUM)
+    // EnumCount enables PackedEnums support.
+    EnumCount
+};
+
+enum class VulkanApiPerfCounterType
+{
+    ANGLE_VK_API_PERF_COUNTER_TYPES_X(ANGLE_DECLARE_VK_API_PERF_COUNTER_ENUM)
+    // EnumCount enables PackedEnums support.
+    EnumCount
+};
+
+#undef ANGLE_DECLARE_VK_API_PERF_COUNTER_ENUM
+
+std::string_view GetVulkanApiPerfCounterGroupName(VulkanApiPerfCounterGroup group);
+std::string_view GetVulkanApiPerfCounterTypeName(VulkanApiPerfCounterType type);
+std::string_view GetVulkanApiPerfCounterName(VulkanApiPerfCounterGroup group,
+                                             VulkanApiPerfCounterType type);
+
+namespace internal
+{
+template <typename Range>
+class ReversedAdapter
+{
+  public:
+    explicit constexpr ReversedAdapter(Range &&range) : mRange(std::forward<Range>(range)) {}
+    constexpr ReversedAdapter(const ReversedAdapter &)  = default;
+    constexpr ReversedAdapter(ReversedAdapter &&)       = default;
+    ReversedAdapter &operator=(const ReversedAdapter &) = delete;
+    ReversedAdapter &operator=(ReversedAdapter &&)      = delete;
+
+    constexpr auto begin() { return std::rbegin(mRange); }
+    constexpr auto begin() const { return std::rbegin(mRange); }
+    constexpr auto cbegin() const { return std::crbegin(mRange); }
+
+    constexpr auto end() { return std::rend(mRange); }
+    constexpr auto end() const { return std::rend(mRange); }
+    constexpr auto cend() const { return std::crend(mRange); }
+
+  private:
+    Range mRange;
+};
+}  // namespace internal
+
+// Reversed returns a container adapter usable in a range-based "for" statement
+// for iterating a reversible container in reverse order.
+//
+// TODO(http://crbug.com/330910097): Switch to std::views::reverse once ANGLE
+// drops C++17 support and requires C++20.
+template <typename Range>
+constexpr internal::ReversedAdapter<Range> Reversed(Range &&range)
+{
+    return internal::ReversedAdapter<Range>(std::forward<Range>(range));
+}
 }  // namespace angle
 
 template <typename T, size_t N>
@@ -212,26 +287,6 @@ class WrappedArray final : angle::NonCopyable
     const T *mArray = nullptr;
     size_t mSize    = 0;
 };
-
-template <typename T, unsigned int N>
-void SafeRelease(T (&resourceBlock)[N])
-{
-    for (unsigned int i = 0; i < N; i++)
-    {
-        // SAFETY: size deduced by compiler from template.
-        SafeRelease(ANGLE_UNSAFE_BUFFERS(resourceBlock[i]));
-    }
-}
-
-template <typename T>
-void SafeRelease(T &resource)
-{
-    if (resource)
-    {
-        resource->Release();
-        resource = nullptr;
-    }
-}
 
 template <typename T>
 void SafeDelete(T *&resource)
@@ -504,6 +559,57 @@ class MsanScopedDisableInterceptorChecks final : angle::NonCopyable
 #    define ANGLE_NOINLINE __declspec(noinline)
 #else
 #    define ANGLE_NOINLINE
+#endif
+
+// Annotates a type as being suitable for passing in registers despite having a
+// non-trivial copy or move constructor or destructor. This requires the type
+// not be concerned about its address remaining constant, be safely usable after
+// copying its memory, and have a destructor that may be safely omitted on
+// moved-from instances; an example is `std::unique_ptr`. Unnecessary if the
+// copy/move constructor(s) and destructor are unconditionally trivial; likely
+// ineffective if the type is too large to be passed in one or two registers
+// with the target ABI. However, annotating a type this way will also cause
+// `IS_TRIVIALLY_RELOCATABLE()` to return true for that type, and so may be
+// desirable even for large types, if they are placed in containers that
+// optimize based on that check.
+//
+// NOTE: Use with caution; this has subtle effects on constructor/destructor
+// ordering. When used with types passed or returned by value, values may be
+// constructed in the source stack frame, passed in a register, and then used
+// and destroyed in the target stack frame.
+//
+// See also:
+//   https://clang.llvm.org/docs/AttributeReference.html#trivial-abi
+//   https://libcxx.llvm.org/docs/DesignDocs/UniquePtrTrivialAbi.html
+//
+// Usage:
+// ```
+//   // Instances of type `S` will be eligible to be passed in registers despite
+//   // `S`'s nontrivial destructor.
+//   struct ANGLE_TRIVIAL_ABI S { ~S(); }
+// ```
+#if defined(__has_cpp_attribute)
+#    if __has_cpp_attribute(clang::trivial_abi)
+#        define ANGLE_TRIVIAL_ABI [[clang::trivial_abi]]
+#    else
+#        define ANGLE_TRIVIAL_ABI
+#    endif
+#else
+#    define ANGLE_TRIVIAL_ABI
+#endif
+
+// Annotates a class as a pointer-like type, so that the compiler can diagnose references left
+// dangling by a temporary owner.
+//
+// https://clang.llvm.org/docs/AttributeReference.html#pointer
+#if defined(__has_cpp_attribute)
+#    if __has_cpp_attribute(gsl::Pointer)
+#        define ANGLE_GSL_POINTER [[gsl::Pointer]]
+#    else
+#        define ANGLE_GSL_POINTER
+#    endif
+#else
+#    define ANGLE_GSL_POINTER
 #endif
 
 #if defined(__clang__) || (defined(__GNUC__) && defined(__has_attribute))

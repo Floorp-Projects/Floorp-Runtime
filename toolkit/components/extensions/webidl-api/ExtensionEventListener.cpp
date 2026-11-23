@@ -156,6 +156,20 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 NS_IMPL_ISUPPORTS(ExtensionEventListener, mozIExtensionEventListener)
 
 // static
+ExtensionEventListener::ExtensionEventListener(
+    nsIGlobalObject* aGlobal, ExtensionBrowser* aExtensionBrowser,
+    dom::Function* aCallback)
+    : mGlobal(do_GetWeakReference(aGlobal)),
+      mExtensionBrowser(aExtensionBrowser),
+      mCallback(aCallback),
+      mMutex("ExtensionEventListener::mMutex") {
+  MOZ_ASSERT(aGlobal);
+  MOZ_ASSERT(aExtensionBrowser);
+  MOZ_ASSERT(aCallback);
+}
+
+ExtensionEventListener::~ExtensionEventListener() { Cleanup(); }
+
 already_AddRefed<ExtensionEventListener> ExtensionEventListener::Create(
     nsIGlobalObject* aGlobal, ExtensionBrowser* aExtensionBrowser,
     dom::Function* aCallback, CleanupCallback&& aCleanupCallback,
@@ -178,6 +192,22 @@ already_AddRefed<ExtensionEventListener> ExtensionEventListener::Create(
 
   return extCb.forget();
 }
+RefPtr<dom::Function> ExtensionEventListener::GetCallback() const {
+  return mCallback;
+}
+
+void ExtensionEventListener::Cleanup() {
+  if (mWorkerRef) {
+    MutexAutoLock lock(mMutex);
+
+    mWorkerRef->Private()->AssertIsOnWorkerThread();
+    mWorkerRef = nullptr;
+  }
+
+  mGlobal = nullptr;
+  mCallback = nullptr;
+  mExtensionBrowser = nullptr;
+}
 
 // static
 UniquePtr<dom::StructuredCloneHolder>
@@ -191,7 +221,7 @@ ExtensionEventListener::SerializeCallArguments(const nsTArray<JS::Value>& aArgs,
   }
 
   UniquePtr<dom::StructuredCloneHolder> argsHolder =
-      MakeUnique<dom::StructuredCloneHolder>(
+      std::make_unique<dom::StructuredCloneHolder>(
           dom::StructuredCloneHolder::CloningSupported,
           dom::StructuredCloneHolder::TransferringNotSupported,
           JS::StructuredCloneScope::SameProcess);
@@ -602,7 +632,7 @@ void ExtensionListenerCallPromiseResultHandler::WorkerRunCallback(
   }
 
   UniquePtr<dom::StructuredCloneHolder> resHolder =
-      MakeUnique<dom::StructuredCloneHolder>(
+      std::make_unique<dom::StructuredCloneHolder>(
           dom::StructuredCloneHolder::CloningSupported,
           dom::StructuredCloneHolder::TransferringNotSupported,
           JS::StructuredCloneScope::SameProcess);

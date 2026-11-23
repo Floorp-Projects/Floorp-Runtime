@@ -29,6 +29,11 @@ Any data collection that meets the following criteria can use OHTTP:
     * This includes `client_id` and the Mozilla Accounts identifier.
       The `client_id` and other fingerprinting information are explicitly excluded
       from pings using OHTTP.
+* Your collection must [be tested][instrumentation-tests]
+  and/or you must make arrangements to manually ensure your data is correctly submitted,
+  uploaded, and received.
+    * Failure to test data collections submitted over OHTTP has resulted in data loss in the past.
+    * Any data sensitive enough to warrant the use of OHTTP is important enough to be tested.
 
 ## How can I use OHTTP for my Data?
 
@@ -65,6 +70,9 @@ if you'd like to see existing uses in tree.
       generate the necessary code to recognize this ping as needing OHTTP transport.
       It is read in the uploader to ensure the ping is only sent using OHTTP.
 2. [Test your instrumentation][instrumentation-tests].
+    * To assert that your ping is going over OHTTP, you can use an approach similar to
+      {searchfox}`toolkit/components/glean/tests/xpcshell/test_OHTTP.js`
+      and set up a local OHTTP-capable server.
 
 And that's it!
 

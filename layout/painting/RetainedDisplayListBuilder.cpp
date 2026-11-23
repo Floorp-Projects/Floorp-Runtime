@@ -184,7 +184,7 @@ bool RetainedDisplayListBuilder::PreProcessDisplayList(
       aList->mDAG.Length() ==
           (initializeOldItems ? aList->Length() : aList->mOldItems.Length()));
 
-  nsDisplayList out(Builder());
+  nsDisplayList out;
 
   size_t i = 0;
   while (nsDisplayItem* item = aList->RemoveBottom()) {
@@ -447,7 +447,6 @@ class MergeState {
         mOldDAG(
             std::move(*reinterpret_cast<DirectedAcyclicGraph<OldListUnits>*>(
                 &aOldList.mDAG))),
-        mMergedItems(aBuilder->Builder()),
         mOuterItem(aOuterItem),
         mResultIsModified(false) {
     mMergedDAG.EnsureCapacityFor(mOldDAG);
@@ -507,7 +506,7 @@ class MergeState {
     }
 
     Maybe<const ActiveScrolledRoot*> containerASRForChildren;
-    nsDisplayList empty(mBuilder->Builder());
+    nsDisplayList empty;
     const bool modified = mBuilder->MergeDisplayLists(
         aNewItem ? aNewItem->GetChildren() : &empty, aOldItem->GetChildren(),
         aOutItem->GetChildren(), containerASRForChildren, aOutItem);
@@ -617,7 +616,7 @@ class MergeState {
       ProcessOldNode(OldListIndex(i), std::move(directPredecessors));
     }
 
-    RetainedDisplayList result(mBuilder->Builder());
+    RetainedDisplayList result;
     result.AppendToTop(&mMergedItems);
     result.mDAG = std::move(mMergedDAG);
     MOZ_RELEASE_ASSERT(result.mDAG.Length() == result.Length());
@@ -1014,18 +1013,11 @@ static bool ProcessFrameInternal(nsIFrame* aFrame,
 
     if (CanStoreDisplayListBuildingRect(aBuilder, currentFrame)) {
       CRR_LOG("Frame belongs to stacking context frame %p\n", currentFrame);
-      // If we found an intermediate stacking context with an existing display
-      // item then we can store the dirty rect there and stop. If we couldn't
-      // find one then we need to keep bubbling up to the next stacking context.
-      nsDisplayItem* wrapperItem =
-          GetFirstDisplayItemWithChildren(currentFrame);
-      if (!wrapperItem) {
-        continue;
-      }
-
       // Store the stacking context relative dirty area such
       // that display list building will pick it up when it
-      // gets to it.
+      // gets to it. This is needed even if we don't stop here, since display
+      // list building treats a missing rect on such a frame as meaning that
+      // nothing in its subtree needs to be rebuilt.
       nsDisplayListBuilder::DisplayListBuildingData* data =
           currentFrame->GetProperty(
               nsDisplayListBuilder::DisplayListBuildingRect());
@@ -1042,6 +1034,15 @@ static bool ProcessFrameInternal(nsIFrame* aFrame,
 
       if (!aStopAtStackingContext) {
         // Continue ascending the frame tree until we reach aStopAtFrame.
+        continue;
+      }
+
+      // If we found an intermediate stacking context with an existing display
+      // item then we can stop here. If we couldn't find one then we need to
+      // keep bubbling up to the next stacking context.
+      nsDisplayItem* wrapperItem =
+          GetFirstDisplayItemWithChildren(currentFrame);
+      if (!wrapperItem) {
         continue;
       }
 
@@ -1582,7 +1583,7 @@ PartialUpdateResult RetainedDisplayListBuilder::AttemptPartialUpdate(
   }
 
   nsRect modifiedDirty;
-  nsDisplayList modifiedDL(&mBuilder);
+  nsDisplayList modifiedDL;
   nsIFrame* modifiedAGR = nullptr;
   PartialUpdateResult result = PartialUpdateResult::NoChange;
   const bool simpleUpdate =

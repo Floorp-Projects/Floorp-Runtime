@@ -976,6 +976,11 @@ PK11_ImportPrivateKeyInfoAndReturnKey(PK11SlotInfo *slot,
             lpk->keyType = kyberKey;
             lpk->u.mlkem.params = algTag;
         handlePQKey:
+            /* RFC 9881 and RFC 9935: the parameters MUST be absent. */
+            if (pki->algorithm.parameters.len != 0) {
+                PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+                goto loser;
+            }
             if (pki->privateKey.data == NULL || pki->privateKey.len == 0) {
                 PORT_SetError(SEC_ERROR_BAD_KEY);
                 goto loser;
@@ -1233,6 +1238,35 @@ PK11_ExportPrivKeyInfo(SECKEYPrivateKey *pk, void *wincx)
             keyTemplate = SECKEY_ECRawPrivateKeyTemplate;
             /* Currently, X25519 does not support any parameter.  */
             rv = SECOID_SetAlgorithmID(arena, &pki->algorithm, SEC_OID_X25519, NULL);
+            if (rv != SECSuccess) {
+                goto loser;
+            }
+        } break;
+        case mldsaKey:
+        case kyberKey: {
+            SECOidTag paramSet = seckey_GetParameterSet(pk);
+            if (paramSet == SEC_OID_UNKNOWN) {
+                PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+                goto loser;
+            }
+
+            /* Prefer the seed CHOICE; fall back to expandedKey without one. */
+            if (ReadAttribute(pk, CKA_SEED, arena, &rawKey.u.pq.seed) &&
+                rawKey.u.pq.seed.len != 0) {
+                keyTemplate = SECKEY_PQPrivateKeySeedExportTemplate;
+            } else {
+                if (!ReadAttribute(pk, CKA_VALUE, arena,
+                                   &rawKey.u.pq.privateValue)) {
+                    goto loser;
+                }
+                if (rawKey.u.pq.privateValue.len == 0) {
+                    PORT_SetError(SEC_ERROR_BAD_KEY);
+                    goto loser;
+                }
+                keyTemplate = SECKEY_PQPrivateKeyKeyExportTemplate;
+            }
+
+            rv = SECOID_SetAlgorithmID(arena, &pki->algorithm, paramSet, NULL);
             if (rv != SECSuccess) {
                 goto loser;
             }

@@ -10,7 +10,6 @@ const PSEUDO_PREF = "devtools.inspector.show_pseudo_elements";
 
 add_task(async function () {
   await pushPref(PSEUDO_PREF, true);
-  await pushPref("dom.text_fragments.enabled", true);
   await pushPref("layout.css.modern-range-pseudos.enabled", true);
   await pushPref("dom.select.customizable_select.enabled", true);
   await pushPref("full-screen-api.transition-duration.enter", "0 0");
@@ -505,6 +504,9 @@ async function testCustomizableSelect(inspector, view) {
 
   info("Test ::picker-icon for select element");
   await selectNode(selectNodeFront, inspector);
+  // A pending mutation can refresh the rule view while it is selecting the node,
+  // which makes it render empty until the refresh completes (Bug 2080325).
+  await waitFor(() => getRuleViewRule(view, "#customizable-select"));
   await checkRuleViewContent(view, [
     {
       header: "Pseudo-elements",

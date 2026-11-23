@@ -47,7 +47,7 @@
   <!-- Description for the "tabs" WebExtensions API permission. -->
   <string name="mozac_feature_addons_permissions_tabs_description">dostop do zavihkov brskalnika</string>
   <!-- Description for the "webNavigation" WebExtensions API permission. -->
-  <string name="mozac_feature_addons_permissions_web_navigation_description">dostop do dejavnosti brskalnika</string>
+  <string name="mozac_feature_addons_permissions_web_navigation_description">dostop do dejavnosti brskalnika med krmarjenjem</string>
   <!-- Description for the "bookmarks" WebExtensions API permission. -->
   <string name="mozac_feature_addons_permissions_bookmarks_description">branje in spreminjanje zaznamkov</string>
   <!-- Description for the "browserSettings" WebExtensions API permission. -->
@@ -89,7 +89,7 @@
   <!-- Description for the "topSites" WebExtensions API permission. -->
   <string name="mozac_feature_addons_permissions_top_sites_description">dostop do zgodovine brskanja</string>
   <!-- Description for the "trialML" WebExtensions API permission. -->
-  <string name="mozac_feature_addons_permissions_trial_ml_description">Prenesite in uporabljajte modele z umetno inteligenco na svoji napravi</string>
+  <string name="mozac_feature_addons_permissions_trial_ml_description">prenos in uporaba modelov z umetno inteligenco na svoji napravi</string>
   <!-- Description for the "userScripts" WebExtensions API permission. -->
   <string name="mozac_feature_addons_permissions_user_scripts_description">dovoljevanje dostopa do vaših podatkov nepotrjenim skriptom tretjih strani</string>
   <!-- Description for the "devtools" WebExtensions API permission. -->
@@ -179,7 +179,7 @@
   <!-- The sentence used when the developer of an extension has explicitly stated that they do not collect any data collection. -->
   <string name="mozac_feature_addons_permissions_none_required_data_collection_description">Razvijalec pravi, da ta razširitev ne zahteva zbiranja podatkov.</string>
   <!-- The sentence used when the extension requests new data collection permissions. %1$s is a formatted list of permissions. -->
-  <string name="mozac_feature_addons_permissions_data_collection_optional_description">Razvijalec pravi, da razširitev zbira: %1$s</string>
+  <string name="mozac_feature_addons_permissions_data_collection_optional_description">Razvijalec pravi, da želi razširitev zbirati: %1$s</string>
   <!-- Description for text button that expands the list of domain permissions -->
   <string name="mozac_feature_addons_permissions_show_all_sites">Prikaži vsa spletna mesta</string>
   <!-- Description for text button that hides the majority of the list of domain permissions -->
@@ -227,7 +227,7 @@
   <!-- Long description for the searchTerms data collection permission -->
   <string name="mozac_feature_addons_permissions_data_collection_searchTerms_long_description">deljenje iskalnih poizvedb z razvijalcem razširitve</string>
   <!-- Long description for the technicalAndInteraction data collection permission -->
-  <string name="mozac_feature_addons_permissions_data_collection_technicalAndInteraction_long_description">Deli tehnične in interakcijske podatke z razvijalcem razširitve</string>
+  <string name="mozac_feature_addons_permissions_data_collection_technicalAndInteraction_long_description">deljenje tehničnih in interakcijskih podatkov z razvijalcem razširitve</string>
   <!-- Long description for the websiteActivity data collection permission -->
   <string name="mozac_feature_addons_permissions_data_collection_websiteActivity_long_description">deljenje dejavnosti spletnih strani z razvijalcem razširitve</string>
   <!-- Long description for the websiteContent data collection permission -->
@@ -288,9 +288,9 @@
   <string name="mozac_feature_addons_permissions_dialog_heading_required_data_collection">Zahtevano zbiranje podatkov:</string>
   <!-- Heading for the optional settings section in the add-on install dialog. -->
   <string name="mozac_feature_addons_permissions_dialog_heading_optional_settings">Izbirne nastavitve:</string>
-  <!-- Heading for the permissions section in the optional permissions request dialog. -->
+  <!-- Heading for the permissions section in the optional permissions request dialog, and in the confirmation dialog for updating an extension that needs new permissions. -->
   <string name="mozac_feature_addons_permissions_dialog_heading_optional_permissions">Nova dovoljenja:</string>
-  <!-- Heading for the data collection permissions section in the optional permissions request dialog. -->
+  <!-- Heading for the data collection permissions section in the optional permissions request dialog, and in the confirmation dialog for updating an extension that needs new permissions. -->
   <string name="mozac_feature_addons_permissions_dialog_heading_optional_data_collection">Novo zbiranje podatkov:</string>
   <!-- This is a button to add (install) an add-on . -->
   <string name="mozac_feature_addons_permissions_dialog_add">Dodaj</string>
@@ -308,6 +308,10 @@
   <string name="mozac_feature_addons_install_addon_content_description_2">Namesti %1$s</string>
   <!-- This is the label of a button to cancel an ongoing add-on installation. -->
   <string name="mozac_feature_addons_install_addon_dialog_cancel">Prekliči</string>
+  <!-- Button in confirmation dialog for updating an extension that needs new permissions. Clicking it installs the update. -->
+  <string name="mozac_feature_addons_updater_permissions_dialog_update_button">Posodobi</string>
+  <!-- Button in confirmation dialog for updating an extension that needs new permissions. Clicking it closes the dialog without updating (the update can still be performed later). -->
+  <string name="mozac_feature_addons_updater_permissions_dialog_cancel_button">Prekliči</string>
   <!-- Indicates how many users have rated an add-on. %1$s will be replaced with number of reviews -->
   <string name="mozac_feature_addons_user_rating_count_2">Ocen: %1$s</string>
   <!-- Accessibility content description for the amount of stars that add-on has, where %1$.02f will be the amount of stars. -->

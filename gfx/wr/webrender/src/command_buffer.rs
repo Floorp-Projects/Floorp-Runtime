@@ -6,12 +6,13 @@ use api::euclid::{point2, Box2D};
 use api::{MixBlendMode, units::{DeviceRect, LayoutRect, PictureRect}};
 use crate::pattern::{PatternKind, PatternShaderInput};
 use crate::renderer::BlendMode;
-use crate::{spatial_tree::SpatialNodeIndex, render_task_graph::RenderTaskId, surface::SurfaceTileDescriptor, tile_cache::TileKey, renderer::GpuBufferAddress, FastHashMap};
+use crate::{spatial_tree::SpatialNodeIndex, render_task_graph::RenderTaskId, surface::{SurfaceExtraTarget, SurfaceTileDescriptor}, tile_cache::TileKey, renderer::GpuBufferAddress, FastHashMap};
 use crate::gpu_types::QuadSegment;
 use crate::prim_store::storage;
 use crate::segment::EdgeMask;
 use crate::transform::GpuTransformId;
-use crate::visibility::PrimitiveDrawHeader;
+use crate::prim_store::PrimitiveInstanceIndex;
+use crate::visibility::{BackdropCaptureIndex, PrimitiveDrawHeader};
 
 /// A tightly packed command stored in a command buffer
 #[cfg_attr(feature = "capture", derive(Serialize))]
@@ -483,6 +484,10 @@ pub enum CommandBufferBuilderKind {
         //           slightly complicated by the sub_slice_index in the
         //           TileKey structure - could have a 2 level array?
         tiles: FastHashMap<TileKey, SurfaceTileDescriptor>,
+        /// Tasks besides the tiles that this surface's primitives are drawn
+        /// into. Primitives of every sub-slice in a target's rect are drawn
+        /// into it.
+        extra_targets: Vec<SurfaceExtraTarget>,
     },
     Simple {
         render_task_id: RenderTaskId,
@@ -492,53 +497,86 @@ pub enum CommandBufferBuilderKind {
     Invalid,
 }
 
+impl CommandBufferBuilderKind {
+    /// Call `f` with each task the surface's primitives are drawn into.
+    pub fn for_each_task(&self, mut f: impl FnMut(RenderTaskId)) {
+        match self {
+            CommandBufferBuilderKind::Tiled { tiles, extra_targets } => {
+                for descriptor in tiles.values() {
+                    f(descriptor.current_task_id);
+                }
+                for target in extra_targets {
+                    f(target.task_id);
+                }
+            }
+            CommandBufferBuilderKind::Simple { render_task_id, .. } => f(*render_task_id),
+            CommandBufferBuilderKind::Invalid => {}
+        }
+    }
+}
+
+/// A backdrop-filter capture open on a surface: each primitive prepared on the
+/// surface that is behind the element is drawn into the capture too.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "capture", derive(Serialize))]
+#[cfg_attr(feature = "replay", derive(Deserialize))]
+pub struct OpenBackdropCapture {
+    pub index: BackdropCaptureIndex,
+    /// The area of the surface the capture's filters sample.
+    pub region: PictureRect,
+    /// The `BackdropCapture` primitive. Primitives painted before the element
+    /// have lower instance indices.
+    pub capture_instance_index: PrimitiveInstanceIndex,
+    /// The command buffer the capture's task draws from.
+    pub cmd_buffer_index: CommandBufferIndex,
+    /// The render tasks the primitives drawn into the capture depend on, which
+    /// its task has to depend on too.
+    pub dependencies: Vec<RenderTaskId>,
+    /// Whether the primitive being prepared on the surface is drawn into the
+    /// capture, so that the render tasks it makes the surface depend on are
+    /// added to its dependencies too.
+    pub drawn_into: bool,
+}
+
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
 pub struct CommandBufferBuilder {
     pub kind: CommandBufferBuilderKind,
 
-    /// If a command buffer establishes a sub-graph, then at the end of constructing
-    /// the surface, the parent surface is supplied as an input dependency, and the
-    /// parent surface gets a duplicated (existing) task with the same location, and
-    /// with the sub-graph output as an input dependency.
-    pub establishes_sub_graph: bool,
-
-    /// If this surface builds a sub-graph, it will mark a task in the filter sub-graph
-    /// as a resolve source for the input from the parent surface.
-    pub resolve_source: Option<RenderTaskId>,
-
     /// List of render tasks that depend on the task that will be created for this builder.
     pub extra_dependencies: Vec<RenderTaskId>,
+
+    /// The backdrop-filter captures open on this surface.
+    pub backdrop_captures: Vec<OpenBackdropCapture>,
 }
 
 impl CommandBufferBuilder {
     pub fn empty() -> Self {
         CommandBufferBuilder {
             kind: CommandBufferBuilderKind::Invalid,
-            establishes_sub_graph: false,
-            resolve_source: None,
             extra_dependencies: Vec::new(),
+            backdrop_captures: Vec::new(),
         }
     }
 
     /// Construct a tiled command buffer builder.
     pub fn new_tiled(
         tiles: FastHashMap<TileKey, SurfaceTileDescriptor>,
+        extra_targets: Vec<SurfaceExtraTarget>,
     ) -> Self {
         CommandBufferBuilder {
             kind: CommandBufferBuilderKind::Tiled {
                 tiles,
+                extra_targets,
             },
-            establishes_sub_graph: false,
-            resolve_source: None,
             extra_dependencies: Vec::new(),
+            backdrop_captures: Vec::new(),
         }
     }
 
     /// Construct a simple command buffer builder.
     pub fn new_simple(
         render_task_id: RenderTaskId,
-        establishes_sub_graph: bool,
         root_task_id: Option<RenderTaskId>,
         dirty_rect: PictureRect,
     ) -> Self {
@@ -548,9 +586,8 @@ impl CommandBufferBuilder {
                 root_task_id,
                 dirty_rect,
             },
-            establishes_sub_graph,
-            resolve_source: None,
             extra_dependencies: Vec::new(),
+            backdrop_captures: Vec::new(),
         }
     }
 }

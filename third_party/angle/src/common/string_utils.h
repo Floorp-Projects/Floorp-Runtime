@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "common/Optional.h"
+#include "common/span.h"
 
 namespace angle
 {
@@ -34,19 +35,29 @@ enum SplitResult
 };
 
 std::vector<std::string> SplitString(const std::string &input,
-                                     const std::string &delimiters,
+                                     const std::string_view &delimiters,
                                      WhitespaceHandling whitespace,
                                      SplitResult resultType);
+
+std::vector<std::string_view> SplitStringView(const std::string_view &input,
+                                              const std::string_view &delimiters,
+                                              WhitespaceHandling whitespace,
+                                              SplitResult resultType);
 
 void SplitStringAlongWhitespace(const std::string &input, std::vector<std::string> *tokensOut);
 
 std::string TrimString(const std::string &input, const std::string &trimChars);
+std::string_view TrimStringView(const std::string_view &input, const std::string &trimChars);
 
 // Return the substring starting at offset and up to the first occurance of the |delimeter|.
 std::string GetPrefix(const std::string &input, size_t offset, const char *delimiter);
 std::string GetPrefix(const std::string &input, size_t offset, char delimiter);
 
 bool HexStringToUInt(const std::string_view &input, unsigned int *uintOut);
+
+// Parses a decimal integer.  Returns false, leaving *valueOut unchanged, if input is empty, has any
+// characters other than an optional leading '-' and digits, or is out of range.
+bool StringToInt64(const std::string_view &input, int64_t *valueOut);
 
 bool ReadFileToString(const std::string &path, std::string *stringOut);
 
@@ -119,10 +130,17 @@ std::vector<std::string> GetCachedStringsFromEnvironmentVarOrAndroidProperty(
     const char *propertyName,
     const char *separator);
 
-// glob can have * as wildcard
-bool NamesMatchWithWildcard(const char *glob, const char *name);
+// Returns true if `potential_glob` contains characters that require matching using
+// `NamesMatchWithWildcard`
+bool IsGlobPattern(const std::string_view &potential_glob);
+
+// Returns true if and only if the `glob` pattern matches the string `name`. Each
+// pattern consists of regular characters, single-character wildcards (?), and
+// multi-character wildcards (*).
+bool NamesMatchWithWildcard(const std::string_view &glob, const std::string_view &name);
 
 std::vector<uint8_t> HexStringToUintVector(const std::string_view &hexStr);
+std::string UintStreamToHexString(angle::Span<const uint8_t> uintStream);
 }  // namespace angle
 
 #endif  // LIBANGLE_STRING_UTILS_H_

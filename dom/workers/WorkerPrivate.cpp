@@ -1154,10 +1154,15 @@ class WorkerPrivate::MemoryReporter final : public nsIMemoryReporter {
 
   SharedMutex mMutex;
   WorkerPrivate* mWorkerPrivate;
+  // Outlives mWorkerPrivate and rejects dispatches once the worker has been
+  // destroyed, so CollectReports never has to keep the worker alive itself.
+  const nsCOMPtr<nsISerialEventTarget> mControlEventTarget;
 
  public:
   explicit MemoryReporter(WorkerPrivate* aWorkerPrivate)
-      : mMutex(aWorkerPrivate->mMutex), mWorkerPrivate(aWorkerPrivate) {
+      : mMutex(aWorkerPrivate->mMutex),
+        mWorkerPrivate(aWorkerPrivate),
+        mControlEventTarget(aWorkerPrivate->ControlEventTarget()) {
     aWorkerPrivate->AssertIsOnWorkerThread();
   }
 
@@ -1168,19 +1173,22 @@ class WorkerPrivate::MemoryReporter final : public nsIMemoryReporter {
  private:
   class FinishCollectRunnable;
 
-  class CollectReportsRunnable final : public MainThreadWorkerControlRunnable {
+  // Dispatched through mControlEventTarget, which wraps it in a control
+  // runnable. Cancel is a no-op so that draining the control queue of a dead
+  // worker only releases it, and the destructor still finishes the report.
+  class CollectReportsRunnable final : public CancelableRunnable {
     RefPtr<FinishCollectRunnable> mFinishCollectRunnable;
     const bool mAnonymize;
 
    public:
-    CollectReportsRunnable(WorkerPrivate* aWorkerPrivate,
-                           nsIHandleReportCallback* aHandleReport,
+    CollectReportsRunnable(nsIHandleReportCallback* aHandleReport,
                            nsISupports* aHandlerData, bool aAnonymize,
                            const nsACString& aPath);
 
-   private:
-    bool WorkerRun(JSContext* aCx, WorkerPrivate* aWorkerPrivate) override;
+    NS_IMETHOD Run() override;
+    nsresult Cancel() override { return NS_OK; }
 
+   private:
     ~CollectReportsRunnable() {
       if (NS_IsMainThread()) {
         mFinishCollectRunnable->Run();
@@ -1282,11 +1290,15 @@ WorkerPrivate::MemoryReporter::CollectReports(
     }
     path.AppendPrintf(", 0x%p)/", static_cast<void*>(mWorkerPrivate));
 
-    runnable = new CollectReportsRunnable(mWorkerPrivate, aHandleReport, aData,
-                                          aAnonymize, path);
+    runnable =
+        new CollectReportsRunnable(aHandleReport, aData, aAnonymize, path);
   }
 
-  if (!runnable->Dispatch(mWorkerPrivate)) {
+  // The worker may be destroyed by its parent thread at any point from here
+  // on. The event target checks for that atomically with the dispatch, and a
+  // failed dispatch releases the runnable here, which finishes the report.
+  if (NS_FAILED(mControlEventTarget->Dispatch(runnable.forget(),
+                                              NS_DISPATCH_NORMAL))) {
     return NS_ERROR_UNEXPECTED;
   }
 
@@ -1294,18 +1306,21 @@ WorkerPrivate::MemoryReporter::CollectReports(
 }
 
 WorkerPrivate::MemoryReporter::CollectReportsRunnable::CollectReportsRunnable(
-    WorkerPrivate* aWorkerPrivate, nsIHandleReportCallback* aHandleReport,
-    nsISupports* aHandlerData, bool aAnonymize, const nsACString& aPath)
-    : MainThreadWorkerControlRunnable("CollectReportsRunnable"),
+    nsIHandleReportCallback* aHandleReport, nsISupports* aHandlerData,
+    bool aAnonymize, const nsACString& aPath)
+    : CancelableRunnable(
+          "dom::WorkerPrivate::MemoryReporter::CollectReportsRunnable"),
       mFinishCollectRunnable(new FinishCollectRunnable(
           aHandleReport, aHandlerData, aAnonymize, aPath)),
       mAnonymize(aAnonymize) {}
 
-bool WorkerPrivate::MemoryReporter::CollectReportsRunnable::WorkerRun(
-    JSContext* aCx, WorkerPrivate* aWorkerPrivate) {
-  aWorkerPrivate->AssertIsOnWorkerThread();
+NS_IMETHODIMP
+WorkerPrivate::MemoryReporter::CollectReportsRunnable::Run() {
+  WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
+  MOZ_ASSERT(workerPrivate);
+  workerPrivate->AssertIsOnWorkerThread();
 
-  RefPtr<WorkerGlobalScope> scope = aWorkerPrivate->GlobalScope();
+  RefPtr<WorkerGlobalScope> scope = workerPrivate->GlobalScope();
   RefPtr<Performance> performance =
       scope ? scope->GetPerformanceIfExists() : nullptr;
   if (performance) {
@@ -1315,10 +1330,10 @@ bool WorkerPrivate::MemoryReporter::CollectReportsRunnable::WorkerRun(
     mFinishCollectRunnable->SetPerformanceSizes(userEntries, resourceEntries);
   }
 
-  mFinishCollectRunnable->SetSuccess(aWorkerPrivate->CollectRuntimeStats(
+  mFinishCollectRunnable->SetSuccess(workerPrivate->CollectRuntimeStats(
       &mFinishCollectRunnable->mCxStats, mAnonymize));
 
-  return true;
+  return NS_OK;
 }
 
 WorkerPrivate::MemoryReporter::FinishCollectRunnable::FinishCollectRunnable(
@@ -1425,27 +1440,11 @@ void WorkerPrivate::EvictFromBFCache() {
   runnable->Dispatch(this);
 }
 
-nsresult WorkerPrivate::SetCsp(nsIContentSecurityPolicy* aCSP) {
-  AssertIsOnMainThread();
-  if (!aCSP) {
-    return NS_OK;
-  }
-  aCSP->EnsureEventTarget(mMainThreadEventTarget);
-
-  mLoadInfo.mCSP = aCSP;
-  auto ctx = OffThreadCSPContext::CreateFromCSP(aCSP);
-  if (NS_WARN_IF(ctx.isErr())) {
-    return ctx.unwrapErr();
-  }
-  mLoadInfo.mCSPContext = ctx.unwrap();
-  return NS_OK;
-}
-
 nsresult WorkerPrivate::SetCSPFromHeaderValues(
     const nsACString& aCSPHeaderValue,
     const nsACString& aCSPReportOnlyHeaderValue) {
   AssertIsOnMainThread();
-  MOZ_DIAGNOSTIC_ASSERT(!mLoadInfo.mCSP);
+  MOZ_DIAGNOSTIC_ASSERT(!mLoadInfo.mPolicyContainer);
 
   NS_ConvertASCIItoUTF16 cspHeaderValue(aCSPHeaderValue);
   NS_ConvertASCIItoUTF16 cspROHeaderValue(aCSPReportOnlyHeaderValue);
@@ -1473,8 +1472,6 @@ nsresult WorkerPrivate::SetCSPFromHeaderValues(
                                            0);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  csp->EnsureEventTarget(mMainThreadEventTarget);
-
   // If there's a CSP header, apply it.
   if (!cspHeaderValue.IsEmpty()) {
     rv = CSP_AppendCSPFromHeader(csp, cspHeaderValue, false);
@@ -1499,14 +1496,9 @@ nsresult WorkerPrivate::SetCSPFromHeaderValues(
     csp->AppendPolicy(addonPolicy->ExtensionPageCSP(), false, false);
   }
 
-  mLoadInfo.mCSP = csp;
-
-  auto ctx = OffThreadCSPContext::CreateFromCSP(csp);
-  if (NS_WARN_IF(ctx.isErr())) {
-    return ctx.unwrapErr();
-  }
-  mLoadInfo.mCSPContext = ctx.unwrap();
-  return NS_OK;
+  RefPtr policyContainer = MakeRefPtr<PolicyContainer>();
+  policyContainer->SetCSP(csp);
+  return SetPolicyContainerOnMainThread(policyContainer);
 }
 
 bool WorkerPrivate::IsFrozenForWorkerThread() const {
@@ -1526,14 +1518,12 @@ void WorkerPrivate::StorePolicyContainerArgsOnClient() {
 
   mozilla::ipc::PolicyContainerArgs policyContainerArgs;
 
-  if (mLoadInfo.mCSPContext) {
-    policyContainerArgs.csp() = Some(mLoadInfo.mCSPContext->CSPInfo());
+  if (mLoadInfo.mPolicyContainerArgs) {
+    policyContainerArgs = *mLoadInfo.mPolicyContainerArgs;
   }
 
   policyContainerArgs.ipAddressSpace() =
       static_cast<nsILoadInfo::IPAddressSpace>(mLoadInfo.mIPAddressSpace);
-  // TODO(Bug 2017654): Check if integrity policy args need to be propagated
-  // to workers as well. Currently not set explicitly here.
 
   clientSource.SetPolicyContainerArgs(policyContainerArgs);
 }
@@ -2674,15 +2664,33 @@ void WorkerPrivate::SetBaseURI(nsIURI* aBaseURI) {
                                                    mLocationInfo.mOrigin);
 }
 
-nsresult WorkerPrivate::SetPrincipalsAndCSPOnMainThread(
+nsresult WorkerPrivate::SetPrincipalsOnMainThread(
     nsIPrincipal* aPrincipal, nsIPrincipal* aPartitionedPrincipal,
-    nsILoadGroup* aLoadGroup, nsIContentSecurityPolicy* aCsp) {
-  return mLoadInfo.SetPrincipalsAndCSPOnMainThread(
-      aPrincipal, aPartitionedPrincipal, aLoadGroup, aCsp);
+    nsILoadGroup* aLoadGroup) {
+  return mLoadInfo.SetPrincipalsOnMainThread(aPrincipal, aPartitionedPrincipal,
+                                             aLoadGroup);
 }
 
-nsresult WorkerPrivate::SetPrincipalsAndCSPFromChannel(nsIChannel* aChannel) {
-  return mLoadInfo.SetPrincipalsAndCSPFromChannel(aChannel);
+nsresult WorkerPrivate::SetPolicyContainerOnMainThread(
+    PolicyContainer* aPolicyContainer) {
+  MOZ_TRY(mLoadInfo.SetPolicyContainerOnMainThread(aPolicyContainer));
+
+  if (nsIContentSecurityPolicy* csp = GetCsp()) {
+    csp->EnsureEventTarget(mMainThreadEventTarget);
+  }
+
+  return NS_OK;
+}
+
+nsresult WorkerPrivate::SetPrincipalsAndPolicyContainerFromChannel(
+    nsIChannel* aChannel) {
+  MOZ_TRY(mLoadInfo.SetPrincipalsAndPolicyContainerFromChannel(aChannel));
+
+  if (nsIContentSecurityPolicy* csp = GetCsp()) {
+    csp->EnsureEventTarget(mMainThreadEventTarget);
+  }
+
+  return NS_OK;
 }
 
 bool WorkerPrivate::FinalChannelPrincipalIsValid(nsIChannel* aChannel) {
@@ -3227,6 +3235,21 @@ already_AddRefed<WorkerPrivate> WorkerPrivate::Constructor(
     aLoadInfo = stackLoadInfo.ptr();
   }
 
+  // Until the worker is registered and holds mSelfRef, a failure destroys it
+  // on this thread. For a nested worker that is the parent's worker thread, so
+  // the main-thread-only load info members have to be proxy released.
+  RefPtr<WorkerPrivate> worker;
+  auto releaseLoadInfoOnFailure = MakeScopeExit([&] {
+    if (!parent) {
+      return;
+    }
+    if (worker) {
+      worker->ProxyReleaseMainThreadObjects();
+    } else if (stackLoadInfo) {
+      MOZ_ALWAYS_TRUE(stackLoadInfo->ProxyReleaseMainThreadObjects(parent));
+    }
+  });
+
   // NB: This has to be done before creating the WorkerPrivate, because it will
   // attempt to use static variables that are initialized in the RuntimeService
   // constructor.
@@ -3253,7 +3276,7 @@ already_AddRefed<WorkerPrivate> WorkerPrivate::Constructor(
   AgentClusterIdAndCoop idAndCoop = ComputeAgentClusterIdAndCoop(
       parent, aWorkerKind, aLoadInfo, aIsChromeWorker);
 
-  RefPtr<WorkerPrivate> worker = new WorkerPrivate(
+  worker = new WorkerPrivate(
       parent, aScriptURL, aIsChromeWorker, aWorkerKind, aRequestCredentials,
       aWorkerType, aWorkerName, aServiceWorkerScope, *aLoadInfo, std::move(aId),
       idAndCoop.mId, idAndCoop.mCoop, std::move(aCancellationCallback),
@@ -3285,6 +3308,7 @@ already_AddRefed<WorkerPrivate> WorkerPrivate::Constructor(
   // ClearSelfAndParentEventTargetRef().
   worker->mSelfRef = worker;
   worker->mParentRef = MakeRefPtr<WorkerParentRef>(worker);
+  releaseLoadInfoOnFailure.release();
 
   // The remote and local debugger mechanisms are mutually exclusive. Enable the
   // remote worker debugger once the worker is really scheduled; otherwise
@@ -3765,7 +3789,7 @@ nsresult WorkerPrivate::GetLoadInfo(
                                      : nsILoadInfo::NoStoragePermission);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    rv = loadInfo.SetPrincipalsAndCSPFromChannel(loadInfo.mChannel);
+    rv = loadInfo.SetPrincipalsAndPolicyContainerFromChannel(loadInfo.mChannel);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
@@ -6168,7 +6192,7 @@ void WorkerPrivate::ReportError(JSContext* aCx,
                    data->mErrorHandlerRecursionCount == 1,
                "Bad recursion logic!");
 
-  UniquePtr<WorkerErrorReport> report = MakeUnique<WorkerErrorReport>();
+  auto report = std::make_unique<WorkerErrorReport>();
   if (aReport) {
     report->AssignErrorReport(aReport);
   }

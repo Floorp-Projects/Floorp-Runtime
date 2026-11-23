@@ -14,9 +14,6 @@ will lead to a smoother, more rapid process of review and acceptance.
   strongly recommended for anyone who reviews patches: it displays a
   badge with the number of reviews waiting on you in Phabricator,
   Bugzilla and GitHub, so requests don't sit unnoticed for days.
-- Use the [phab-test-policy
-  add-on](https://addons.mozilla.org/firefox/addon/phab-test-policy/) to
-  help select the right test policy for the patch in Phabricator.
 
 ## Good web citizenship
 
@@ -59,7 +56,7 @@ will lead to a smoother, more rapid process of review and acceptance.
 ## Style
 
 - Follow the [style
-  guide](https://firefox-source-docs.mozilla.org/code-quality/coding-style/index.html)
+  guide](/code-quality/coding-style/index.md)
   for the language and module in question.
 - Follow local style for the surrounding code, even if that local style
   isn't formally documented.

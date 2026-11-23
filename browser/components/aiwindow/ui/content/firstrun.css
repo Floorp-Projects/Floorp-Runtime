@@ -25,7 +25,7 @@
 
     /* TODO: Bug 2033070 - remove these media queries after Nova launch */
     @media not -moz-pref("browser.nova.enabled") {
-      /* stylelint-disable-next-line -- using linear gradient for text effect */
+      /* using linear gradient for text effect */
       --header-bg-image: light-dark(linear-gradient(91deg, #7630c0 22.04%, #5c66ee 78.7%), linear-gradient(65deg, #9165ff 18.85%, #d8c9ff 78.79%));
       --card-bg: light-dark(var(--color-white-alpha-50), var(--color-gray-80));
       --card-bg-hover: var(--background-color-box);
@@ -87,7 +87,7 @@
     @media not -moz-pref("browser.nova.enabled") {
       border: none;
       border-radius: var(--border-radius-medium);
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom gradient per Figma design */
+      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-paired-color-tokens -- custom gradient per Figma design; the button's text color comes from its default styles */
       background-image: var(--button-background-color-primary);
     }
 
@@ -113,7 +113,6 @@
 
     /* TODO: Bug 2033070 - remove these media queries after Nova launch */
     @media not -moz-pref("browser.nova.enabled") {
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
       background-color: var(--card-border-color);
     }
 
@@ -122,7 +121,6 @@
     }
 
     &:hover {
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom brand border per Figma design */
       border-color: var(--card-border-color-hover);
     }
   }
@@ -137,7 +135,7 @@
 #mainContentHeader {
   background-image: var(--header-bg-image);
   background-clip: text;
-  /* stylelint-disable-next-line -- transparent needed for gradient text effect */
+  /* transparent needed for gradient text effect */
   color: var(--header-text-color);
 
   .screen.AI_WINDOW_INTRO & {
@@ -157,12 +155,11 @@
 
 .welcome-text {
   .screen:not(.AI_WINDOW_INTRO) & {
-    margin-bottom: 0;
+    margin-block-end: 0;
 
     h2 {
       opacity: var(--opacity-deemphasized);
-      margin-top: var(--space-medium);
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom subtitle size per Figma design */
+      margin-block-start: var(--space-medium);
       font-size: var(--font-size-root);
       font-weight: normal;
       /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom subtitle width per Figma design */
@@ -172,7 +169,7 @@
 
   .screen.AI_WINDOW_MEMORIES &,
   .screen.AI_WINDOW_SET_DEFAULT & {
-    margin-bottom: var(--space-large);
+    margin-block-end: var(--space-large);
 
     p {
       opacity: var(--opacity-deemphasized);
@@ -186,7 +183,6 @@
   p {
     letter-spacing: 0.3px;
     line-height: normal;
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom brand color per Figma design */
     color: var(--card-text-color);
   }
 }
@@ -194,7 +190,7 @@
 .screen.AI_WINDOW_MEMORIES,
 .screen.AI_WINDOW_SET_DEFAULT {
   .section-main {
-    margin-top: calc(var(--space-xxlarge) * 3);
+    margin-block-start: calc(var(--space-xxlarge) * 3);
   }
 
   #content-tiles-container {
@@ -229,7 +225,7 @@
     }
 
     .confirmation-checklist-icon {
-      margin-top: var(--space-xxsmall);
+      margin-block-start: var(--space-xxsmall);
       -moz-context-properties: fill;
       /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom brand color per Figma design */
       fill: var(--card-text-color);
@@ -285,14 +281,11 @@
       display: grid;
       grid-template-columns: 35px 1fr;
       padding: var(--space-medium) var(--space-large);
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom card background per Figma design */
       background: var(--card-bg);
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom border per Figma design */
       border-inline: var(--border-width) solid var(--card-border-color);
       border-block-end: var(--border-width) solid var(--card-border-color);
 
       &:first-of-type {
-        /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- custom border per Figma design */
         border-block-start: var(--border-width) solid var(--card-border-color);
         border-start-start-radius: var(--border-radius-medium);
         border-start-end-radius: var(--border-radius-medium);
@@ -307,13 +300,13 @@
 
   .action-buttons {
     gap: var(--space-small);
-    margin-top: var(--space-small);
+    margin-block-start: var(--space-small);
   }
 }
 
 .screen.AI_WINDOW_SET_DEFAULT {
   .multi-select-container {
-    margin-top: var(--space-large);
+    margin-block-start: var(--space-large);
 
     .checkbox-container.multi-select-item {
       padding: var(--space-xlarge);
@@ -357,7 +350,7 @@
 .screen.AI_WINDOW_CHOOSE_MODEL {
   .tiles-single-select-container {
     align-items: stretch;
-    /* stylelint-disable-next-line -- 550px per Figma */
+    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens -- 550px per Figma */
     max-width: 550px;
 
     > div {
@@ -376,12 +369,10 @@
 
   .select-item {
     align-items: center;
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
     background-color: var(--card-bg);
     border: var(--border-width) solid var(--card-border-color);
     border-radius: var(--border-radius-large);
     box-sizing: border-box;
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
     color: var(--card-text-color);
     column-gap: var(--space-medium);
     display: grid;
@@ -410,9 +401,7 @@
 
     /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector */
     &:hover:not(:has(.selected)) {
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
       background-color: var(--card-bg-hover);
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
       border: var(--border-width) solid var(--card-border-color-hover);
       box-shadow: var(--box-shadow-level-2);
     }
@@ -423,7 +412,6 @@
       background:
         image(var(--card-bg-hover)) padding-box,
         var(--card-border-color-gradient) border-box;
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
       border: calc(2 * var(--border-width)) solid var(--border-color-transparent);
       box-shadow: var(--box-shadow-level-4);
       color: var(--card-text-color-selected);
@@ -432,8 +420,7 @@
 
     .label-text {
       grid-area: title;
-      margin-bottom: 0;
-      margin-top: 0;
+      margin-block: 0;
       line-height: normal;
       text-align: start;
     }
@@ -452,8 +439,7 @@
       grid-row-end: 3;
       grid-row-start: 1;
       line-height: normal;
-      margin-bottom: 0;
-      margin-top: 0;
+      margin-block: 0;
       /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
       max-width: 196px;
       text-align: end;
@@ -473,7 +459,6 @@
         var(--color-violet-desaturated-0, var(--color-violet-0)),
         var(--color-violet-desaturated-50, var(--color-violet-50))
       );
-      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
       background-color: var(--flair-background-color);
       border-radius: var(--border-radius-xlarge, var(--border-radius-large));
       color: var(--text-color);

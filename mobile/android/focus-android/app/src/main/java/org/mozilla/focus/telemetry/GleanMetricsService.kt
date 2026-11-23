@@ -21,12 +21,12 @@ import mozilla.components.browser.state.search.SearchEngine
 import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
 import mozilla.components.feature.search.ext.waitForSelectedOrDefaultSearchEngine
 import mozilla.components.feature.search.telemetry.SearchProviderModel
-import mozilla.components.feature.search.telemetry.SerpTelemetryRepository
 import mozilla.components.service.glean.net.ConceptFetchHttpUploader
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.utils.Browsers
 import mozilla.telemetry.glean.Glean
 import mozilla.telemetry.glean.config.Configuration
+import org.mozilla.experiments.nimbus.Nimbus.Pings as NimbusPings
 import org.mozilla.focus.BuildConfig
 import org.mozilla.focus.Components
 import org.mozilla.focus.GleanMetrics.Browser
@@ -134,15 +134,11 @@ class GleanMetricsService(
         )
 
         Glean.registerPings(Pings)
+        Glean.registerPings(NimbusPings.nimbusTargetingContext)
 
         if (telemetryEnabled) {
             serviceScope.launch {
-                val providerList =
-                    SerpTelemetryRepository(
-                            collectionName = COLLECTION_NAME,
-                            remoteSettingsService = context.components.remoteSettingsService,
-                        )
-                        .updateProviderList()
+                val providerList = components.serpTelemetryRepository.updateProviderList()
                 installSearchTelemetryExtensions(components, providerList)
             }
         }
@@ -180,7 +176,7 @@ class GleanMetricsService(
             val shortcutsOnHomeNumber =
                 components.topSitesStorage
                     .getTopSites(
-                        totalSites = TOP_SITES_MAX_LIMIT,
+                        targetSitesCount = TOP_SITES_MAX_LIMIT,
                         frecencyConfig = null,
                     )
                     .size

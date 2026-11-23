@@ -45,6 +45,7 @@ import {
   SPACE_IDS,
 } from "resource://newtab/common/PageLayoutVariants.mjs";
 
+import { isPlausibleSurfaceId } from "resource://newtab/common/SurfaceId.mjs";
 import { scoreItemInferred } from "resource://newtab/lib/InferredModel/GreedyContentRanker.mjs";
 
 const LOCAL_POPULAR_RERANK = false; // default behavior for local re-ranking
@@ -748,8 +749,8 @@ export class DiscoveryStreamFeed {
    * @param {object} options
    * @param {object} options.cachedData data returned from cache.get()
    * @param {string} options.key a cache key
-   * @param {string?} options.url for "feed" only, the URL of the feed.
-   * @param {boolean} options.isStartup is this check done at initial browser load
+   * @param {string} [options.url] for "feed" only, the URL of the feed.
+   * @param {boolean} [options.isStartup] is this check done at initial browser load
    */
   isExpired({ cachedData, key, url, isStartup }) {
     const { spocs, feeds } = cachedData;
@@ -1169,6 +1170,10 @@ export class DiscoveryStreamFeed {
   // We want to maintain both implementations until we're done rollout out,
   // so for now we are going to normlaize the new data to match the old data props,
   // so we can change as little as possible. Once we commit to one, we can remove all this.
+  /**
+   * @param {object} spocs
+   * @returns {{items: Array, title?: string, context?: string, sponsor?: string, sponsored_by_override?: string, flight_id?: string}}
+   */
   normalizeSpocsItems(spocs) {
     const unifiedAdsEnabled =
       this.store.getState().Prefs.values[PREF_UNIFIED_ADS_SPOCS_ENABLED];
@@ -1388,6 +1393,7 @@ export class DiscoveryStreamFeed {
         headers.append("content-type", "application/json");
         const state = this.store.getState();
         let endpoint = state.DiscoveryStream.spocs.spocs_endpoint;
+        /** @type {object} */
         let body = {
           version: 2,
           ...(placements.length ? { placements } : {}),
@@ -1890,6 +1896,10 @@ export class DiscoveryStreamFeed {
 
     let feed = feeds ? feeds[feedUrl] : null;
     if (this.isExpired({ cachedData, key: "feed", url: feedUrl, isStartup })) {
+      // Read before the awaits below, alongside the request body, so the
+      // surfaceId is checked against what Merino was sent even if the region
+      // changes while the fetch is in flight.
+      const { locale, region } = this;
       const options = this.formatComponentFeedRequest(
         cachedData.sectionPersonalization
       );
@@ -2019,9 +2029,15 @@ export class DiscoveryStreamFeed {
         // Rotate is also the only place that uses these impressions.
         await this.cleanUpTopRecImpressions();
         const rotatedItems = await this.rotate(scoredItems);
-
         const { data: filteredResults } =
           await this.filterBlocked(rotatedItems);
+        let { surfaceId = "" } = feedResponse;
+        if (surfaceId && !isPlausibleSurfaceId(surfaceId, locale, region)) {
+          console.warn(`Ignoring implausible surfaceId: ${surfaceId}`);
+          // @ts-expect-error tools/@types/generated/lib.gecko.glean.d.ts predates this metric.
+          Glean.newtabContent.surfaceIdRejected.record();
+          surfaceId = "";
+        }
         feed = {
           lastUpdated: Date.now(),
           personalized,
@@ -2031,7 +2047,7 @@ export class DiscoveryStreamFeed {
             sections,
             interestPicker: feedResponse.interestPicker || {},
             recommendations: filteredResults,
-            surfaceId: feedResponse.surfaceId || "",
+            surfaceId,
             status: "success",
           },
         };
@@ -2046,8 +2062,12 @@ export class DiscoveryStreamFeed {
     }
 
     // Still gated: this pref feeds utc_offset on the Merino request
-    if (prefs[PREF_PRIVATE_PING_ENABLED] && feed?.data?.surfaceId) {
-      this.store.dispatch(ac.SetPref(PREF_SURFACE_ID, feed.data.surfaceId));
+    if (prefs[PREF_PRIVATE_PING_ENABLED] && feed?.data) {
+      this.store.dispatch(
+        feed.data.surfaceId
+          ? ac.SetPref(PREF_SURFACE_ID, feed.data.surfaceId)
+          : { type: at.CLEAR_PREF, data: { name: PREF_SURFACE_ID } }
+      );
     }
 
     // If we have no feed at this point, both fetch and cache failed for some reason.
@@ -2096,9 +2116,14 @@ export class DiscoveryStreamFeed {
 
     let inferredInterests = null;
     if (inferredPersonalization && merinoOhttpEnabled) {
-      inferredInterests =
-        this.store.getState().InferredPersonalization
-          ?.coarsePrivateInferredInterests || {};
+      const personalization = this.store.getState().InferredPersonalization;
+      const useLocationVector =
+        prefs?.trainhopConfig?.locationInitInferred?.enabled &&
+        personalization?.shouldUseLocationVector &&
+        personalization.locationPrivateInferredInterests;
+      inferredInterests = useLocationVector
+        ? personalization.locationPrivateInferredInterests
+        : personalization?.coarsePrivateInferredInterests || {};
       if (prefs[PREF_INFERRED_INTERESTS_OVERRIDE]) {
         try {
           inferredInterests = JSON.parse(
@@ -2111,13 +2136,16 @@ export class DiscoveryStreamFeed {
     }
 
     const requestMetadata = {
-      utc_offset: prefs.inferredPersonalizationConfig
-        ?.normalized_time_zone_offset
-        ? lazy.NewTabUtils.getUtcOffset(prefs[PREF_SURFACE_ID])
-        : undefined,
+      // Without a surface, getUtcOffset would return the unclamped offset.
+      utc_offset:
+        prefs.inferredPersonalizationConfig?.normalized_time_zone_offset &&
+        prefs[PREF_SURFACE_ID]
+          ? lazy.NewTabUtils.getUtcOffset(prefs[PREF_SURFACE_ID])
+          : undefined,
       inferredInterests,
     };
     headers.append("content-type", "application/json");
+    /** @type {{[key: string]: any}} */
     let body = {
       ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
       ...requestMetadata,
@@ -2196,12 +2224,17 @@ export class DiscoveryStreamFeed {
 
   /**
    * @typedef {object} RefreshAll
-   * @property {boolean} updateOpenTabs - Sends updates to open tabs immediately if true,
+   * @property {boolean} [updateOpenTabs] - Sends updates to open tabs immediately if true,
    *                                      updates in background if false
-   * @property {boolean} isStartup - When the function is called at browser startup
-   *
+   * @property {boolean} [isStartup] - When the function is called at browser startup
+   * @property {boolean} [isSystemTick] - When the function is called by the system tick,
+   *                                      so that it can check whether spocs are on demand
+   */
+
+  /**
    * Refreshes component feeds, and spocs in order if caches have expired.
-   * @param {RefreshAll} options
+   *
+   * @param {RefreshAll} [options]
    */
   async refreshAll(options = {}) {
     const { updateOpenTabs, isStartup, isSystemTick } = options;
@@ -2674,7 +2707,7 @@ export class DiscoveryStreamFeed {
       this.setupPrefs(false /* isStartup */);
     }
     if (action.data.name === "trainhopConfig") {
-      await this.onTrainhopConfigChanged(action);
+      await this.onTrainhopConfigChanged();
     }
   }
 

@@ -308,10 +308,18 @@ const ProxyMessenger = {
       let browser = top.embedderElement;
       let data =
         browser && apiManager.global.tabTracker.getBrowserData(browser);
+
+      let windowId = data?.windowId;
       if (data?.tabId > 0) {
         sender.tab = extension.tabManager.get(data.tabId, null)?.convert();
         // frameId is documented to only be set if sender.tab is set.
         sender.frameId = source.frameId;
+        // preferring windowId from tab over data.windowId
+        windowId ??= sender.tab?.windowId;
+      }
+
+      if (windowId > 0) {
+        sender.windowId = windowId;
       }
 
       if (currentWindowContext?.innerWindowId) {
@@ -2577,10 +2585,8 @@ export var ExtensionParent = {
 
 // browserPaintedPromise and browserStartupPromise are promises that
 // resolve after the first browser window is painted and after browser
-// windows have been restored, respectively. Alternatively,
-// browserStartupPromise also resolves from the extensions-late-startup
-// notification sent by Firefox Reality on desktop platforms, because it
-// doesn't support SessionStore.
+// windows have been restored, respectively. browserStartupPromise also
+// resolves from the extensions-late-startup notification.
 // _resetStartupPromises should only be called from outside this file in tests.
 ExtensionParent._resetStartupPromises = () => {
   ExtensionParent.browserPaintedPromise = promiseObserved(
@@ -2622,6 +2628,8 @@ ChromeUtils.defineLazyGetter(ExtensionParent, "PlatformInfo", () => {
         arch = "x86-32";
       } else if (arch == "x86_64") {
         arch = "x86-64";
+      } else if (arch == "aarch64") {
+        arch = "arm64";
       }
       return arch;
     })(),

@@ -659,7 +659,7 @@ class TestFirefoxRefresh(MarionetteTestCase):
             """
           try {
             global.formAutofillStorage = ChromeUtils.importESModule(
-              "resource://formautofill/FormAutofillStorage.sys.mjs"
+              "resource://autofill/FormAutofillStorage.sys.mjs"
             ).formAutofillStorage;
           } catch(e) {
             return false;
@@ -1012,3 +1012,203 @@ class TestSelectableProfileFirefoxRefresh(TestFirefoxRefresh):
             self.checkSession()
             self.checkStartupMigrationStateCleared()
             self.checkRefreshPromptDisabled()
+
+
+class TestFirefoxRefreshRustAutofill(TestFirefoxRefresh):
+    """Refresh a profile whose addresses and credit cards are served from
+    autofill.db.
+
+    Once they move to the Rust store, autofill-profiles.json is no longer
+    written, so the migrator has to carry autofill.db and the rust.active prefs
+    into the new profile. rust.enabled is kept across the refresh as it is once
+    Nimbus enrolls the new profile, so the new profile serves the copied
+    autofill.db as is.
+    """
+
+    _addressEnabledPref = "extensions.formautofill.addresses.storage.rust.enabled"
+    _creditCardEnabledPref = "extensions.formautofill.creditCards.storage.rust.enabled"
+
+    _rustAddressGuid = None
+    _rustCreditCardGuid = None
+
+    # Inherited test that does not involve autofill data.
+    testFxANoSync = None
+
+    def doReset(self):
+        # Without rust.enabled the new profile copies its credit cards back to
+        # autofill-profiles.json at startup, which needs the OS key store.
+        self.runCode(
+            """
+          let [prefs] = arguments;
+          let name = "MOZ_MARIONETTE_REQUIRED_PREFS";
+          let kept = JSON.parse(Services.env.get(name)).concat(prefs);
+          Services.env.set(name, JSON.stringify(kept));
+        """,
+            script_args=([self._addressEnabledPref, self._creditCardEnabledPref],),
+        )
+        return super().doReset()
+
+    def createFormAutofill(self):
+        super().createFormAutofill()
+        # Credit cards switch before any is saved: copying a JSON card into the
+        # Rust store waits for the OS key store to be unlocked.
+        result = self.runAsyncCode(
+            """
+          let [addressPref, creditCardPref, resolve] = arguments;
+          let storage = global.formAutofillStorage;
+          (async () => {
+            await storage.initialize();
+            Services.prefs.setBoolPref(addressPref, true);
+            Services.prefs.setBoolPref(creditCardPref, true);
+            await storage._addressSwitch;
+            await storage._creditCardSwitch;
+            let addressGuid = await storage.addresses.add({
+              "given-name": "Jane",
+              "family-name": "Doe",
+              "street-address": "1 Rust Street",
+              "address-level2": "Toronto",
+              "address-level1": "ON",
+              "postal-code": "M5V 2T6",
+              country: "CA",
+            });
+            let creditCardGuid = await storage.creditCards.add({
+              "cc-name": "Jane Doe",
+              "cc-number": "4111111111111111",
+              "cc-exp-month": 4,
+              "cc-exp-year": 2050,
+            });
+            return [addressGuid, creditCardGuid];
+          })().then(resolve, e => resolve("Unexpected error in adding autofill data: " + e));
+        """,
+            script_args=(self._addressEnabledPref, self._creditCardEnabledPref),
+        )
+        if type(result) is str:
+            self.fail(result)
+            return
+        [self._rustAddressGuid, self._rustCreditCardGuid] = result
+
+    def checkFormAutofill(self):
+        result = self.runAsyncCode(
+            """
+          let resolve = arguments[arguments.length - 1];
+          let storage = global.formAutofillStorage;
+          (async () => {
+            await storage.initialize();
+            let addresses = await storage.addresses.getAll();
+            let creditCards = await storage.creditCards.getAll();
+            return [addresses.map(a => a.guid), creditCards.map(c => c.guid)];
+          })().then(resolve, e => resolve("Unexpected error in fetching autofill data: " + e));
+        """
+        )
+        if type(result) is str:
+            self.fail(result)
+            return
+        [addressGuids, creditCardGuids] = result
+
+        self.assertCountEqual(
+            addressGuids,
+            [self._formAutofillAddressGuid, self._rustAddressGuid],
+            "Both the address saved before and after the switch should be present",
+        )
+        self.assertEqual(
+            creditCardGuids,
+            [self._rustCreditCardGuid],
+            "The credit card saved after the switch should be present",
+        )
+
+
+class TestFirefoxRefreshEncryptedSession(TestFirefoxRefresh):
+    """Refresh a profile whose session store data is encrypted.
+
+    The migrator has to carry the lockstore keys and the enabled pref into
+    the new profile so the encrypted session can be decrypted there,
+    converted and written back, encrypted only if the new profile's build
+    supports it.
+    """
+
+    _availablePref = "browser.sessionstore.encryption.available"
+    _enabledPref = "browser.sessionstore.encryption.enabled"
+    # Header IOUtils writes in front of encrypted files.
+    _encryptedFileMagic = b"mozEnc0\x00"
+
+    # Inherited test that does not involve session data.
+    testFxANoSync = None
+
+    def enableSessionEncryption(self):
+        # SessionStartup locks the available pref at startup so that only its
+        # default value is honoured. Unlock it so the user values set here
+        # take effect for the rest of this session and the source session is
+        # written encrypted. Both values are saved to prefs.js, but the
+        # migrator only picks up the enabled one.
+        self.runCode(
+            """
+          Services.prefs.unlockPref(arguments[0]);
+          Services.prefs.setBoolPref(arguments[0], true);
+          Services.prefs.setBoolPref(arguments[1], true);
+        """,
+            script_args=(self._availablePref, self._enabledPref),
+        )
+
+    def createProfileData(self):
+        self.enableSessionEncryption()
+        super().createProfileData()
+
+    def doReset(self):
+        cleanup = super().doReset()
+        self._sourceProfilePath = cleanup.desktop_backup_path
+        self._resetProfilePath = cleanup.reset_profile_path
+        return cleanup
+
+    def readSessionFileHeader(self, profileDir):
+        # SessionWriter moves sessionstore.jsonlz4 to the backups directory
+        # on its first write, so accept either location.
+        candidates = [
+            os.path.join(profileDir, "sessionstore.jsonlz4"),
+            os.path.join(profileDir, "sessionstore-backups", "previous.jsonlz4"),
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    return path, f.read(len(self._encryptedFileMagic))
+        self.fail(f"No session file found in {profileDir}")
+
+    def checkSessionFilesEncrypted(self):
+        path, header = self.readSessionFileHeader(self._sourceProfilePath)
+        self.assertEqual(
+            header, self._encryptedFileMagic, f"{path} should be encrypted"
+        )
+
+        available = self.runCode(
+            "return Services.prefs.getBoolPref(arguments[0]);",
+            script_args=(self._availablePref,),
+        )
+        path, header = self.readSessionFileHeader(self._resetProfilePath)
+        if available:
+            self.assertEqual(
+                header, self._encryptedFileMagic, f"{path} should be encrypted"
+            )
+        else:
+            self.assertNotEqual(
+                header, self._encryptedFileMagic, f"{path} should be plaintext"
+            )
+
+    def checkEncryptionPrefsMigrated(self):
+        [available_has_user_value, enabled] = self.runCode(
+            """
+          return [
+            Services.prefs.prefHasUserValue(arguments[0]),
+            Services.prefs.getBoolPref(arguments[1]),
+          ];
+        """,
+            script_args=(self._availablePref, self._enabledPref),
+        )
+        self.assertFalse(
+            available_has_user_value, "available pref should not be migrated"
+        )
+        self.assertTrue(enabled, "enabled pref should have been migrated")
+
+    def checkProfile(self, has_migrated=False, expect_sync_user=True):
+        if has_migrated:
+            self.checkSessionFilesEncrypted()
+            self.checkEncryptionPrefsMigrated()
+        super().checkProfile(has_migrated, expect_sync_user)

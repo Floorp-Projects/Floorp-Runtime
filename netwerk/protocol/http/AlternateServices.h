@@ -198,6 +198,10 @@ class AltSvcCache {
       bool privateBrowsing, const OriginAttributes& originAttributes,
       bool aHttp2Allowed, bool aHttp3Allowed, bool aForceHttp3First = false);
   void ClearAltServiceMappings();
+  // Removes all Alt-Svc mappings whose origin attributes match
+  // aOriginAttributes.
+  void ClearAltServiceMappingsMatchingOA(
+      const OriginAttributes& aOriginAttributes);
   void ClearHostMapping(const nsACString& host, int32_t port,
                         const OriginAttributes& originAttributes);
   void ClearHostMapping(nsHttpConnectionInfo* ci);
@@ -213,39 +217,20 @@ class AltSvcCache {
   int32_t mStorageEpoch{0};
 };
 
-// This class is used to write the validated result to AltSvcMapping when the
-// AltSvcTransaction is closed and destroyed.
-class AltSvcMappingValidator final {
- public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(AltSvcMappingValidator)
-
-  explicit AltSvcMappingValidator(AltSvcMapping* aMap);
-
-  void OnTransactionDestroy(bool aValidateResult);
-
-  void OnTransactionClose(bool aValidateResult);
-
- protected:
-  virtual ~AltSvcMappingValidator() = default;
-
-  RefPtr<AltSvcMapping> mMapping;
-};
-
 // This is the asynchronous null transaction used to validate
 // an alt-svc advertisement only for https://
-// When http over socket process is enabled, this class should live only in
-// socket process.
-template <class Validator>
 class AltSvcTransaction final : public SpeculativeTransaction {
  public:
   AltSvcTransaction(nsHttpConnectionInfo* ci, nsIInterfaceRequestor* callbacks,
-                    uint32_t caps, Validator* aValidator, bool aIsHttp3);
+                    uint32_t caps, AltSvcMapping* aMap);
 
   ~AltSvcTransaction() override;
 
   // AltSvcTransaction is used to validate the alt-svc record, so we don't want
   // to fetch HTTPS RR for this.
   virtual nsresult FetchHTTPSRR() override { return NS_ERROR_NOT_IMPLEMENTED; }
+
+  bool IsAltSvcValidation() override { return true; }
 
  private:
   // check on alternate route.
@@ -258,9 +243,8 @@ class AltSvcTransaction final : public SpeculativeTransaction {
                         uint32_t* countRead) override;
 
  private:
-  RefPtr<Validator> mValidator;
+  RefPtr<AltSvcMapping> mMapping;
   uint32_t mIsHttp3 : 1;
-  uint32_t mRunning : 1;
   uint32_t mTriedToValidate : 1;
   uint32_t mTriedToWrite : 1;
   uint32_t mValidatedResult : 1;

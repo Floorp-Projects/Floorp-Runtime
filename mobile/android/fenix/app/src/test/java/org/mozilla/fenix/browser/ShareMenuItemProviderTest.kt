@@ -14,11 +14,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.ReaderState
+import mozilla.components.browser.state.state.createCustomTab
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.text.Text
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.ui.MenuItemIconRes
+import mozilla.components.compose.menu.ui.MenuItemState
 import mozilla.components.concept.engine.prompt.ShareData
 import mozilla.components.ui.icons.R as iconsR
 import org.junit.Test
@@ -43,11 +46,26 @@ class ShareMenuItemProviderTest {
 
         assertEquals(
             StandardMenuItem(
-                title = Text.Resource(R.string.browser_menu_share),
+                title = MenuItemTitle(Text.Resource(R.string.browser_menu_share)),
                 icon = MenuItemIconRes(iconsR.drawable.mozac_ic_share_android_24),
                 onClickEvent = MenuAction.Navigate.Share,
             ),
-            provider.itemFlow.value,
+            provider.itemsFlow.value.single(),
+        )
+    }
+
+    @Test
+    fun `GIVEN target is CustomizeMenu WHEN building the share menu item THEN return menu item without click event`() {
+        val provider = createProvider(target = MenuTarget.CustomizeMenu)
+
+        assertEquals(
+            StandardMenuItem(
+                title = MenuItemTitle(Text.Resource(R.string.browser_menu_share)),
+                icon = MenuItemIconRes(iconsR.drawable.mozac_ic_share_android_24),
+                onClickEvent = null,
+                state = MenuItemState.DEFAULT,
+            ),
+            provider.itemsFlow.value.single(),
         )
     }
 
@@ -64,6 +82,28 @@ class ShareMenuItemProviderTest {
                 title = TEST_TITLE,
                 source = ShareSource.BROWSER_MENU,
                 isPrivate = false,
+                isCustomTab = false,
+                navigateToShareFragment = any(),
+            )
+        }
+    }
+
+    @Test
+    fun `GIVEN a custom tab WHEN clicking the item THEN share its page with custom tab source`() {
+        val customTab = createCustomTab(url = TEST_URL, title = TEST_TITLE, id = TAB_ID)
+        val browserStore = BrowserStore(BrowserState(customTabs = listOf(customTab)))
+        val provider = createProvider(browserStore = browserStore, target = MenuTarget.CustomTab(TAB_ID))
+
+        provider.onEvent(MenuAction.Navigate.Share, menu)
+
+        verify {
+            shareUseCases.shareUrl(
+                id = TAB_ID,
+                url = TEST_URL,
+                title = TEST_TITLE,
+                source = ShareSource.CUSTOM_TAB_MENU,
+                isPrivate = false,
+                isCustomTab = true,
                 navigateToShareFragment = any(),
             )
         }
@@ -136,7 +176,7 @@ class ShareMenuItemProviderTest {
     fun `WHEN building the item THEN handle all events it can dispatch and no others`() {
         val provider = createProvider()
 
-        val events = requireNotNull(provider.itemFlow.value).reachableEvents()
+        val events = provider.itemsFlow.value.single().reachableEvents()
 
         assertTrue(events.all { provider.handles(it) }, "Not all of $events are handled")
         assertFalse(provider.handles(MenuAction.Navigate.Settings))

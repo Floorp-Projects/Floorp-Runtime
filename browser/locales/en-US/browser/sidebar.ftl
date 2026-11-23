@@ -62,6 +62,13 @@ sidebar-history-sort-option-last-visited =
 sidebar-history-sort-option-most-visited =
   .label = Most visited
 
+# Promo shown in the history panel to people with a new profile, inviting them
+# to import their browsing history from another browser.
+sidebar-history-import-promo =
+  .message = Missing something? Grab history from another browser.
+sidebar-history-import-promo-button =
+  .label = Import to { -brand-short-name }
+
 ## Labels for sidebar search
 
 # "Search" is a noun (as in "Results of the search for")
@@ -349,3 +356,5 @@ sidebar-widget-hide-sidebar2 =
 # users who do not have any pinned tabs. Indicates that they can drop tabs in
 # this area to pin them.
 sidebar-pins-promo-text = Drag important tabs here to keep them within reach
+sidebar-pins-promo-text-2 =
+  .heading = Drag important tabs here to keep them within reach

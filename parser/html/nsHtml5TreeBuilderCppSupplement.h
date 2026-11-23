@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include <memory>
+
 #include "ErrorList.h"
 #include "nsError.h"
 #include "nsHtml5AttributeName.h"
@@ -14,8 +16,8 @@
 #include "mozilla/CheckedInt.h"
 #include "mozilla/Likely.h"
 #include "mozilla/StaticPrefs_dom.h"
+#include "mozilla/StaticPrefs_media.h"
 #include "mozilla/StaticPrefs_network.h"
-#include "mozilla/UniquePtr.h"
 #include "mozilla/UniquePtrExtensions.h"
 #include "mozilla/dom/Sanitizer.h"
 #include "nsTHashMap.h"
@@ -303,7 +305,7 @@ void nsHtml5TreeBuilder::SetSanitizer(mozilla::dom::Sanitizer* aSanitizer,
              "Sanitizing while parsing needs the op-less builder.");
   if (aSanitizer) {
     aSanitizer->RecordSanitizeUse();
-    mSanitizerState = mozilla::MakeUnique<SanitizerState>(aSanitizer, aSafe);
+    mSanitizerState = std::make_unique<SanitizerState>(aSanitizer, aSafe);
   } else {
     mSanitizerState = nullptr;
   }
@@ -838,17 +840,24 @@ nsIContentHandle* nsHtml5TreeBuilder::createElement(
             }
           }
         } else if (nsGkAtoms::video == aName) {
-          nsHtml5String url =
-              aAttributes->getValue(nsHtml5AttributeName::ATTR_POSTER);
-          if (url) {
-            // Fetch priority is not supported for video. Nullptr will map to
-            // the auto state
-            // (https://html.spec.whatwg.org/#fetch-priority-attribute).
-            auto fetchPriority = nullptr;
+          // Lazy video defers the poster fetch as well as media loading.
+          bool isLazyLoading =
+              mozilla::StaticPrefs::media_lazy_loading_enabled() &&
+              aAttributes->getValue(nsHtml5AttributeName::ATTR_LOADING)
+                  .LowerCaseEqualsASCII("lazy");
+          if (!isLazyLoading) {
+            nsHtml5String url =
+                aAttributes->getValue(nsHtml5AttributeName::ATTR_POSTER);
+            if (url) {
+              // Fetch priority is not supported for video. Nullptr will map to
+              // the auto state
+              // (https://html.spec.whatwg.org/#fetch-priority-attribute).
+              auto fetchPriority = nullptr;
 
-            mSpeculativeLoadQueue.AppendElement()->InitImage(
-                url, nullptr, nullptr, nullptr, nullptr, nullptr, false,
-                fetchPriority, nullptr);
+              mSpeculativeLoadQueue.AppendElement()->InitImage(
+                  url, nullptr, nullptr, nullptr, nullptr, nullptr, false,
+                  fetchPriority, nullptr);
+            }
           }
         } else if (nsGkAtoms::style == aName) {
           mImportScanner.Start();
@@ -1722,6 +1731,29 @@ void nsHtml5TreeBuilder::elementPopped(int32_t aNamespace, nsAtom* aName,
                "Element isn't HTML, SVG or MathML!");
   NS_ASSERTION(aName, "Element doesn't have local name!");
   NS_ASSERTION(aElement, "No element!");
+
+  // https://html.spec.whatwg.org/#the-stack-of-open-elements
+  // When an element is popped, the spec processes internal resource links
+  // (rel=expect). nsHtml5TreeOperation::DoneAddingChildren does this, and also
+  // clears ELEMENT_ON_PARSER_STACK. The code below queues opDoneAddingChildren
+  // only for some elements, so queue it here for all other elements. The
+  // fragment parser (mBuilder) does not need this, because Element::BindToTree
+  // handles its elements when they are inserted.
+  // TODO: removeFromStack() does not call elementPopped() for an element that
+  // is not the current node, for example <form> in <form><div></form>. Such an
+  // element keeps ELEMENT_ON_PARSER_STACK, so a rel=expect link to it blocks
+  // until loading ends or the timeout. Bug 2075826 has the same cause.
+  if (!mBuilder && mozilla::StaticPrefs::dom_element_blocking_enabled() &&
+      !nsIContent::RequiresDoneAddingChildren(aNamespace, aName)) {
+    nsHtml5TreeOperation* treeOp = mOpQueue.AppendElement(mozilla::fallible);
+    if (MOZ_UNLIKELY(!treeOp)) {
+      MarkAsBrokenAndRequestSuspensionWithoutBuilder(NS_ERROR_OUT_OF_MEMORY);
+      return;
+    }
+    opDoneAddingChildren operation(aElement);
+    treeOp->Init(mozilla::AsVariant(operation));
+  }
+
   if (aNamespace == kNameSpaceID_MathML) {
     return;
   }
@@ -1908,7 +1940,7 @@ nsIContentHandle* nsHtml5TreeBuilder::AllocateContentHandle() {
   }
   if (mHandlesUsed == NS_HTML5_TREE_BUILDER_HANDLE_ARRAY_LENGTH) {
     mOldHandles.AppendElement(std::move(mHandles));
-    mHandles = mozilla::MakeUnique<nsIContent*[]>(
+    mHandles = std::make_unique<nsIContent*[]>(
         NS_HTML5_TREE_BUILDER_HANDLE_ARRAY_LENGTH);
     mHandlesUsed = 0;
   }

@@ -511,15 +511,6 @@ function promiseSanitizationComplete() {
   return TestUtils.topicObserved("sanitizer-sanitization-complete");
 }
 
-function settingsRedesignHistoryEnabled() {
-  return (
-    Services.prefs.getBoolPref(
-      "browser.settings-redesign.history2.enabled",
-      false
-    ) || Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)
-  );
-}
-
 /**
  * This wraps the dialog and provides some convenience methods for interacting
  * with it.
@@ -527,7 +518,7 @@ function settingsRedesignHistoryEnabled() {
  * @param {Window} browserWin (optional)
  *        The browser window that the dialog is expected to open in. If not
  *        supplied, the initial browser window of the test run is used.
- * @param {object} {mode, checkingDataSizes}
+ * @param {object} {mode, checkingDataSizes, showUIOptions}
  *        mode: context to open the dialog in
  *          One of
  *            clear on shutdown settings context ("clearOnShutdown"),
@@ -537,15 +528,19 @@ function settingsRedesignHistoryEnabled() {
  *          "browser" by default
  *        checkingDataSizes: boolean check if we should wait for the data sizes
  *          to load
+ *        showUIOptions: options passed to Sanitizer.showUI in the browser
+ *          context
  */
 function ClearHistoryDialogHelper({
   mode = "browser",
   checkingDataSizes = false,
+  showUIOptions,
 } = {}) {
   this._browserWin = window;
   this.win = null;
   this._mode = mode;
   this._checkingDataSizes = checkingDataSizes;
+  this._showUIOptions = showUIOptions;
   this.promiseClosed = new Promise(resolve => {
     this._resolveClosed = resolve;
   });
@@ -672,7 +667,7 @@ ClearHistoryDialogHelper.prototype = {
     // We want to simulate opening the dialog inside preferences for clear history
     // and clear site data
     if (this._mode != "browser") {
-      if (this._mode == "clearOnShutdown" && settingsRedesignHistoryEnabled()) {
+      if (this._mode == "clearOnShutdown") {
         await openPreferencesViaOpenPreferencesAPI("history", {
           leaveOpen: true,
         });
@@ -701,7 +696,7 @@ ClearHistoryDialogHelper.prototype = {
     // We open the dialog in the chrome context in other cases
     else {
       executeSoon(() => {
-        Sanitizer.showUI(this._browserWin, this._mode);
+        Sanitizer.showUI(this._browserWin, this._mode, this._showUIOptions);
       });
     }
 

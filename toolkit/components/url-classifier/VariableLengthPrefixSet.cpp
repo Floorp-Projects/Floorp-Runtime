@@ -12,9 +12,10 @@
 #include "mozilla/Logging.h"
 #include "mozilla/StaticMutex.h"
 #include "mozilla/StaticPtr.h"
-#include "mozilla/UniquePtr.h"
+
 #include <algorithm>
 #include <bit>
+#include <memory>
 
 // MOZ_LOG=UrlClassifierPrefixSet:5
 static mozilla::LazyLogModule gUrlClassifierPrefixSetLog(
@@ -117,7 +118,7 @@ MOZ_DEFINE_MALLOC_SIZE_OF(UrlClassifierMallocSizeOf)
 NS_IMETHODIMP
 UrlClassifierPrefixSetReporter::CollectReports(
     nsIHandleReportCallback* aHandleReport, nsISupports* aData,
-    bool aAnonymize) {
+    bool /*aAnonymize*/) {
   struct PrefixSetToReport {
     RefPtr<VariableLengthPrefixSet> mPrefixSet;
     nsCString mPath;
@@ -215,7 +216,7 @@ nsresult VariableLengthPrefixSet::SetPrefixes(AddPrefixArray& aAddPrefixes,
   }
   completions.Sort();
 
-  UniquePtr<nsCString> completionStr(new nsCString);
+  auto completionStr = std::make_unique<nsCString>();
   completionStr->SetCapacity(completions.Length() * COMPLETE_SIZE);
   for (size_t i = 0; i < completions.Length(); i++) {
     const char* buf = reinterpret_cast<const char*>(completions[i].buf);
@@ -282,7 +283,7 @@ nsresult VariableLengthPrefixSet::SetPrefixes(PrefixStringMap& aPrefixMap) {
     }
 
     mVLPrefixSet.InsertOrUpdate(entry.GetKey(),
-                                MakeUnique<nsCString>(*entry.GetData()));
+                                std::make_unique<nsCString>(*entry.GetData()));
   }
 
   return NS_OK;
@@ -298,7 +299,7 @@ nsresult VariableLengthPrefixSet::GetPrefixes(PrefixStringMap& aPrefixMap) {
 
   size_t count = array.Length();
   if (count) {
-    UniquePtr<nsCString> prefixes(new nsCString());
+    auto prefixes = std::make_unique<nsCString>();
     if (!prefixes->SetLength(PREFIX_SIZE_FIXED * count, fallible)) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
@@ -315,7 +316,7 @@ nsresult VariableLengthPrefixSet::GetPrefixes(PrefixStringMap& aPrefixMap) {
   // Copy variable-length prefix set
   for (const auto& entry : mVLPrefixSet) {
     aPrefixMap.InsertOrUpdate(entry.GetKey(),
-                              MakeUnique<nsCString>(*entry.GetData()));
+                              std::make_unique<nsCString>(*entry.GetData()));
   }
 
   return NS_OK;
@@ -455,7 +456,7 @@ nsresult VariableLengthPrefixSet::LoadPrefixes(nsCOMPtr<nsIInputStream>& in) {
     NS_ENSURE_TRUE(stringLength % prefixSize == 0, NS_ERROR_FILE_CORRUPTED);
     uint32_t prefixCount = stringLength / prefixSize;
 
-    UniquePtr<nsCString> vlPrefixes(new nsCString());
+    auto vlPrefixes = std::make_unique<nsCString>();
     if (!vlPrefixes->SetLength(stringLength, fallible)) {
       return NS_ERROR_OUT_OF_MEMORY;
     }

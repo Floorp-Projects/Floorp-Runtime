@@ -12,8 +12,8 @@ confirmation-hint-password-created = Password saved
 confirmation-hint-password-updated = Password updated
 confirmation-hint-address-created = Address saved
 confirmation-hint-address-updated = Address updated
-confirmation-hint-credit-card-created = Card saved
-confirmation-hint-credit-card-updated = Card updated
+confirmation-hint-payment-method-saved = Payment method saved
+confirmation-hint-payment-method-updated = Payment method updated
 confirmation-hint-passport-created = Passport saved
 confirmation-hint-passport-updated = Passport updated
 confirmation-hint-pin-tab = Pinned!
@@ -22,6 +22,7 @@ confirmation-hint-send-to-device = Sent!
 confirmation-hint-firefox-relay-mask-created = New mask created!
 confirmation-hint-firefox-relay-mask-reused = Existing mask reused!
 confirmation-hint-screenshot-copied = Screenshot copied!
+confirmation-hint-tab-group-saved = Tab group saved
 # Variables:
 #   $tabCount (Number): The number of duplicate tabs closed, at least 1.
 confirmation-hint-duplicate-tabs-closed =

@@ -177,7 +177,7 @@ struct TestConfig {
     std::vector<TestConfig> out;
     for (auto cc : kEndpointVariants) {
       for (auto sc : kEndpointVariants) {
-        if (!cc.dtls_in_stun && sc.dtls_in_stun) {
+        if (cc.dtls_in_stun != sc.dtls_in_stun) {
           continue;
         }
         for (auto use_ice_lite : {false, true}) {
@@ -428,6 +428,9 @@ class Base {
 
   Thread* thread(Endpoint& ep) {
     if (ep.emulated_network_manager == nullptr) {
+      if (time_controller_ == nullptr) {
+        return nullptr;
+      }
       return time_controller_->GetMainThread();
     } else {
       return ep.emulated_network_manager->network_thread();
@@ -562,6 +565,11 @@ class Base {
     ep.dtls = std::make_unique<DtlsTransportInternalImpl>(
         ep.env, ep.ice_transport, crypto_options,
         ep.config.max_protocol_version);
+
+    // No SDP exchange in this fixture; stand in for JsepTransport's call.
+    if (ep.config.dtls_in_stun) {
+      ep.dtls->MaybeStartDtlsInStun();
+    }
 
     if (ice_lite_agent) {
       ep.dtls->SetFakeIceLite();

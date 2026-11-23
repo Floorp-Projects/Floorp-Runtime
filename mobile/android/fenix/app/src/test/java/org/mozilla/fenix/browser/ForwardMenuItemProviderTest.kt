@@ -15,8 +15,10 @@ import kotlinx.coroutines.test.runTest
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.ContentState
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.browser.state.state.createCustomTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.text.Text
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.ui.MenuItemIconRes
 import mozilla.components.compose.menu.ui.MenuItemState
@@ -39,7 +41,7 @@ class ForwardMenuItemProviderTest {
         runTest {
             val provider = createProvider(BrowserStore(), backgroundScope)
 
-            assertEquals(expectedItem(canGoForward = false), provider.itemFlow.value)
+            assertEquals(expectedItem(canGoForward = false), provider.itemsFlow.value.single())
         }
 
     @Test
@@ -47,7 +49,7 @@ class ForwardMenuItemProviderTest {
         runTest {
             val provider = createProvider(browserStore(canGoForward = false), backgroundScope)
 
-            assertEquals(expectedItem(canGoForward = false), provider.itemFlow.value)
+            assertEquals(expectedItem(canGoForward = false), provider.itemsFlow.value.single())
         }
 
     @Test
@@ -55,7 +57,23 @@ class ForwardMenuItemProviderTest {
         runTest {
             val provider = createProvider(browserStore(canGoForward = true), backgroundScope)
 
-            assertEquals(expectedItem(canGoForward = true), provider.itemFlow.value)
+            assertEquals(expectedItem(canGoForward = true), provider.itemsFlow.value.single())
+        }
+
+    @Test
+    fun `GIVEN target is CustomizeMenu WHEN building the forward menu item THEN return an enabled menu item without click events`() =
+        runTest {
+            val provider = createProvider(BrowserStore(), backgroundScope, target = MenuTarget.CustomizeMenu)
+
+            val expected =
+                StandardMenuItem(
+                    title = MenuItemTitle(Text.Resource(R.string.browser_menu_forward)),
+                    icon = MenuItemIconRes(iconsR.drawable.mozac_ic_forward_24),
+                    onClickEvent = null,
+                    onLongClickEvent = null,
+                    state = MenuItemState.DEFAULT,
+                )
+            assertEquals(expected, provider.itemsFlow.value.single())
         }
 
     @Test
@@ -81,6 +99,25 @@ class ForwardMenuItemProviderTest {
     }
 
     @Test
+    fun `GIVEN a custom tab WHEN long clicking the item THEN show its history with custom tab session ID in place of the menu`() =
+        runTest {
+            val provider =
+                createProvider(
+                    customTabBrowserStore(canGoForward = true),
+                    backgroundScope,
+                    target = MenuTarget.CustomTab("customTabId"),
+                )
+
+            provider.onEvent(MenuAction.Navigate.Forward(viewHistory = true), menu)
+
+            assertEquals(
+                NavGraphDirections.actionGlobalTabHistoryDialogFragment(activeSessionId = "customTabId"),
+                menu.directions,
+            )
+            verify(exactly = 0) { goForward(any()) }
+        }
+
+    @Test
     fun `GIVEN no selected tab WHEN clicking the item THEN keep the menu open`() = runTest {
         val provider = createProvider(BrowserStore(), backgroundScope)
 
@@ -104,7 +141,7 @@ class ForwardMenuItemProviderTest {
         listOf(BrowserStore(), browserStore(canGoForward = false), browserStore(canGoForward = true)).forEach { store ->
             val provider = createProvider(store, backgroundScope)
 
-            val events = requireNotNull(provider.itemFlow.value).reachableEvents()
+            val events = provider.itemsFlow.value.single().reachableEvents()
 
             assertTrue(events.all { provider.handles(it) }, "Not all of $events are handled")
         }
@@ -148,9 +185,26 @@ class ForwardMenuItemProviderTest {
             )
         )
 
+    private fun customTabBrowserStore(canGoForward: Boolean) =
+        BrowserStore(
+            BrowserState(
+                customTabs =
+                    listOf(
+                        createCustomTab(
+                                url = "https://custom.org",
+                                id = "customTabId",
+                            )
+                            .let { tab ->
+                                tab.copy(content = tab.content.copy(canGoForward = canGoForward))
+                            }
+                    ),
+                selectedTabId = null,
+            )
+        )
+
     private fun expectedItem(canGoForward: Boolean) =
         StandardMenuItem(
-            title = Text.Resource(R.string.browser_menu_forward),
+            title = MenuItemTitle(Text.Resource(R.string.browser_menu_forward)),
             icon = MenuItemIconRes(iconsR.drawable.mozac_ic_forward_24),
             onClickEvent = MenuAction.Navigate.Forward(viewHistory = false),
             onLongClickEvent = MenuAction.Navigate.Forward(viewHistory = true),

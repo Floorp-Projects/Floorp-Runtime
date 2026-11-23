@@ -7,7 +7,7 @@ use alloc::{
 use core::fmt;
 
 use arrayvec::ArrayVec;
-use hashbrown::{hash_map::Entry, HashSet};
+use hashbrown::hash_map::Entry;
 use shader_io_deductions::{display_deductions_as_optional_list, MaxVertexShaderOutputDeduction};
 use thiserror::Error;
 use wgt::{
@@ -153,15 +153,16 @@ impl fmt::Display for InterfaceVar {
 
 /// An [inter-stage input or output value][io].
 ///
-/// A value of this type describes one value to be passed to or returned from
-/// some entry point.
+/// A value of this type describes one value produced by some shader entry
+/// point, to be passed to the next pipeline stage.
 ///
 /// [io]: https://www.w3.org/TR/WGSL/#stage-inputs-outputs
 #[derive(Debug, Eq, PartialEq)]
 enum Varying {
     /// A [user-defined input or output][uio].
     ///
-    /// In WGSL, this is a value with a `@location` attribute.
+    /// In WGSL, this is a value with a `@location` attribute. In Naga terms,
+    /// these are the entry point's [`naga::Binding::Location`] inputs/outputs.
     ///
     /// [uio]: https://www.w3.org/TR/WGSL/#user-defined-inputs-outputs
     UserDefined { location: u32, iv: InterfaceVar },
@@ -342,6 +343,13 @@ struct EntryPoint {
     /// [compute-like]: naga::ShaderStage::compute_like
     workgroup_size: [u32; 3],
 
+    /// Number of bytes needed for this entry point's `workgroup` globals.
+    ///
+    /// Since `Limits::max_compute_workgroup_storage_size` could, in principle,
+    /// be as high as `u32::MAX`, this is a `u64` to represent values beyond
+    /// that.
+    workgroup_storage_size: u64,
+
     /// Indicates that the entry point uses dual source blending.
     dual_source_blending: bool,
 
@@ -398,29 +406,6 @@ pub struct Interface {
     /// allowed to contain multiple entry points with the same name, as long as
     /// they are for different shader stages.
     entry_points: FastHashMap<EntryPointKey, EntryPoint>,
-}
-
-#[derive(Debug)]
-pub struct PassthroughInterface {
-    pub entry_point_names: HashSet<String>,
-}
-
-// Most shaders will use a standard interface which is very large.
-// Passthrough shaders have a much smaller interface. No reason to
-// box the standard interface though.
-#[expect(clippy::large_enum_variant)]
-#[derive(Debug)]
-pub enum ShaderMetaData {
-    Interface(Interface),
-    Passthrough(PassthroughInterface),
-}
-impl ShaderMetaData {
-    pub fn interface(&self) -> Option<&Interface> {
-        match self {
-            Self::Interface(i) => Some(i),
-            Self::Passthrough(_) => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Error)]
@@ -514,10 +499,38 @@ impl WebGpuError for InputError {
 #[derive(Clone, Debug, Error)]
 #[non_exhaustive]
 pub enum StageError {
+    #[error("Unable to find entry point {0:?}")]
+    NoEntryPointWithName(String),
+    #[error("Unable to find entry point `{name}` for stage `{stage:?}`")]
+    NoEntryPointWithNameForStage {
+        name: String,
+        stage: naga::ShaderStage,
+    },
+    #[error(
+        "Unable to select an entry point: no entry points found in the provided shader module"
+    )]
+    NoEntryPoints,
+    #[error("No entry point found for stage `{0:?}`")]
+    NoEntryPointForStage(naga::ShaderStage),
+    #[error(
+        "Unable to select an entry point: \
+        multiple entry points were found in the provided shader module, \
+        but no entry point was specified"
+    )]
+    AmbiguousEntryPoint,
+    #[error("More than one entry point present in module for stage `{0:?}`, entry point name must be provided")]
+    AmbiguousEntryPointForStage(naga::ShaderStage),
+    #[error(
+        "Workgroup storage size {used} must be less than or equal to \
+        `Limits::{limit_desc}` ({limit})"
+    )]
+    WorkgroupStorageSizeLimitExceeded {
+        used: u64,
+        limit: u32,
+        limit_desc: &'static str,
+    },
     #[error(transparent)]
     InvalidWorkgroupSize(#[from] InvalidWorkgroupSizeError),
-    #[error("Unable to find entry point '{0}'")]
-    MissingEntryPoint(String),
     #[error("Shader global {0:?} is not available in the pipeline layout")]
     Binding(naga::ResourceBinding, #[source] BindingError),
     #[error("Unable to filter the texture ({texture:?}) by the sampler ({sampler:?})")]
@@ -534,16 +547,6 @@ pub enum StageError {
         #[source]
         error: InputError,
     },
-    #[error(
-        "Unable to select an entry point: no entry point was found in the provided shader module"
-    )]
-    NoEntryPointFound,
-    #[error(
-        "Unable to select an entry point: \
-        multiple entry points were found in the provided shader module, \
-        but no entry point was specified"
-    )]
-    MultipleEntryPointsFound,
     #[error(transparent)]
     InvalidResource(#[from] InvalidResourceError),
     #[error(
@@ -647,10 +650,14 @@ impl WebGpuError for StageError {
                 var: _,
                 error,
             } => error.webgpu_error_type(),
-            Self::InvalidWorkgroupSize { .. }
-            | Self::MissingEntryPoint(..)
-            | Self::NoEntryPointFound
-            | Self::MultipleEntryPointsFound
+            Self::WorkgroupStorageSizeLimitExceeded { .. }
+            | Self::NoEntryPointWithName { .. }
+            | Self::NoEntryPointWithNameForStage { .. }
+            | Self::NoEntryPoints
+            | Self::NoEntryPointForStage(_)
+            | Self::AmbiguousEntryPoint
+            | Self::AmbiguousEntryPointForStage(_)
+            | Self::InvalidWorkgroupSize { .. }
             | Self::VertexOutputLocationTooLarge { .. }
             | Self::TooManyUserDefinedVertexOutputs { .. }
             | Self::FragmentInputLocationTooLarge { .. }
@@ -1006,7 +1013,8 @@ impl NumericType {
             | Vf::Float16x4
             | Vf::Float32x4
             | Vf::Unorm10_10_10_2
-            | Vf::Unorm8x4Bgra => (NumericDimension::Vector(Vs::Quad), Scalar::F32),
+            | Vf::Unorm8x4Bgra
+            | Vf::Snorm10_10_10_2 => (NumericDimension::Vector(Vs::Quad), Scalar::F32),
             Vf::Float64 => (NumericDimension::Scalar, Scalar::F64),
             Vf::Float64x2 => (NumericDimension::Vector(Vs::Bi), Scalar::F64),
             Vf::Float64x3 => (NumericDimension::Vector(Vs::Tri), Scalar::F64),
@@ -1173,18 +1181,45 @@ impl BindingLayoutSource {
     }
 }
 
+/// Resource usage accumulated across all of a pipeline's stages.
+pub struct PipelineResources {
+    pub layout: BindingLayoutSource,
+    pub minimum_binding_sizes: FastHashMap<naga::ResourceBinding, wgt::BufferSize>,
+    pub immediates: naga::valid::ImmediateUsage,
+}
+
+impl PipelineResources {
+    pub fn new(layout: BindingLayoutSource) -> Self {
+        Self {
+            layout,
+            minimum_binding_sizes: FastHashMap::default(),
+            immediates: Default::default(),
+        }
+    }
+}
+
+/// Summary of one shader stage's outputs, presented as inputs to the next stage.
+///
+/// Each stage in a pipeline produces one of these values, to be validated
+/// against the input requirements of the pipeline's next stage.
 #[derive(Debug, Clone, Default)]
 pub struct StageIo {
+    /// The prior stage's [`Varying::UserDefined`] outputs.
     pub varyings: FastHashMap<wgt::ShaderLocation, InterfaceVar>,
-    /// This must match between mesh & task shaders
-    pub task_payload_size: Option<u32>,
-    /// Fragment shaders cannot input primitive index on mesh shaders that don't output it on DX12.
-    /// Therefore, we track between shader stages if primitive index is written (or if vertex shader
-    /// is used).
+
+    /// If the prior stage was a task shader, the size of its payload global.
     ///
-    /// This is Some if it was a mesh shader.
+    /// This must match the mesh shader's payload global.
+    pub task_payload_size: Option<u32>,
+
+    /// If the prior was a mesh shader, whether it output
+    /// [`BuiltIn::PrimitiveIndex`].
+    ///
+    /// In a mesh pipeline on DX12, the mesh shader and fragment shader must
+    /// agree on whether `PrimitiveIndex` is passed between them.
+    ///
+    /// This is `None` if the prior stage was not a mesh shader.
     pub primitive_index: Option<bool>,
-    pub immediates: naga::valid::ImmediateUsage,
 }
 
 impl Interface {
@@ -1407,12 +1442,21 @@ impl Interface {
                 );
             }
 
+            let mut workgroup_storage_size = 0u64;
             for (var_handle, var) in module.global_variables.iter() {
                 let usage = func_info[var_handle];
-                if !usage.is_empty() && var.binding.is_some() {
-                    ep.resources.push(resource_mapping[&var_handle]);
+                if !usage.is_empty() {
+                    if var.binding.is_some() {
+                        ep.resources.push(resource_mapping[&var_handle]);
+                    }
+                    if var.space == naga::AddressSpace::WorkGroup {
+                        let size = module.types[var.ty].inner.size(module.to_ctx());
+                        workgroup_storage_size = workgroup_storage_size
+                            .saturating_add(u64::from(size).next_multiple_of(16));
+                    }
                 }
             }
+            ep.workgroup_storage_size = workgroup_storage_size;
 
             for key in func_info.sampling_set.iter() {
                 ep.sampling_pairs
@@ -1496,34 +1540,6 @@ impl Interface {
             .unwrap_or_default()
     }
 
-    /// Select an entry point name, given an optional name and a shader stage.
-    ///
-    /// See [`ShaderModule::finalize_entry_point_name`] for details.
-    ///
-    /// [`ShaderModule::finalize_entry_point_name`]: crate::pipeline::ShaderModule::finalize_entry_point_name
-    pub fn finalize_entry_point_name(
-        &self,
-        stage: naga::ShaderStage,
-        entry_point_name: Option<&str>,
-    ) -> Result<String, StageError> {
-        entry_point_name
-            .map(|ep| ep.to_string())
-            .map(Ok)
-            .unwrap_or_else(|| {
-                let mut entry_points =
-                    self.entry_points
-                        .keys()
-                        .filter_map(|EntryPointKey(ep_stage, name)| {
-                            (ep_stage == &stage).then_some(name)
-                        });
-                let first = entry_points.next().ok_or(StageError::NoEntryPointFound)?;
-                if entry_points.next().is_some() {
-                    return Err(StageError::MultipleEntryPointsFound);
-                }
-                Ok(first.clone())
-            })
-    }
-
     /// Analyze and validate an entry point for use as a given shader stage.
     ///
     /// Validate the entry point named `entry_point_name` for use in
@@ -1547,8 +1563,7 @@ impl Interface {
     /// [validating inter-stage interfaces]: https://www.w3.org/TR/webgpu/#abstract-opdef-validating-inter-stage-interfaces
     pub fn check_stage(
         &self,
-        layouts: &mut BindingLayoutSource,
-        minimum_binding_sizes: &mut FastHashMap<naga::ResourceBinding, wgt::BufferSize>,
+        resources: &mut PipelineResources,
         entry_point_name: &str,
         shader_stage: ShaderStageForValidation,
         inputs: StageIo,
@@ -1559,17 +1574,27 @@ impl Interface {
         let pair = EntryPointKeyRef(shader_stage.to_naga(), entry_point_name);
         let entry_point = match self.entry_points.get(&pair) {
             Some(some) => some,
-            None => return Err(StageError::MissingEntryPoint(pair.1.to_string())),
+            None => {
+                return Err(StageError::NoEntryPointWithNameForStage {
+                    name: pair.1.to_string(),
+                    stage: shader_stage.to_naga(),
+                })
+            }
         };
         let EntryPointKeyRef(_, entry_point_name) = pair;
 
         let stage_bit = shader_stage.to_wgt_bit();
+        let PipelineResources {
+            ref mut layout,
+            ref mut minimum_binding_sizes,
+            ref mut immediates,
+        } = *resources;
 
         // check resources visibility
         for &handle in entry_point.resources.iter() {
             let res = &self.resources[handle];
             let result = 'err: {
-                match layouts {
+                match layout {
                     BindingLayoutSource::Provided(pipeline_layout) => {
                         // update the required binding size for this buffer
                         if let ResourceType::Buffer {
@@ -1642,7 +1667,7 @@ impl Interface {
         //
         // We only need to do this if the binding layout is provided by the user, as derived
         // layouts will inherently be correctly tagged.
-        if let BindingLayoutSource::Provided(pipeline_layout) = layouts {
+        if let BindingLayoutSource::Provided(pipeline_layout) = layout {
             for &(texture_handle, sampler_handle) in entry_point.sampling_pairs.iter() {
                 let texture_bind = &self.resources[texture_handle].bind;
                 let sampler_bind = &self.resources[sampler_handle].bind;
@@ -1719,6 +1744,17 @@ impl Interface {
                 },
                 _ => unreachable!(),
             };
+
+            if entry_point.workgroup_storage_size
+                > u64::from(self.limits.max_compute_workgroup_storage_size)
+            {
+                return Err(StageError::WorkgroupStorageSizeLimitExceeded {
+                    used: entry_point.workgroup_storage_size,
+                    limit: self.limits.max_compute_workgroup_storage_size,
+                    limit_desc: "max_compute_workgroup_storage_size",
+                });
+            }
+
             let total = workgroup_size_check.check_and_compute_total_invocations()?;
             if total == 0 {
                 return Err(StageError::InvalidWorkgroupSize(
@@ -2064,10 +2100,10 @@ impl Interface {
 
         let immediate_usage = self
             .immediate_usage(shader_stage.to_naga(), entry_point_name)
-            .merge(&inputs.immediates);
+            .merge(immediates);
 
         // Check pipeline layout immediate size
-        if let BindingLayoutSource::Provided(pipeline_layout) = layouts {
+        if let BindingLayoutSource::Provided(pipeline_layout) = layout {
             if pipeline_layout.immediate_size < immediate_usage.size() {
                 return Err(StageError::LayoutImmediateSize {
                     layout: pipeline_layout.immediate_size,
@@ -2075,6 +2111,8 @@ impl Interface {
                 });
             }
         }
+
+        *immediates = immediate_usage;
 
         Ok(StageIo {
             task_payload_size: entry_point.task_payload_size,
@@ -2084,7 +2122,6 @@ impl Interface {
             } else {
                 None
             },
-            immediates: immediate_usage,
         })
     }
 }

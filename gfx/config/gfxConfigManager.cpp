@@ -95,6 +95,9 @@ void gfxConfigManager::Init() {
 #elif defined(XP_MACOSX)
   mFeatureMetalAngle = &gfxConfig::GetFeature(Feature::WEBRENDER_ANGLE_METAL);
   mFeatureWrAngleBackend = mFeatureMetalAngle;
+#elif defined(MOZ_WIDGET_ANDROID)
+  mFeatureGlAngle = &gfxConfig::GetFeature(Feature::WEBRENDER_ANGLE_GL);
+  mFeatureWrAngleBackend = mFeatureGlAngle;
 #endif
   mFeatureGPUProcess = &gfxConfig::GetFeature(Feature::GPU_PROCESS);
   mFeatureGLNorm16Textures =
@@ -214,6 +217,12 @@ void gfxConfigManager::ConfigureWebRender() {
                            mFeatureMetalAngle);
   }
 
+  if (mFeatureGlAngle) {
+    mFeatureGlAngle->EnableByDefault();
+    ConfigureFromBlocklist(nsIGfxInfo::FEATURE_WEBRENDER_ANGLE_GL,
+                           mFeatureGlAngle);
+  }
+
   mFeatureWrAngle->SetDefaultFromPref(
       StaticPrefs::GetPrefName_gfx_webrender_enable_angle(), true,
       StaticPrefs::GetPrefDefault_gfx_webrender_enable_angle(),
@@ -274,7 +283,8 @@ void gfxConfigManager::ConfigureWebRender() {
   }
 
   // Initialize WebRender partial present config.
-  // Partial present is used only when WebRender compositor is not used.
+  // Partial present applies to the window and to OS layer swapchains, but not
+  // to the tiles of the native compositor.
   mFeatureWrPartial->SetDefault(mWrPartialPresent, FeatureStatus::Disabled,
                                 "User disabled via pref");
   if (mWrForcePartialPresent) {

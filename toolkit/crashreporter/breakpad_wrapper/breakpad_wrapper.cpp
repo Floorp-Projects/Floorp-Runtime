@@ -24,7 +24,7 @@ using breakpad_pid = pid_t;
 #  include "windows/handler/exception_handler.h"
 using breakpad_char = wchar_t;
 using breakpad_string = std::wstring;
-using breakpad_init_type = wchar_t*;
+using breakpad_init_type = HANDLE;
 using breakpad_pid = DWORD;
 using ExtraCrashData = void;
 #elif defined(XP_MACOSX)
@@ -118,11 +118,9 @@ extern "C" void* CrashGenerationServer_init(breakpad_init_type aBreakpadData,
                                             const breakpad_char* aMinidumpPath,
                                             BreakpadContext* aContext) {
   breakpad_string minidumpPath(aMinidumpPath);
-  breakpad_string breakpadData(aBreakpadData);
 
   CrashGenerationServer* server = new CrashGenerationServer(
-      breakpadData,
-      /* pipe_sec_attrs */ nullptr,
+      aBreakpadData,
       /* connect_callback */ nullptr,
       /* connect_context */ nullptr, onClientDumpRequestCallback,
       reinterpret_cast<void*>(aContext),
@@ -180,7 +178,8 @@ extern "C" void* CrashGenerationServer_init(breakpad_init_type aBreakpadData,
       [aAuxvCallback](GeckoChildID aId, DirectAuxvDumpInfo* aAuxvInfo) {
         return getAuxvDumpInfo(aAuxvCallback, aId, aAuxvInfo);
       },
-      [aContext](void* dump_context, const ClientInfo& aClientInfo,
+      [aContext]([[maybe_unused]] void* dump_context,
+                 const ClientInfo& aClientInfo,
                  const breakpad_string& aFilePath) {
         onClientDumpRequestCallback(aContext, aClientInfo, aFilePath);
       },
@@ -282,7 +281,7 @@ using google_breakpad::MinidumpDescriptor;
 
 bool WriteMinidumpCallback(const MinidumpDescriptor& aDescriptor,
                            void* aContext,
-                           const mozilla::phc::AddrInfo* aAddrInfo,
+                           const mozilla::phc::AddrInfo* /*aAddrInfo*/,
                            bool aSucceeded) {
   if (aSucceeded) {
     MinidumpCallbackResult* result =

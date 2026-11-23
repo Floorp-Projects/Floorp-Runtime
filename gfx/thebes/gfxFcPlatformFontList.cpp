@@ -7,6 +7,7 @@
 #include "SharedFontList-impl.h"
 #include "gfxFT2Utils.h"
 #include "gfxFont.h"
+#include "gfxOTSUtils.h"
 #include "gfxPlatform.h"
 #include "mozilla/Components.h"
 #include "mozilla/FileUtils.h"
@@ -456,8 +457,10 @@ gfxFontconfigFontEntry::~gfxFontconfigFontEntry() {
     // InitializeVarFuncs must have been called in order for mMMVar to be
     // non-null here, so we don't need to do it again.
     if (sDoneVar) {
+      // Scaled fonts may still be using the shared face.
       auto* ftFace = GetFTFace();
       MOZ_ASSERT(ftFace, "How did mMMVar get set without a face?");
+      AutoLockSharedFTFace lock(ftFace);
       (*sDoneVar)(ftFace->GetFace()->glyph->library, mMMVar);
     } else {
       free(mMMVar);
@@ -488,19 +491,16 @@ gfxFontconfigFontEntry::AutoHBFace gfxFontconfigFontEntry::GetHBFace() {
       index &= 0xFFFF;
       face = hb_face_create_from_file_or_fail((const char*)filename, index);
     } else {
-      // If we have an FT_Font with webfont user data attached, we can use
-      // hb_face_create to wrap that.
-      if (mFTFaceInitialized) {
-        if (const auto* ufd = GetUserFontData()) {
-          hb_blob_t* blob =
-              hb_blob_create((const char*)ufd->Data(), ufd->Length(),
-                             HB_MEMORY_MODE_READONLY, nullptr, nullptr);
-          // Currently the face index is always zero, as we don't support
-          // collections as webfonts.
-          face = hb_face_create(blob, 0);
-          // Drop our blob reference; the face will hold on to it.
-          hb_blob_destroy(blob);
-        }
+      // If we have webfont user data, we can use hb_face_create to wrap that.
+      if (const auto* ufd = GetUserFontData()) {
+        hb_blob_t* blob =
+            hb_blob_create((const char*)ufd->Data(), ufd->Length(),
+                           HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+        // Currently the face index is always zero, as we don't support
+        // collections as webfonts.
+        face = hb_face_create(blob, 0);
+        // Drop our blob reference; the face will hold on to it.
+        hb_blob_destroy(blob);
       }
     }
     if (!face) {
@@ -1104,12 +1104,12 @@ gfxFont* gfxFontconfigFontEntry::CreateFontInstance(
 }
 
 #ifdef MOZ_FONTATIONS
-void gfxFontconfigFontEntry::InitSkrifaFont(FcPattern* aPattern) {
+void gfxFontconfigFontEntry::InitSkrifaFontFace() {
   using mozilla::MemoryMappedFile;
   using mozilla::gfx::SkrifaFontRef;
 
   // Try to load the file.
-  const FcChar8* const filenameBytes = GetPatternFilename(aPattern);
+  const FcChar8* const filenameBytes = GetPatternFilename(mFontPattern);
   if (!filenameBytes) {
     return;
   }
@@ -1119,10 +1119,10 @@ void gfxFontconfigFontEntry::InitSkrifaFont(FcPattern* aPattern) {
     return;
   }
 
-  const int index = GetPatternIndex(aPattern);
-  const uint8_t* data = static_cast<const uint8_t*>(file.Data());
-  const size_t size = file.Size();
-  if (SkrifaFontRef* font = skrifa_font_new_from_index(data, size, index)) {
+  const int index = GetPatternIndex(mFontPattern);
+  const Span<const uint8_t> span = file.AsSpan();
+  if (SkrifaFontRef* font =
+          skrifa_font_new_from_index(span.data(), span.size(), index)) {
     SetSkrifaFont(font, std::move(file));
   }
 }
@@ -1130,11 +1130,7 @@ void gfxFontconfigFontEntry::InitSkrifaFont(FcPattern* aPattern) {
 
 SharedFTFace* gfxFontconfigFontEntry::GetFTFace() {
   if (!mFTFaceInitialized) {
-#ifdef MOZ_FONTATIONS
-    InitSkrifaFont(mFontPattern);
-#endif
     RefPtr<SharedFTFace> face = CreateFaceForPattern(mFontPattern);
-
     if (face) {
       if (mFTFace.compareExchange(nullptr, face.get())) {
         face.forget().leak();  // The reference is now owned by mFTFace.
@@ -1148,8 +1144,8 @@ SharedFTFace* gfxFontconfigFontEntry::GetFTFace() {
 }
 
 FontData* gfxFontconfigFontEntry::GetUserFontData() {
-  if (auto* face = GetFTFace()) {
-    return face->GetFontData();
+  if (mUserFontData) {
+    return mUserFontData->mFontData;
   }
   return nullptr;
 }
@@ -1216,6 +1212,7 @@ FT_MM_Var* gfxFontconfigFontEntry::GetMMVar() {
   if (!ftFace) {
     return nullptr;
   }
+  AutoLockSharedFTFace faceLock(ftFace);
   if (FT_Err_Ok != (*sGetVar)(ftFace->GetFace(), &mMMVar)) {
     mMMVar = nullptr;
   }
@@ -1994,7 +1991,7 @@ void gfxFcPlatformFontList::InitSharedFontListForPlatform() {
                       keyName, aFamilyName, fontlist::Family::kNoIndex,
                       visibility,
                       /*bundled*/ aAppFont, /*badUnderline*/ false));
-                  return MakeUnique<FacesData>();
+                  return std::make_unique<FacesData>();
                 })
             .get();
 
@@ -2039,7 +2036,7 @@ void gfxFcPlatformFontList::InitSharedFontListForPlatform() {
                     visibility,
                     /*bundled*/ aAppFont, /*badUnderline*/ false));
 
-                return MakeUnique<FacesData>();
+                return std::make_unique<FacesData>();
               })
           .get()
           ->Add(fontlist::Face::InitData(initData), /* aSingleName = */ false);
@@ -2373,8 +2370,7 @@ void gfxFcPlatformFontList::GetFontList(nsAtom* aLangGroup,
     sansSerif = true;
   } else if (aGenericFamily.LowerCaseEqualsLiteral("monospace")) {
     monospace = true;
-  } else if (StaticPrefs::mathml_font_family_math_enabled() &&
-             aGenericFamily.LowerCaseEqualsLiteral("math")) {
+  } else if (aGenericFamily.LowerCaseEqualsLiteral("math")) {
     math = true;
   } else if (aGenericFamily.LowerCaseEqualsLiteral("cursive") ||
              aGenericFamily.LowerCaseEqualsLiteral("fantasy")) {
@@ -2436,7 +2432,22 @@ already_AddRefed<gfxFontEntry> gfxFcPlatformFontList::MakePlatformFont(
     const nsACString& aFontName, WeightRange aWeightForEntry,
     WidthRange aWidthForEntry, SlantStyleRange aStyleForEntry,
     FontData* aFontData) {
-  RefPtr<SharedFTFace> face = Factory::NewSharedFTFaceFromData(aFontData, 0);
+  // Make a copy of the font data with shaping tables stripped, and use this
+  // to instantiate the FreeType face; we only need this face to support
+  // rasterization, not shaping behaviors.
+  // We disable validation because the resource was already sanitized when
+  // initially downloaded; we're re-running OTS here purely to filter out the
+  // shaping-related tables.
+  gfxOTSExpandingMemoryStream<> output(aFontData->Length());
+  gfxOTSContext otsContext(/* aDropShapingTables = */ true,
+                           /* aDisableValidation = */ true);
+  if (!otsContext.Process(&output, aFontData->Data(), aFontData->Length())) {
+    return nullptr;
+  }
+  uint32_t length = output.Tell();
+  RefPtr ftFontData = MakeRefPtr<FontData>(
+      static_cast<const uint8_t*>(output.forget()), length);
+  RefPtr<SharedFTFace> face = Factory::NewSharedFTFaceFromData(ftFontData, 0);
   if (!face) {
     return nullptr;
   }
@@ -2461,23 +2472,22 @@ bool gfxFcPlatformFontList::FindAndAddFamiliesLocked(
 
   if (!(aFlags & FindFamiliesFlags::eQuotedFamilyName)) {
     // deprecated generic names are explicitly converted to standard generics
-    bool isDeprecatedGeneric = false;
     if (familyName.EqualsLiteral("sans") ||
         familyName.EqualsLiteral("sans serif")) {
       familyName.AssignLiteral("sans-serif");
-      isDeprecatedGeneric = true;
     } else if (familyName.EqualsLiteral("mono")) {
       familyName.AssignLiteral("monospace");
-      isDeprecatedGeneric = true;
     }
 
     // fontconfig generics? use fontconfig to determine the family for lang
-    if (isDeprecatedGeneric ||
-        mozilla::StyleSingleFontFamily::Parse(familyName).IsGeneric()) {
+    auto parsed = mozilla::StyleSingleFontFamily::Parse(familyName);
+    if (parsed.IsGeneric()) {
       PrefFontList* prefFonts =
           FindGenericFamilies(aFontVisibilityProvider, familyName, aLanguage);
       if (prefFonts && !prefFonts->IsEmpty()) {
-        aOutput->AppendElements(*prefFonts);
+        for (const auto& family : *prefFonts) {
+          aOutput->AppendElement(FamilyAndGeneric(family, parsed.AsGeneric()));
+        }
         return true;
       }
       return false;
@@ -2707,8 +2717,7 @@ void gfxFcPlatformFontList::AddGenericFonts(
     nsTArray<FamilyAndGeneric>& aFamilyList) {
   // TODO(eri): For now the math generic language uses the legacy
   // "serif.x-math". See `gfxPlatformFontList::AddGenericFonts`.
-  if (StaticPrefs::mathml_font_family_math_enabled() &&
-      aGenericType == StyleGenericFontFamily::Math) {
+  if (aGenericType == StyleGenericFontFamily::Math) {
     aGenericType = StyleGenericFontFamily::Serif;
     aLanguage = nsGkAtoms::x_math;
   }
@@ -2731,20 +2740,21 @@ void gfxFcPlatformFontList::AddGenericFonts(
       aLanguage == nsGkAtoms::x_math) {
     nsAtom* langGroup = GetLangGroup(aLanguage);
     nsAutoCString fontlistValue;
-    mFontPrefs->LookupName(PrefName(generic, langGroup), fontlistValue);
+    AutoLock lock(mLock);
+    GetFontPrefs()->LookupName(PrefName(generic, langGroup), fontlistValue);
     if (fontlistValue.IsEmpty()) {
       // The font name list may have two or more family names as comma
       // separated list.  In such case, not matching with generic font
       // name is fine because if the list prefers specific font, we
       // should try to use the pref with complicated path.
-      mFontPrefs->LookupNameList(PrefName(generic, langGroup), fontlistValue);
+      GetFontPrefs()->LookupNameList(PrefName(generic, langGroup),
+                                     fontlistValue);
     }
     if (!fontlistValue.IsEmpty()) {
       if (!fontlistValue.EqualsLiteral("serif") &&
           !fontlistValue.EqualsLiteral("sans-serif") &&
           !fontlistValue.EqualsLiteral("monospace") &&
-          !(StaticPrefs::mathml_font_family_math_enabled() &&
-            fontlistValue.EqualsLiteral("math"))) {
+          !fontlistValue.EqualsLiteral("math")) {
         usePrefFontList = true;
       } else {
         // serif, sans-serif, monospace or math was specified
@@ -2841,8 +2851,9 @@ gfxPlatformFontList::PrefFontList* gfxFcPlatformFontList::FindGenericFamilies(
           }
 
           // -- select the fonts to be used for the generic
-          auto prefFonts = MakeUnique<PrefFontList>();  // can be empty but in
-                                                        // practice won't happen
+          auto prefFonts =
+              std::make_unique<PrefFontList>();  // can be empty but in
+                                                 // practice won't happen
           uint32_t limit = StaticPrefs::
               gfx_font_rendering_fontconfig_max_generic_substitutions();
           bool foundFontWithLang = false;
@@ -2955,7 +2966,7 @@ struct MozLangGroupData {
   const char* defaultLang;
 };
 
-const MozLangGroupData MozLangGroups[] = {
+constexpr MozLangGroupData kMozLangGroups[] = {
     // clang-format off
   {nsGkAtoms::x_western, "en"},
   {nsGkAtoms::x_cyrillic, "ru"},
@@ -3027,14 +3038,11 @@ void gfxFcPlatformFontList::GetSampleLangForGroup(nsAtom* aLanguage,
   // set up lang string
   const MozLangGroupData* mozLangGroup = nullptr;
 
-  if (aLanguage != nsGkAtoms::x_math ||
-      StaticPrefs::mathml_font_family_math_enabled()) {
-    // -- look it up in the list of moz lang groups
-    for (const auto& MozLangGroup : MozLangGroups) {
-      if (aLanguage == MozLangGroup.mozLangGroup) {
-        mozLangGroup = &MozLangGroup;
-        break;
-      }
+  // -- look it up in the list of moz lang groups
+  for (const auto& group : kMozLangGroups) {
+    if (aLanguage == group.mozLangGroup) {
+      mozLangGroup = &group;
+      break;
     }
   }
 

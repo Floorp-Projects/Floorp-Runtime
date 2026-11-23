@@ -17,6 +17,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <array>
 #include <vector>
 
 #include "common/mathutil.h"
@@ -263,7 +264,7 @@ size_t TIntermLoop::getChildCount() const
 
 TIntermNode *TIntermLoop::getChildNode(size_t index) const
 {
-    TIntermNode *children[4];
+    std::array<TIntermNode *, 4> children;
     unsigned int childIndex = 0;
     if (mInit)
     {
@@ -555,9 +556,9 @@ TIntermDeclaration::TIntermDeclaration(const TIntermDeclaration &node)
 
 bool TIntermAggregateBase::replaceChildNodeInternal(TIntermNode *original, TIntermNode *replacement)
 {
-    for (size_t ii = 0; ii < getSequence()->size(); ++ii)
+    for (TIntermNode *&child : *getSequence())
     {
-        REPLACE_IF_IS((*getSequence())[ii], getAsNode, original, replacement);
+        REPLACE_IF_IS(child, getAsNode, original, replacement);
     }
     return false;
 }
@@ -1785,7 +1786,7 @@ bool TIntermSwizzle::hasDuplicateOffsets() const
     {
         return true;
     }
-    uint32_t offsetCount[4] = {0u, 0u, 0u, 0u};
+    std::array<uint32_t, 4> offsetCount = {0u, 0u, 0u, 0u};
     for (const uint32_t offset : mSwizzleOffsets)
     {
         offsetCount[offset]++;
@@ -3024,7 +3025,7 @@ TConstantUnion *TIntermConstantUnion::foldUnaryNonComponentWise(TOperator op)
         {
             ASSERT(getType().getBasicType() == EbtUInt);
             resultArray = new TConstantUnion[4];
-            float f[4];
+            std::array<float, 4> f;
             gl::UnpackUnorm4x8(operandArray[0].getUConst(), f);
             for (size_t i = 0; i < 4; ++i)
             {
@@ -3036,7 +3037,7 @@ TConstantUnion *TIntermConstantUnion::foldUnaryNonComponentWise(TOperator op)
         {
             ASSERT(getType().getBasicType() == EbtUInt);
             resultArray = new TConstantUnion[4];
-            float f[4];
+            std::array<float, 4> f;
             gl::UnpackSnorm4x8(operandArray[0].getUConst(), f);
             for (size_t i = 0; i < 4; ++i)
             {

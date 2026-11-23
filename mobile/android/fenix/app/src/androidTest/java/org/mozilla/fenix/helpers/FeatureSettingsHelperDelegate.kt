@@ -47,12 +47,15 @@ class FeatureSettingsHelperDelegate : FeatureSettingsHelper {
             tabManagerOpeningAnimationEnabled = settings.tabManagerOpeningAnimationEnabled,
             hasSeenShakeToSummarizeToolbarCfr = settings.shakeToSummarizeToolbarCfrShown,
             shakeToSummarizeFeatureFlagEnabled = settings.shakeToSummarizeFeatureFlagEnabled,
-            isPrivateModeAndStoriesEntryPointEnabled = settings.privateModeAndStoriesEntryPointEnabled,
             shouldUseExpandedToolbar = settings.shouldUseExpandedToolbar,
             isTabStripEnabled = settings.isTabStripEnabled,
             nativeShareSheetEnabled = settings.nativeShareSheetEnabled,
             showVoiceSearchInDisplayToolbar = settings.showVoiceSearchInDisplayToolbar,
             isHomepageTrendingRecentSearchEnabled = settings.enableHomepageTrendingRecentSearch,
+            isGoogleLensIntegrationEnabled = settings.googleLensIntegrationEnabled,
+            isGoogleLensIntegrationUserEnabled = settings.googleLensIntegrationUserEnabled,
+            isFxSuggestEnabled = settings.enableFxSuggest,
+            isPdfToolsEnabled = settings.enablePdfTools,
             showAddressBarInFocusMode = settings.showAddressBarInFocusMode,
             crashReportOption = settings.crashReportOption(),
         )
@@ -79,14 +82,16 @@ class FeatureSettingsHelperDelegate : FeatureSettingsHelper {
     override var tabManagerOpeningAnimationEnabled: Boolean by updatedFeatureFlags::tabManagerOpeningAnimationEnabled
     override var hasSeenShakeToSummarizeToolbarCfr: Boolean by updatedFeatureFlags::hasSeenShakeToSummarizeToolbarCfr
     override var shakeToSummarizeFeatureFlagEnabled: Boolean by updatedFeatureFlags::shakeToSummarizeFeatureFlagEnabled
-    override var isPrivateModeAndStoriesEntryPointEnabled: Boolean by
-        updatedFeatureFlags::isPrivateModeAndStoriesEntryPointEnabled
     override var shouldUseExpandedToolbar: Boolean by updatedFeatureFlags::shouldUseExpandedToolbar
     override var isTabStripEnabled: Boolean by updatedFeatureFlags::isTabStripEnabled
     override var nativeShareSheetEnabled: Boolean by updatedFeatureFlags::nativeShareSheetEnabled
     override var showVoiceSearchInDisplayToolbar: Boolean by updatedFeatureFlags::showVoiceSearchInDisplayToolbar
     override var isHomepageTrendingRecentSearchEnabled: Boolean by
         updatedFeatureFlags::isHomepageTrendingRecentSearchEnabled
+    override var isGoogleLensIntegrationEnabled: Boolean by updatedFeatureFlags::isGoogleLensIntegrationEnabled
+    override var isGoogleLensIntegrationUserEnabled: Boolean by updatedFeatureFlags::isGoogleLensIntegrationUserEnabled
+    override var isFxSuggestEnabled: Boolean by updatedFeatureFlags::isFxSuggestEnabled
+    override var isPdfToolsEnabled: Boolean by updatedFeatureFlags::isPdfToolsEnabled
     override var showAddressBarInFocusMode: Boolean by updatedFeatureFlags::showAddressBarInFocusMode
     override var crashReportOption: CrashReportOption by updatedFeatureFlags::crashReportOption
 
@@ -124,7 +129,6 @@ class FeatureSettingsHelperDelegate : FeatureSettingsHelper {
         settings.tabManagerOpeningAnimationEnabled = featureFlags.tabManagerOpeningAnimationEnabled
         settings.shakeToSummarizeToolbarCfrShown = featureFlags.hasSeenShakeToSummarizeToolbarCfr
         settings.shakeToSummarizeFeatureFlagEnabled = featureFlags.shakeToSummarizeFeatureFlagEnabled
-        settings.privateModeAndStoriesEntryPointEnabled = featureFlags.isPrivateModeAndStoriesEntryPointEnabled
         settings.shouldUseExpandedToolbar = featureFlags.shouldUseExpandedToolbar
         settings.isTabStripEnabled = featureFlags.isTabStripEnabled
         settings.nativeShareSheetEnabled = featureFlags.nativeShareSheetEnabled
@@ -132,6 +136,10 @@ class FeatureSettingsHelperDelegate : FeatureSettingsHelper {
         settings.enableHomepageTrendingRecentSearch = featureFlags.isHomepageTrendingRecentSearchEnabled
         settings.showAddressBarInFocusMode = featureFlags.showAddressBarInFocusMode
         settings.crashReportChoice = featureFlags.crashReportOption.label
+        settings.googleLensIntegrationEnabled = featureFlags.isGoogleLensIntegrationEnabled
+        settings.googleLensIntegrationUserEnabled = featureFlags.isGoogleLensIntegrationUserEnabled
+        settings.enableFxSuggest = featureFlags.isFxSuggestEnabled
+        settings.enablePdfTools = featureFlags.isPdfToolsEnabled
     }
 }
 
@@ -155,7 +163,6 @@ private data class FeatureFlags(
     var tabManagerOpeningAnimationEnabled: Boolean,
     var hasSeenShakeToSummarizeToolbarCfr: Boolean,
     var shakeToSummarizeFeatureFlagEnabled: Boolean,
-    var isPrivateModeAndStoriesEntryPointEnabled: Boolean,
     var shouldUseExpandedToolbar: Boolean,
     var isTabStripEnabled: Boolean,
     var nativeShareSheetEnabled: Boolean,
@@ -163,6 +170,10 @@ private data class FeatureFlags(
     var isHomepageTrendingRecentSearchEnabled: Boolean,
     var showAddressBarInFocusMode: Boolean,
     var crashReportOption: CrashReportOption,
+    var isGoogleLensIntegrationEnabled: Boolean,
+    var isGoogleLensIntegrationUserEnabled: Boolean,
+    var isFxSuggestEnabled: Boolean,
+    var isPdfToolsEnabled: Boolean,
 )
 
 internal fun getETPPolicy(settings: Settings): ETPPolicy {

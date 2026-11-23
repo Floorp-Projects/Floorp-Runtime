@@ -22,11 +22,10 @@
   height: 290px;
   padding: 50px 50px 20px;
   margin: auto;
-  background-color: var(--background-color-canvas);
+  background-color: var(--logins-dialog-background-color);
   color: var(--text-color);
   box-shadow: var(--logins-dialog-shadow);
   border: var(--logins-dialog-border);
-  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
   border-radius: var(--logins-dialog-border-radius);
   /* show a border in high contrast mode */
   outline: 1px solid transparent;
@@ -48,15 +47,15 @@
 ::slotted([slot="content"]) {
   grid-column-start: 2;
   align-self: baseline;
-  margin-top: 16px;
+  margin-block-start: 16px;
   line-height: 1.4em;
 }
 
 ::slotted([slot="buttons"]) {
   grid-column: 1 / 4;
   grid-row-start: 3;
-  border-top: 1px solid var(--border-color);
-  padding-top: 12px;
+  border-block-start: 1px solid var(--border-color);
+  padding-block-start: 12px;
 }
 
 .dialog-body {

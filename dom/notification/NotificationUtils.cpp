@@ -409,12 +409,28 @@ NS_IMETHODIMP NotificationCallbacksCommon::OnAlertShow() {
   return NS_OK;
 }
 
+static nsLiteralCString ApplicationStateToString(
+    nsIAlertCallbacks::ApplicationState aState) {
+  switch (aState) {
+    case nsIAlertCallbacks::ApplicationState::FOREGROUND:
+      return "foreground"_ns;
+    case nsIAlertCallbacks::ApplicationState::BACKGROUND_WINDOWS:
+      return "background_with_window"_ns;
+    case nsIAlertCallbacks::ApplicationState::BACKGROUND_NO_WINDOWS:
+      return "background_no_window"_ns;
+    case nsIAlertCallbacks::ApplicationState::UNKNOWN:
+      break;
+  }
+  return "unknown"_ns;
+}
+
 NS_IMETHODIMP NotificationCallbacksCommon::OnAlertClick(
-    nsIAlertAction* aAction) {
+    nsIAlertAction* aAction, nsIAlertCallbacks::ApplicationState aState) {
   mClicked = true;
   glean::web_notification::clicked.Record(
       Some(glean::web_notification::ClickedExtra{
           .action = Some(aAction ? "action-button"_ns : "body"_ns),
+          .appStateBeforeClick = Some(ApplicationStateToString(aState)),
           .siteCategory = mCategory}));
   return NS_OK;
 }
@@ -549,7 +565,7 @@ RefPtr<NotificationPermissionPromise> EnsureValidNotificationPermission(
 
 Result<nsCOMPtr<nsIAlertNotification>, nsresult> CreateAlertForNotification(
     const IPCNotificationOptions& aOptions, nsIPrincipal& aPrincipal,
-    Maybe<IPCImage>&& aIcon) {
+    imgIContainer* aIcon) {
   // Step 4.3 the show steps, which are almost all about processing `tag` and
   // then displaying the notification. Both are handled by
   // nsIAlertsService::ShowAlert. The below is all about constructing the
@@ -585,13 +601,7 @@ Result<nsCOMPtr<nsIAlertNotification>, nsresult> CreateAlertForNotification(
                       aOptions.lang(), aOptions.dataSerialized(), principal,
                       principal->GetIsInPrivateBrowsing(), requireInteraction,
                       aOptions.silent(), aOptions.vibrate()));
-
-  if (aIcon) {
-    if (nsCOMPtr<imgIContainer> image =
-            nsContentUtils::IPCImageToImage(*aIcon)) {
-      alert->SetImage(image);
-    }
-  }
+  alert->SetImage(aIcon);
 
   if (StaticPrefs::dom_webnotifications_actions_enabled()) {
     nsTArray<RefPtr<nsIAlertAction>> actions;

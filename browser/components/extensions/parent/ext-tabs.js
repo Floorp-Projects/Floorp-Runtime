@@ -38,9 +38,6 @@ ChromeUtils.defineLazyGetter(this, "tabHidePopup", () => {
     getLocalizedDescription: (doc, message, addonDetails) => {
       let image = doc.createXULElement("image");
       image.classList.add("extension-controlled-icon", "alltabs-icon");
-      if (!doc.getElementById("alltabs-button")?.closest("#TabsToolbar")) {
-        image.classList.add("alltabs-icon-generic");
-      }
       return BrowserUIUtils.getLocalizedFragment(
         doc,
         message,
@@ -865,7 +862,10 @@ this.tabs = class extends ExtensionAPIPersistent {
             )
           );
           for (let nativeTab of nativeTabs) {
-            nativeTab.documentGlobal.gBrowser.discardBrowser(nativeTab);
+            nativeTab.documentGlobal.gBrowser.discardBrowser(nativeTab, {
+              renderDiscarded: true,
+              skipOnClose: false,
+            });
           }
         },
 

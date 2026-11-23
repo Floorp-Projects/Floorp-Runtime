@@ -10,33 +10,37 @@
 
 use euclid::approxeq::ApproxEq;
 use euclid::vec2;
-use api::{ExtendMode, GradientStop};
+use api::{AlphaMode, ExtendMode, GradientStop};
 use api::units::*;
 use crate::pattern::gradient::linear_gradient_pattern;
 use crate::pattern::{Pattern, PatternBuilder, PatternBuilderState};
-use crate::intern::{Internable, InternDebug, Handle as InternHandle};
-use crate::internal_types::LayoutPrimitiveInfo;
-use crate::prim_store::{PrimitiveKind, PrimitiveOpacity};
-use crate::prim_store::{PrimTemplateCommonData, PrimitiveStore};
-use crate::prim_store::{NinePatchDescriptor, InternablePrimitive};
+use crate::dl_interner::{DlResolve, DlResolveContext};
+use crate::prim_store::PrimitiveOpacity;
+use crate::prim_store::PrimTemplateCommonData;
+use crate::prim_store::NinePatchDescriptor;
 use crate::segment::EdgeMask;
 use super::stops_and_min_alpha;
 use std::ops::{Deref, DerefMut};
 use std::mem::swap;
 
 // `LinearGradient` (the interned value) and `LinearGradientKey` live in
-// `webrender_api::interned_prims` so the key can be built from api-resident
-// types. The frame-time `LinearGradientTemplate` and the interning glue stay here.
-pub use api::interned_prims::{LinearGradient, LinearGradientKey};
+// `webrender_api::interned_prims`, since the content display list builder
+// interns them. The frame-time `LinearGradientTemplate` stays here.
+pub use api::interned_prims::LinearGradientKey;
 
-impl InternDebug for LinearGradientKey {}
+impl crate::prim_store::PrimKeyCommon for LinearGradientKey {
+    fn key_common(&self) -> &crate::prim_store::PrimKeyCommonData {
+        &self.common
+    }
+}
 
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, MallocSizeOf)]
+#[derive(Debug, MallocSizeOf, Clone)]
 pub struct LinearGradientTemplate {
     pub common: PrimTemplateCommonData,
     pub extend_mode: ExtendMode,
+    pub alpha_mode: AlphaMode,
     // Relative to the primitive's pattern rect.
     pub start_point: LayoutVector2D,
     pub end_point: LayoutVector2D,
@@ -69,6 +73,7 @@ impl PatternBuilder for LinearGradientTemplate {
             pattern_rect.min + start,
             pattern_rect.min + end,
             self.extend_mode,
+            self.alpha_mode,
             &self.stops,
             state.frame_gpu_data,
         )
@@ -314,9 +319,9 @@ pub fn decompose_axis_aligned_gradient(
     }
 }
 
-impl From<LinearGradientKey> for LinearGradientTemplate {
-    fn from(item: LinearGradientKey) -> Self {
-
+/// Nothing to validate: a gradient names no resource.
+impl DlResolve<LinearGradientKey> for LinearGradientTemplate {
+    fn resolve(item: &LinearGradientKey, _ctx: &DlResolveContext) -> Self {
         let common = PrimTemplateCommonData::with_key_common(item.common);
 
         let (stops, min_alpha) = stops_and_min_alpha(&item.stops);
@@ -334,42 +339,15 @@ impl From<LinearGradientKey> for LinearGradientTemplate {
         LinearGradientTemplate {
             common,
             extend_mode: item.extend_mode,
+            alpha_mode: item.alpha_mode,
             start_point,
             end_point,
             stretch_ratio,
             tile_spacing,
             stops_opacity,
             stops,
-            border_nine_patch: item.nine_patch,
+            border_nine_patch: item.nine_patch.clone(),
             reverse_stops: item.reverse_stops,
-        }
-    }
-}
-
-pub type LinearGradientDataHandle = InternHandle<LinearGradient>;
-
-impl Internable for LinearGradient {
-    type Key = LinearGradientKey;
-    type StoreData = LinearGradientTemplate;
-    type InternData = ();
-    const PROFILE_COUNTER: usize = crate::profiler::INTERNED_LINEAR_GRADIENTS;
-}
-
-impl InternablePrimitive for LinearGradient {
-    fn into_key(
-        self,
-        info: &LayoutPrimitiveInfo,
-    ) -> LinearGradientKey {
-        LinearGradientKey::new(info.into(), self)
-    }
-
-    fn make_instance_kind(
-        _key: LinearGradientKey,
-        data_handle: LinearGradientDataHandle,
-        _prim_store: &mut PrimitiveStore,
-    ) -> PrimitiveKind {
-        PrimitiveKind::LinearGradient {
-            data_handle,
         }
     }
 }

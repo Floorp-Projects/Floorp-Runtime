@@ -58,16 +58,11 @@ run-if = [
 # This test is timing sensitive, timing changes due to asan/tsan/debugging
 # can upset it.
 skip-if = [
-  "asan",
   "arch == 'x86'",
-  "debug",
   "os != 'linux'",
 ]
 
 ["browser_hide_tooltip.js"]
-skip-if = [
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64' && opt", # Bug 1971068
-]
 
 ["browser_isactiveintab.js"]
 
@@ -105,8 +100,5 @@ support-files = ["browser_wpi_base.js"]
 support-files = ["browser_wpi_base.js"]
 
 ["browser_wpi_isolate_nothing.js"]
-skip-if = [
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64' && debug", # Bug 1741763; high frequency intermittent; leaked 2 windows
-]
 
 support-files = ["browser_wpi_base.js"]

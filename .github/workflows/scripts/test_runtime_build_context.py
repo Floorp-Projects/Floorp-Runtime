@@ -311,7 +311,7 @@ class ResolutionTests(unittest.TestCase):
                 "mac",
                 "Darwin",
                 "aarch64",
-                "macos-14",
+                "macos-15",
             ),
         ]
 

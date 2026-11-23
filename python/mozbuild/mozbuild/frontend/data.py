@@ -1101,31 +1101,39 @@ class LocalInclude(ContextDerived):
 
 
 class PerSourceFlag(ContextDerived):
-    """Describes compiler flags specified for individual source files."""
+    """Describes compiler flags and dependencies specified for individual source
+    files."""
 
-    __slots__ = ("file_name", "flags")
+    __slots__ = ("path", "file_name", "flags", "object_deps")
 
-    def __init__(self, context, file_name, flags):
-        ContextDerived.__init__(self, context)
-
-        self.file_name = file_name
-        self.flags = flags
-
-
-class JARManifest(ContextDerived):
-    """Describes an individual JAR manifest file and how to process it.
-
-    This class isn't very useful for optimizing backends yet because we don't
-    capture defines. We can't capture defines safely until all of them are
-    defined in moz.build and not Makefile.in files.
-    """
-
-    __slots__ = ("path",)
-
-    def __init__(self, context, path):
+    def __init__(self, context, path, flags, object_deps=()):
         ContextDerived.__init__(self, context)
 
         self.path = path
+        self.file_name = path.full_path
+        self.flags = flags
+        self.object_deps = object_deps
+
+
+class XPIArchive(ContextDerived):
+    """An extension archive built from what was staged for it.
+
+    The file list is what the install step recorded, so the archive describes
+    the declared installs rather than whatever the staging area holds.
+    """
+
+    __slots__ = ("name", "destdir")
+
+    def __init__(self, context, name, destdir=None):
+        ContextDerived.__init__(self, context)
+        self.name = name
+        self.destdir = destdir
+
+    @property
+    def archive(self):
+        """Path of the archive, beside what it packages unless told otherwise."""
+        destdir = self.destdir or mozpath.dirname(self.install_target)
+        return mozpath.join(destdir, self.name + ".xpi")
 
 
 class BaseSources(ContextDerived):
@@ -1590,6 +1598,7 @@ class GeneratedFile(ContextDerived):
                 ".asm",
                 ".c",
                 ".cpp",
+                ".dat",  # ICU data, read by icu_data.S via .incbin
                 ".inc",
                 ".m",
                 ".mm",

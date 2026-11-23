@@ -11,6 +11,7 @@ import mozilla.components.compose.base.text.Text
 import mozilla.components.compose.menu.data.BannerMenuItem
 import mozilla.components.compose.menu.data.MenuItem
 import mozilla.components.compose.menu.data.MenuItemSummary
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.store.MenuEvent
 import mozilla.components.compose.menu.ui.MenuItemIconRes
 import org.mozilla.fenix.R
@@ -32,26 +33,31 @@ class DefaultBrowserMenuItemProvider(
     appName: String,
     private val setAsDefaultBrowser: () -> Unit,
 ) : MenuItemProvider {
-    private val item: MutableStateFlow<MenuItem?> =
+    private val items: MutableStateFlow<List<MenuItem>> =
         MutableStateFlow(
-            when (settings.shouldShowMenuBanner && !settings.isDefaultBrowser) {
-                true ->
-                    BannerMenuItem(
-                        title = Text.Resource(R.string.browser_menu_default_banner_title, listOf(appName)),
-                        summary =
-                            MenuItemSummary(
-                                text = Text.Resource(R.string.browser_menu_default_banner_subtitle_2),
-                                maxLines = 3,
-                            ),
-                        icon = MenuItemIconRes(R.drawable.firefox_as_default_banner_illustration),
-                        onClickEvent = DefaultBrowserMenuBannerClicked,
-                        onDismissEvent = DefaultBrowserMenuBannerDismissed,
-                    )
-                else -> null
-            }
+            listOfNotNull(
+                when (settings.shouldShowMenuBanner && !settings.isDefaultBrowser) {
+                    true ->
+                        BannerMenuItem(
+                            title =
+                                MenuItemTitle(
+                                    Text.Resource(R.string.browser_menu_default_banner_title, listOf(appName))
+                                ),
+                            summary =
+                                MenuItemSummary(
+                                    text = Text.Resource(R.string.browser_menu_default_banner_subtitle_2),
+                                    maxLines = 3,
+                                ),
+                            icon = MenuItemIconRes(R.drawable.firefox_as_default_banner_illustration),
+                            onClickEvent = DefaultBrowserMenuBannerClicked,
+                            onDismissEvent = DefaultBrowserMenuBannerDismissed,
+                        )
+                    else -> null
+                }
+            )
         )
 
-    override val itemFlow: StateFlow<MenuItem?> = item.asStateFlow()
+    override val itemsFlow: StateFlow<List<MenuItem>> = items.asStateFlow()
 
     override fun handles(event: MenuEvent) =
         event == DefaultBrowserMenuBannerClicked || event == DefaultBrowserMenuBannerDismissed
@@ -61,7 +67,7 @@ class DefaultBrowserMenuItemProvider(
             setAsDefaultBrowser()
         } else {
             settings.shouldShowMenuBanner = false
-            item.value = null
+            items.value = emptyList()
         }
     }
 }

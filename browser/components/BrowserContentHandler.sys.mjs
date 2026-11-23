@@ -10,9 +10,9 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AIWindow:
     "moz-src:///browser/components/aiwindow/ui/modules/AIWindow.sys.mjs",
-  AIWindowAccountAuth:
-    "moz-src:///browser/components/aiwindow/ui/modules/AIWindowAccountAuth.sys.mjs",
   AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
+  AuthProvider:
+    "moz-src:///browser/components/aiwindow/models/AuthProvider.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
   FirstStartup: "resource://gre/modules/FirstStartup.sys.mjs",
@@ -32,7 +32,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
 /**
  * Whether `openBrowserWindow` should open the window as Smart Window: the
  * feature is on and set as default, it's not an explicitly private window, and
- * the user previously signed in (approximated synchronously via the ToS consent
+ * the user previously signed in (approximated synchronously via the ToU consent
  * timestamp; the async FxA check happens later in `onFirstWindowReady`, which
  * prompts sign-in if they've since signed out). It deliberately avoids
  * `SessionStartup.willRestore()`/`sessionType`: called this early, before the
@@ -48,7 +48,7 @@ function canOpenAsSmartWindow(forcePrivate = false) {
   return (
     !forcePrivate &&
     lazy.AIWindow.shouldOpenAsSmartWindow() &&
-    lazy.AIWindowAccountAuth.hasToSConsent
+    lazy.AuthProvider.hasToUConsent
   );
 }
 
@@ -740,6 +740,7 @@ nsBrowserContentHandler.prototype = {
       "  --browser          Open a browser window.\n" +
       "  --new-window <url> Open <url> in a new window.\n" +
       "  --new-tab <url>    Open <url> in a new tab.\n" +
+      "  --url-background <url> Open <url> in a background tab.\n" +
       "  --data <data-URL>  Open a data: URL.\n" +
       "  --private-window [<url>] Open <url> in a new private window.\n";
     if (AppConstants.platform == "win") {
@@ -1432,6 +1433,47 @@ function maybeRecordSearchActivationTelemetry(uri, isLaunch) {
   }
 }
 
+/**
+ * Records a click on a web notification that no running nsIAlertCallbacks was
+ * tracking, either because Firefox wasn't running or because the notification
+ * is from an earlier session.
+ *
+ * @param {nsIPrincipal} principal
+ * @param {string} action The action from the notification launch arguments.
+ * @param {string} appState The app_state_before_click value to record.
+ */
+function recordUntrackedNotificationClick(principal, action, appState) {
+  let actionType;
+  switch (action) {
+    case "":
+      actionType = "body";
+      break;
+    case "settings":
+      actionType = "settings";
+      break;
+    case "snooze":
+      actionType = "disable";
+      break;
+    default:
+      actionType = "action-button";
+  }
+
+  let siteCategory;
+  try {
+    siteCategory = Cc["@mozilla.org/site-category;1"]
+      .getService(Ci.nsISiteCategory)
+      .getCategory(principal);
+  } catch (_) {
+    // The site category is optional.
+  }
+
+  Glean.webNotification.clicked.record({
+    action: actionType,
+    app_state_before_click: appState,
+    site_category: siteCategory,
+  });
+}
+
 export function nsDefaultCommandLineHandler() {}
 
 nsDefaultCommandLineHandler.prototype = {
@@ -1518,6 +1560,16 @@ nsDefaultCommandLineHandler.prototype = {
     notificationData,
     alertService
   ) {
+    // Determined before any window is opened for this launch.
+    let appStateBeforeClick;
+    if (cmdLine.state == Ci.nsICommandLine.STATE_INITIAL_LAUNCH) {
+      appStateBeforeClick = "closed";
+    } else if (!Services.wm.getMostRecentBrowserWindow()) {
+      appStateBeforeClick = "background_no_window";
+    } else {
+      appStateBeforeClick = "unknown";
+    }
+
     let { tagWasHandled } = await alertService.handleWindowsTag(notificationId);
 
     try {
@@ -1578,6 +1630,12 @@ nsDefaultCommandLineHandler.prototype = {
       let originPrincipal =
         Services.scriptSecurityManager.createContentPrincipalFromOrigin(origin);
 
+      recordUntrackedNotificationClick(
+        originPrincipal,
+        action ?? "",
+        appStateBeforeClick
+      );
+
       const handler = Cc["@mozilla.org/notification-handler;1"].getService(
         Ci.nsINotificationHandler
       );
@@ -1619,8 +1677,7 @@ nsDefaultCommandLineHandler.prototype = {
 
   /* nsICommandLineHandler */
   handle: function dch_handle(cmdLine) {
-    var urilist = [];
-    var principalList = [];
+    let urls = [];
 
     if (
       cmdLine.state != Ci.nsICommandLine.STATE_INITIAL_LAUNCH &&
@@ -1666,8 +1723,11 @@ nsDefaultCommandLineHandler.prototype = {
           Services.dirsvc.get("ProfD", Ci.nsIFile);
           this._haveProfile = true;
         } catch (e) {
-          // eslint-disable-next-line no-empty
-          while ((ar = cmdLine.handleFlagWithParam("url", false))) {}
+          for (let flag of ["url", "url-background"]) {
+            while (cmdLine.findFlag(flag, false) != -1) {
+              cmdLine.handleFlagWithParam(flag, false);
+            }
+          }
           cmdLine.preventDefault = true;
         }
       }
@@ -1680,37 +1740,55 @@ nsDefaultCommandLineHandler.prototype = {
       cmdLine.handleFlag("osint", false);
     }
 
-    try {
-      var ar;
-      while ((ar = cmdLine.handleFlagWithParam("url", false))) {
-        let { uri, principal } = resolveURIInternal(cmdLine, ar);
-        urilist.push(uri);
-        principalList.push(principal);
+    // The macOS URL handler uses -url-background to open URLs without
+    // bringing Firefox to the foreground.
+    for (let flag of ["url", "url-background"]) {
+      try {
+        let argument;
+        while ((argument = cmdLine.handleFlagWithParam(flag, false))) {
+          let { uri, principal } = resolveURIInternal(cmdLine, argument);
+          if (!shouldLoadURI(uri)) {
+            // Don't fall back to openBrowserWindow if every URL is rejected.
+            cmdLine.preventDefault = true;
+            continue;
+          }
+          let shouldOpenInBackground = flag == "url-background";
+          if (shouldOpenInBackground) {
+            // Prevent the later toolkit default handler from opening or focusing a window.
+            cmdLine.preventDefault = true;
+          }
+          urls.push({
+            uri,
+            principal,
+            where: shouldOpenInBackground
+              ? Ci.nsIBrowserDOMWindow.OPEN_NEWTAB_BACKGROUND
+              : Ci.nsIBrowserDOMWindow.OPEN_DEFAULTWINDOW,
+          });
+          if (launchedWithArg_osint && flag == "url") {
+            launchedWithArg_osint = false;
 
-        if (launchedWithArg_osint) {
-          launchedWithArg_osint = false;
+            // We use the resolved URI here, even though it can produce
+            // surprising results where-by `-osint -url test.pdf` resolves to
+            // a query with search parameter "test.pdf". But that shouldn't
+            // happen when Firefox is launched by Windows itself: files should
+            // exist and be resolved to file URLs.
+            let isLaunch =
+              cmdLine.state == Ci.nsICommandLine.STATE_INITIAL_LAUNCH;
 
-          // We use the resolved URI here, even though it can produce
-          // surprising results where-by `-osint -url test.pdf` resolves to
-          // a query with search parameter "test.pdf".  But that shouldn't
-          // happen when Firefox is launched by Windows itself: files should
-          // exist and be resolved to file URLs.
-          const isLaunch =
-            cmdLine && cmdLine.state == Ci.nsICommandLine.STATE_INITIAL_LAUNCH;
-
-          maybeRecordSearchActivationTelemetry(uri, isLaunch);
-          maybeRecordToHandleTelemetry(uri, isLaunch);
+            maybeRecordSearchActivationTelemetry(uri, isLaunch);
+            maybeRecordToHandleTelemetry(uri, isLaunch);
+          }
         }
+      } catch (e) {
+        console.error(e);
       }
-    } catch (e) {
-      console.error(e);
     }
 
     if (cmdLine.findFlag("screenshot", true) != -1) {
       // Shouldn't have to push principal here with the screenshot flag
       lazy.HeadlessShell.handleCmdLineArgs(
         cmdLine,
-        urilist.filter(shouldLoadURI).map(u => u.spec)
+        urls.map(({ uri }) => uri.spec)
       );
       return;
     }
@@ -1725,8 +1803,15 @@ nsDefaultCommandLineHandler.prototype = {
       } else {
         try {
           let { uri, principal } = resolveURIInternal(cmdLine, curarg);
-          urilist.push(uri);
-          principalList.push(principal);
+          if (!shouldLoadURI(uri)) {
+            cmdLine.preventDefault = true;
+            continue;
+          }
+          urls.push({
+            uri,
+            principal,
+            where: Ci.nsIBrowserDOMWindow.OPEN_DEFAULTWINDOW,
+          });
         } catch (e) {
           console.error(
             `Error opening URI ${curarg} from the command line:`,
@@ -1736,29 +1821,34 @@ nsDefaultCommandLineHandler.prototype = {
       }
     }
 
-    if (urilist.length) {
-      if (
+    if (urls.length) {
+      let shouldOpenInExistingWindow =
         cmdLine.state != Ci.nsICommandLine.STATE_INITIAL_LAUNCH &&
-        urilist.length == 1
-      ) {
-        // Try to find an existing window and load our URI into the
-        // current tab, new tab, or new window as prefs determine.
-        try {
-          handURIToExistingBrowser(
-            urilist[0],
-            Ci.nsIBrowserDOMWindow.OPEN_DEFAULTWINDOW,
-            cmdLine,
-            false,
-            principalList[0] ?? lazy.gSystemPrincipal
-          );
-          return;
-        } catch (e) {}
+        urls.filter(
+          ({ where }) => where == Ci.nsIBrowserDOMWindow.OPEN_DEFAULTWINDOW
+        ).length <= 1;
+      let windowURLs = [];
+      for (let { uri, principal, where } of urls) {
+        if (
+          shouldOpenInExistingWindow ||
+          where == Ci.nsIBrowserDOMWindow.OPEN_NEWTAB_BACKGROUND
+        ) {
+          try {
+            handURIToExistingBrowser(uri, where, cmdLine, false, principal);
+            continue;
+          } catch (e) {
+            if (where == Ci.nsIBrowserDOMWindow.OPEN_NEWTAB_BACKGROUND) {
+              console.error(e);
+              continue;
+            }
+          }
+        }
+        windowURLs.push(uri.spec);
       }
 
       // Can't open multiple URLs without using system principal.
-      var URLlist = urilist.filter(shouldLoadURI).map(u => u.spec);
-      if (URLlist.length) {
-        openBrowserWindow(cmdLine, lazy.gSystemPrincipal, URLlist);
+      if (windowURLs.length) {
+        openBrowserWindow(cmdLine, lazy.gSystemPrincipal, windowURLs);
       }
     } else if (!cmdLine.preventDefault) {
       if (

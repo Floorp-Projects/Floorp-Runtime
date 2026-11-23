@@ -302,8 +302,6 @@ MouseInput::MouseInput(const WidgetMouseEvent& aMouseEvent)
   MOZ_ASSERT(NS_IsMainThread(),
              "Can only copy from WidgetTouchEvent on main thread");
 
-  mButtonType = NONE;
-
   switch (aMouseEvent.mButton) {
     case MouseButton::ePrimary:
       mButtonType = MouseInput::PRIMARY_BUTTON;
@@ -313,6 +311,15 @@ MouseInput::MouseInput(const WidgetMouseEvent& aMouseEvent)
       break;
     case MouseButton::eSecondary:
       mButtonType = MouseInput::SECONDARY_BUTTON;
+      break;
+    case MouseButton::eX1:
+      mButtonType = MouseInput::X1_BUTTON;
+      break;
+    case MouseButton::eX2:
+      mButtonType = MouseInput::X2_BUTTON;
+      break;
+    default:
+      mButtonType = MouseInput::NONE;
       break;
   }
 
@@ -349,9 +356,6 @@ MouseInput::MouseInput(const WidgetMouseEvent& aMouseEvent)
       break;
     case eMouseExitFromWidget:
       mType = MOUSE_WIDGET_EXIT;
-      break;
-    case eMouseExploreByTouch:
-      mType = MOUSE_EXPLORE_BY_TOUCH;
       break;
     case eMouseHitTest:
       mType = MOUSE_HITTEST;
@@ -440,9 +444,6 @@ WidgetMouseOrPointerEvent MouseInput::ToWidgetEvent(nsIWidget* aWidget) const {
       msg = eMouseExitFromWidget;
       exitFrom = Some(WidgetMouseEvent::ePlatformChild);
       break;
-    case MOUSE_EXPLORE_BY_TOUCH:
-      msg = eMouseExploreByTouch;
-      break;
     case MOUSE_HITTEST:
       msg = eMouseHitTest;
       break;
@@ -471,6 +472,12 @@ WidgetMouseOrPointerEvent MouseInput::ToWidgetEvent(nsIWidget* aWidget) const {
       break;
     case MouseInput::SECONDARY_BUTTON:
       event.mButton = MouseButton::eSecondary;
+      break;
+    case MouseInput::X1_BUTTON:
+      event.mButton = MouseButton::eX1;
+      break;
+    case MouseInput::X2_BUTTON:
+      event.mButton = MouseButton::eX2;
       break;
     case MouseInput::NONE:
     default:
@@ -526,7 +533,8 @@ PanGestureInput::PanGestureInput(PanGestureType aType, TimeStamp aTimeStamp,
       mOverscrollBehaviorAllowsSwipe(false),
       mSimulateMomentum(false),
       mIsNoLineOrPageDelta(true) {
-  mMayTriggerSwipe = SwipeTracker::CanTriggerSwipe(*this);
+  mMayTriggerSwipe =
+      SwipeTracker::CanTriggerSwipe(*this, SwipeInputSource::Touchpad);
 }
 
 PanGestureInput::PanGestureInput(PanGestureType aType, TimeStamp aTimeStamp,
@@ -554,6 +562,21 @@ bool PanGestureInput::IsMomentum() const {
       return true;
     default:
       return false;
+  }
+}
+
+bool PanGestureInput::ShouldDispatchToContentAfterAPZ() const {
+  if (mPanDisplacement != ScreenPoint()) {
+    return true;
+  }
+  switch (mType) {
+    case PanGestureInput::PANGESTURE_START:
+    case PanGestureInput::PANGESTURE_PAN:
+    case PanGestureInput::PANGESTURE_MOMENTUMSTART:
+    case PanGestureInput::PANGESTURE_MOMENTUMPAN:
+      return false;
+    default:
+      return true;
   }
 }
 

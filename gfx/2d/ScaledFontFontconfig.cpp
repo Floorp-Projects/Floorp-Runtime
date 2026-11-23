@@ -374,8 +374,7 @@ bool ScaledFontFontconfig::GetFontInstanceData(FontInstanceDataOutput aCb,
                                                void* aBaton) {
   std::vector<wr::FontVariation> variations;
   if (HasVariationSettings()) {
-    UnscaledFontFreeType::GetVariationSettingsFromFace(&variations,
-                                                       mFace->GetFace());
+    UnscaledFontFreeType::GetVariationSettingsFromFace(&variations, mFace);
   }
 
   aCb(reinterpret_cast<uint8_t*>(&mInstanceData), sizeof(mInstanceData),
@@ -471,8 +470,7 @@ bool ScaledFontFontconfig::GetWRFontInstanceOptions(
   *aOutPlatformOptions = Some(platformOptions);
 
   if (HasVariationSettings()) {
-    UnscaledFontFreeType::GetVariationSettingsFromFace(aOutVariations,
-                                                       mFace->GetFace());
+    UnscaledFontFreeType::GetVariationSettingsFromFace(aOutVariations, mFace);
   }
 
   return true;
@@ -529,18 +527,21 @@ bool ScaledFontFontconfig::HasVariationSettings() {
                       ->GetFace();
 }
 
-already_AddRefed<UnscaledFont> UnscaledFontFontconfig::CreateFromFontDescriptor(
-    const uint8_t* aData, uint32_t aDataLength, uint32_t aIndex) {
-  if (aDataLength == 0) {
+bool UnscaledFontFontconfig::ValidateFontDescriptor(const uint8_t* aName,
+                                                    size_t aNameLength,
+                                                    std::string& aResultName,
+                                                    uint32_t& aIndex) {
+  if (aNameLength == 0) {
     gfxWarning() << "Fontconfig font descriptor is truncated.";
-    return nullptr;
+    return false;
   }
-  nsCString path((const char*)aData, aDataLength);
+
+  std::string path((const char*)aName, aNameLength);
 
   // Use the given pathname/index in a fontconfig lookup to confirm this is a
-  // known font; if not, we'll use whatever fallback it provides instead.
+  // known font file; if not, we'll use whatever fallback it provides instead.
   FcPattern* pattern = FcPatternCreate();
-  FcPatternAddString(pattern, FC_FILE, (const FcChar8*)path.BeginReading());
+  FcPatternAddString(pattern, FC_FILE, (const FcChar8*)path.c_str());
   FcPatternAddInteger(pattern, FC_INDEX, aIndex);
   FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
   FcDefaultSubstitute(pattern);
@@ -548,29 +549,39 @@ already_AddRefed<UnscaledFont> UnscaledFontFontconfig::CreateFromFontDescriptor(
   FcPattern* match = FcFontMatch(nullptr, pattern, &result);
   FcPatternDestroy(pattern);
   if (!match || result != FcResultMatch) {
+    FcPatternDestroy(match);
     gfxWarning() << "FcFontMatch failed.";
+    return false;
+  }
+
+  // Get the file that fontconfig returned.
+  // If it didn't use the requested file, log a warning and update path/index.
+  char* file = nullptr;
+  result = FcPatternGetString(match, FC_FILE, 0, (FcChar8**)&file);
+  if (result == FcResultMatch && path != file) {
+    gfxWarning() << "Font path " << path << " invalid, using " << file;
+    path = file;
+    int index = 0;
+    result = FcPatternGetInteger(match, FC_INDEX, 0, &index);
+    if (result == FcResultMatch) {
+      // Mask out possible variation-instance index stashed by fontconfig; we
+      // just want the face index within a collection file.
+      aIndex = index & 0xffff;
+    }
+  }
+  FcPatternDestroy(match);
+
+  aResultName = std::move(path);
+  return true;
+}
+
+already_AddRefed<UnscaledFont> UnscaledFontFontconfig::CreateFromFontDescriptor(
+    const uint8_t* aData, uint32_t aDataLength, uint32_t aIndex) {
+  std::string path;
+  if (!ValidateFontDescriptor(aData, aDataLength, path, aIndex)) {
     return nullptr;
   }
-
-  // Get the file and index that fontconfig returned, logging a warning if they
-  // are not the expected values.
-  char* file = nullptr;
-  int index = 0;
-  result = FcPatternGetString(match, FC_FILE, 0, (FcChar8**)&file);
-  if (result == FcResultMatch && !path.Equals(file)) {
-    gfxWarning() << "Font path " << path.get() << " invalid, using " << file;
-    path = file;
-  }
-  result = FcPatternGetInteger(match, FC_INDEX, 0, &index);
-  // We compare just the low 16 bits of aIndex, as the upper 16 bits appear
-  // to be used to indicate variable-font instances rather than a collection
-  // index.
-  if (result == FcResultMatch && (uint32_t)index != (aIndex & 0xffff)) {
-    gfxWarning() << "Font index " << aIndex << " invalid, using " << index;
-    aIndex = index;
-  }
-
-  return MakeAndAddRef<UnscaledFontFontconfig>(path.BeginReading(), aIndex);
+  return MakeAndAddRef<UnscaledFontFontconfig>(std::move(path), aIndex);
 }
 
 }  // namespace mozilla::gfx

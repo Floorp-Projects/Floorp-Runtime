@@ -94,7 +94,20 @@ add_task(async function test_no_secondary_action_when_pref_disabled() {
 
 add_task(async function test_trash_button_when_pref_enabled() {
   await SpecialPowers.pushPrefEnv({ set: [[PREF, true]] });
+  Services.fog.testResetFOG();
   await withFormHistoryPopup(async (browser, autoCompletePopup, itemsBox) => {
+    const shownEvents = Glean.autocomplete.dropdownShown.testGetValue();
+    Assert.equal(
+      shownEvents?.length,
+      1,
+      "One dropdown shown event is recorded"
+    );
+    Assert.equal(
+      shownEvents[0].extra.record_type,
+      "formhistory",
+      "The event names the formhistory record type"
+    );
+
     const rowItem = getRowItem(itemsBox, 0);
     Assert.equal(
       rowItem.actions.secondary.type,
@@ -164,6 +177,7 @@ add_task(async function test_trash_button_shows_no_confirmation() {
 
 add_task(async function test_escape_leaves_secondary_action_before_closing() {
   await SpecialPowers.pushPrefEnv({ set: [[PREF, true]] });
+  Services.fog.testResetFOG();
   await withFormHistoryPopup(async (browser, autoCompletePopup, itemsBox) => {
     const rowItem = getRowItem(itemsBox, 0);
 
@@ -191,12 +205,74 @@ add_task(async function test_escape_leaves_secondary_action_before_closing() {
       () => !autoCompletePopup.popupOpen,
       "A second Escape closes the popup"
     );
+
+    const shownEvents = Glean.autocomplete.dropdownShown.testGetValue();
+    const closedEvents = Glean.autocomplete.dropdownClosed.testGetValue();
+    Assert.equal(
+      shownEvents?.length,
+      1,
+      "One dropdown shown event is recorded"
+    );
+    Assert.equal(
+      closedEvents?.length,
+      1,
+      "One dropdown closed event is recorded"
+    );
+    Assert.equal(
+      closedEvents[0].extra.record_type,
+      "formhistory",
+      "The event names the formhistory record type"
+    );
+    Assert.equal(
+      closedEvents[0].extra.close_reason,
+      "dismissed",
+      "Escape records a dismissed close"
+    );
+    Assert.ok(closedEvents[0].extra.flow_id, "The event carries a flow id");
+    Assert.equal(
+      closedEvents[0].extra.flow_id,
+      shownEvents[0].extra.flow_id,
+      "The closed event's flow id matches the shown event for the same dropdown"
+    );
   });
   await SpecialPowers.popPrefEnv();
 });
 
+add_task(async function test_selecting_an_entry_records_dropdown_closed() {
+  await withFormHistoryPopup(async (browser, autoCompletePopup, itemsBox) => {
+    const rowItem = getRowItem(itemsBox, 0);
+    await BrowserTestUtils.synthesizeKey("VK_DOWN", {}, browser);
+    await TestUtils.waitForCondition(() => rowItem.selected);
+
+    Services.fog.testResetFOG();
+    await BrowserTestUtils.synthesizeKey("VK_RETURN", {}, browser);
+    await TestUtils.waitForCondition(
+      () => !autoCompletePopup.popupOpen,
+      "Selecting an entry closes the popup"
+    );
+
+    const closedEvents = Glean.autocomplete.dropdownClosed.testGetValue();
+    Assert.equal(
+      closedEvents?.length,
+      1,
+      "One dropdown closed event is recorded"
+    );
+    Assert.equal(
+      closedEvents[0].extra.record_type,
+      "formhistory",
+      "The event names the formhistory record type"
+    );
+    Assert.equal(
+      closedEvents[0].extra.close_reason,
+      "selected",
+      "Picking an entry records a selected close"
+    );
+  });
+});
+
 add_task(async function test_trash_button_removes_the_entry() {
   await SpecialPowers.pushPrefEnv({ set: [[PREF, true]] });
+  Services.fog.testResetFOG();
   await withFormHistoryPopup(async (browser, autoCompletePopup, itemsBox) => {
     const button = await selectRowAndGetTrashButton(browser, itemsBox, 0);
 
@@ -215,6 +291,26 @@ add_task(async function test_trash_button_removes_the_entry() {
       0,
       "The clicked entry is removed from form history"
     );
+    const events = Glean.autocomplete.recordInteraction.testGetValue();
+    Assert.equal(events?.length, 1, "One interaction event is recorded");
+    Assert.equal(
+      events[0].extra.interaction_type,
+      "delete",
+      "The trash button records a delete interaction"
+    );
+    Assert.equal(
+      events[0].extra.record_type,
+      "formhistory",
+      "The event names the formhistory record type"
+    );
+    const shownEvents = Glean.autocomplete.dropdownShown.testGetValue();
+    Assert.equal(shownEvents?.length, 1, "The dropdown is shown only once");
+    Assert.ok(events[0].extra.flow_id, "The interaction has a flow id");
+    Assert.equal(
+      events[0].extra.flow_id,
+      shownEvents[0].extra.flow_id,
+      "The interaction shares the dropdown's flow id"
+    );
     Assert.equal(
       await countEntries("value2"),
       1,
@@ -230,6 +326,7 @@ add_task(async function test_trash_button_removes_the_entry() {
 
 add_task(async function test_deleting_the_last_entry_closes_the_popup() {
   await SpecialPowers.pushPrefEnv({ set: [[PREF, true]] });
+  Services.fog.testResetFOG();
   await withFormHistoryPopup(
     async (browser, autoCompletePopup, itemsBox) => {
       const button = await selectRowAndGetTrashButton(browser, itemsBox, 0);
@@ -249,8 +346,84 @@ add_task(async function test_deleting_the_last_entry_closes_the_popup() {
         0,
         "The only entry is removed from form history"
       );
+      const closedEvents = Glean.autocomplete.dropdownClosed.testGetValue();
+      Assert.equal(closedEvents?.length, 1, "One dropdown closed event");
+      Assert.equal(
+        closedEvents[0].extra.close_reason,
+        "dismissed",
+        "Emptying the dropdown is not a removal prompt close"
+      );
+      const [interaction] = Glean.autocomplete.recordInteraction.testGetValue();
+      Assert.ok(interaction.extra.flow_id, "The interaction has a flow id");
+      Assert.equal(
+        closedEvents[0].extra.flow_id,
+        interaction.extra.flow_id,
+        "The closed event shares the interaction's flow id"
+      );
     },
     ["value1"]
+  );
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_removals_in_one_dropdown_share_a_flow_id() {
+  await SpecialPowers.pushPrefEnv({ set: [[PREF, true]] });
+  Services.fog.testResetFOG();
+  await withFormHistoryPopup(
+    async (browser, autoCompletePopup, itemsBox) => {
+      for (const remaining of [2, 1]) {
+        const rowItem = getRowItem(itemsBox, 0);
+        if (!rowItem.selected) {
+          await BrowserTestUtils.synthesizeKey("VK_DOWN", {}, browser);
+          await TestUtils.waitForCondition(
+            () => rowItem.selected,
+            "the first row is selected"
+          );
+        }
+        const button = rowItem.shadowRoot.querySelector(
+          "moz-button.secondary-action"
+        );
+        await TestUtils.waitForCondition(
+          () => button.checkVisibility({ checkVisibilityCSS: true }),
+          "the trash button is visible"
+        );
+        EventUtils.synthesizeMouseAtCenter(button, {});
+        await TestUtils.waitForCondition(
+          () => autoCompletePopup.matchCount == remaining,
+          "the deleted row leaves the popup"
+        );
+      }
+      Assert.equal(
+        await FormHistory.count({ fieldname: "field1" }),
+        1,
+        "Two entries are removed"
+      );
+
+      const popupHidden = BrowserTestUtils.waitForEvent(
+        autoCompletePopup,
+        "popuphidden"
+      );
+      await BrowserTestUtils.synthesizeKey("VK_ESCAPE", {}, browser);
+      await popupHidden;
+
+      const shownEvents = Glean.autocomplete.dropdownShown.testGetValue();
+      Assert.equal(shownEvents?.length, 1, "The dropdown is shown only once");
+      const flowId = shownEvents[0].extra.flow_id;
+      Assert.ok(flowId, "The dropdown has a flow id");
+      const events = Glean.autocomplete.recordInteraction.testGetValue();
+      Assert.deepEqual(
+        events?.map(e => e.extra.flow_id),
+        [flowId, flowId],
+        "Both interactions share the dropdown's flow id"
+      );
+      const closedEvents = Glean.autocomplete.dropdownClosed.testGetValue();
+      Assert.deepEqual(
+        closedEvents?.map(e => [e.extra.close_reason, e.extra.flow_id]),
+        [["dismissed", flowId]],
+        "Escape closes the dropdown with the same flow id"
+      );
+    },
+    ["value1", "value2", "value3"]
   );
   await SpecialPowers.popPrefEnv();
 });
@@ -295,6 +468,7 @@ add_task(async function test_delete_key_still_removes_with_pref_disabled() {
       "the first row is selected"
     );
 
+    Services.fog.testResetFOG();
     // nsFormFillController routes Delete to the controller everywhere except
     // macOS, where the shortcut is Shift+Backspace instead.
     if (AppConstants.platform == "macosx") {
@@ -319,6 +493,11 @@ add_task(async function test_delete_key_still_removes_with_pref_disabled() {
       await countEntries("value1"),
       0,
       "The keyboard shortcut still removes the entry without the pref"
+    );
+    Assert.equal(
+      Glean.autocomplete.recordInteraction.testGetValue(),
+      null,
+      "The keyboard shortcut does not record a secondary action interaction"
     );
   });
   await SpecialPowers.popPrefEnv();

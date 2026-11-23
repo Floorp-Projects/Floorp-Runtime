@@ -190,7 +190,7 @@ std::vector<Codec> AddIdToCodecs(PayloadTypePicker& pt_mapper,
   std::vector<Codec> codecs = std::move(codecs_in);
   for (Codec& codec : codecs) {
     if (codec.id == Codec::kIdNotSet) {
-      auto id_or_error = pt_mapper.SuggestMapping(codec, nullptr);
+      auto id_or_error = pt_mapper.SuggestMapping(codec);
       EXPECT_TRUE(id_or_error.ok());
       if (id_or_error.ok()) {
         codec.id = id_or_error.value();
@@ -942,6 +942,15 @@ TEST_P(WebRtcVoiceEngineTestFake, CreateSendStream) {
   EXPECT_EQ("", config.rtp.c_name);
   EXPECT_EQ(0u, config.rtp.extensions.size());
   EXPECT_EQ(SendImpl()->transport(), config.send_transport);
+}
+
+// Test that a send stream that is added after the MID has been set is created
+// with the MID.
+TEST_P(WebRtcVoiceEngineTestFake, CreateSendStreamWithMid) {
+  EXPECT_TRUE(SetupChannel());
+  send_channel_->SetMid("audio");
+  EXPECT_TRUE(send_channel_->AddSendStream(StreamParams::CreateLegacy(kSsrcX)));
+  EXPECT_EQ(GetSendStreamConfig(kSsrcX).rtp.mid, "audio");
 }
 
 // Test that we can add a receive stream and that it has the correct defaults.

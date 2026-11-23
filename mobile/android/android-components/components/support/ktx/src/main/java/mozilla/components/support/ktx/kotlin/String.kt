@@ -77,7 +77,7 @@ fun String.toShortUrl(publicSuffixList: PublicSuffixList): String {
             inputString.startsWith(FILE_PREFIX) ||
             uri.port !in -1..MAX_VALID_PORT
     ) {
-        return inputString
+        return URLStringUtils.toLosslessDisplayUrl(inputString)
     }
 
     if (
@@ -142,7 +142,10 @@ fun String.isExtensionUrl() = this.startsWith("moz-extension://")
 /** Checks if this String is a URL of a resource. */
 fun String.isResourceUrl() = this.startsWith("resource://")
 
-/** Appends `http` scheme if no scheme is present in this String. */
+/**
+ * Appends `http` scheme if no scheme is present in this String, and encodes the spaces after the authority of an HTTP/S
+ * URL as `%20`.
+ */
 fun String.toNormalizedUrl(): String {
     val s = this.sanitizeURL()
     // Most commonly we'll encounter http or https schemes.
@@ -150,7 +153,7 @@ fun String.toNormalizedUrl(): String {
     return if (!s.startsWith("http://") && !s.startsWith("https://")) {
         URLStringUtils.toNormalizedURL(s)
     } else {
-        s
+        URLStringUtils.encodeSpacesAfterAuthority(s)
     }
 }
 
@@ -500,4 +503,17 @@ fun String.truncateMiddle(maxLength: Int, ellipsis: String = "…"): String {
     val start = take(half)
     val end = takeLast(maxLength - ellipsis.length - half)
     return "$start$ellipsis$end"
+}
+
+/**
+ * Returns this camelCase or PascalCase string in snake_case: every uppercase character after the first is preceded by
+ * an underscore, and every character is lowercased.
+ */
+fun String.toSnakeCase(): String = buildString {
+    this@toSnakeCase.forEachIndexed { index, char ->
+        if (index > 0 && char.isUpperCase()) {
+            append('_')
+        }
+        append(char.lowercaseChar())
+    }
 }

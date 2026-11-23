@@ -12,6 +12,7 @@ import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.text.Text
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.ui.MenuItemIconRes
 import mozilla.components.feature.session.SessionUseCases
@@ -33,12 +34,12 @@ class SaveAsPdfMenuItemProviderTest {
         val provider = createProvider()
         val expectedItem =
             StandardMenuItem(
-                title = Text.Resource(R.string.browser_menu_save_as_pdf_2),
+                title = MenuItemTitle(Text.Resource(R.string.browser_menu_save_as_pdf_2)),
                 icon = MenuItemIconRes(iconsR.drawable.mozac_ic_save_file_24),
                 onClickEvent = MenuAction.SaveAsPdfRequested,
             )
 
-        val item = provider.itemFlow.value
+        val item = provider.itemsFlow.value.single()
 
         assertEquals(expectedItem, item)
     }
@@ -57,7 +58,7 @@ class SaveAsPdfMenuItemProviderTest {
     fun `WHEN building the item THEN handle all events it can dispatch and no others`() {
         val provider = createProvider()
 
-        val events = requireNotNull(provider.itemFlow.value).reachableEvents()
+        val events = provider.itemsFlow.value.single().reachableEvents()
 
         assertTrue(events.all { provider.handles(it) }, "Not all of $events are handled")
         assertFalse(provider.handles(MenuAction.PrintRequested))

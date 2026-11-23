@@ -9,6 +9,8 @@ support-files = [
 
 ["browser_sma_accept_doh.js"]
 
+["browser_sma_accept_smartwindow_tou.js"]
+
 ["browser_sma_block_message.js"]
 
 ["browser_sma_bookmark_current_tab.js"]
@@ -69,6 +71,8 @@ run-if = [
 
 ["browser_sma_open_spotlight_dialog.js"]
 
+["browser_sma_open_support_page.js"]
+
 ["browser_sma_open_tab_in_splitview.js"]
 
 ["browser_sma_open_url.js"]
@@ -97,6 +101,8 @@ run-if = [
 
 ["browser_sma_restore_session.js"]
 
+["browser_sma_select_and_mark_menu_item.js"]
+
 ["browser_sma_set_bookmarks_toolbar_visibility.js"]
 
 ["browser_sma_set_browser_icon.js"]
@@ -111,10 +117,11 @@ run-if = [
 ["browser_sma_show_firefox_accounts.js"]
 
 ["browser_sma_show_migration_wizard.js"]
-skip-if = [
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64' && debug", # Bug 1837646
-]
+
+["browser_sma_show_qr_code.js"]
 
 ["browser_sma_submit_onboarding_opt_out_ping.js"]
+
+["browser_sma_submit_smartwindow_prompt.js"]
 
 ["browser_sma_summarize_page.js"]

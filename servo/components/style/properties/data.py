@@ -177,7 +177,10 @@ def rule_values_from_arg(rule_types):
         return DEFAULT_RULES
     mask = 0
     for rule in rule_types:
+        assert rule != "scope", "scope is just derived from style"
         mask |= RULE_VALUES[rule]
+        if rule == "style":
+            mask |= SCOPE_RULE
     return mask
 
 
@@ -1224,6 +1227,8 @@ class PropertyRestrictions:
                 "line-height",
                 # Kinda like css-backgrounds?
                 "background-blend-mode",
+                # Not yet in css-text spec, but coming
+                "text-autospace-size",
             ]
             + PropertyRestrictions.shorthand(data, "padding")
             + PropertyRestrictions.shorthand(data, "margin")
@@ -1257,6 +1262,8 @@ class PropertyRestrictions:
                 "line-height",
                 # Kinda like css-backgrounds?
                 "background-blend-mode",
+                # Not yet in css-text spec, but coming
+                "text-autospace-size",
             ]
             + PropertyRestrictions.spec(data, "css-fonts")
             + PropertyRestrictions.spec(data, "css-backgrounds")

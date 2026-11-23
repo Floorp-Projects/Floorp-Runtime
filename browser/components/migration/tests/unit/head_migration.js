@@ -38,6 +38,12 @@ var { getAppInfo, newAppInfo, updateAppInfo } = ChromeUtils.importESModule(
 );
 updateAppInfo();
 
+// The tests read browser data from temporary folders, which the OS does not
+// block, so reading them must not wait for the user to select a folder.
+ChromeUtils.importESModule(
+  "moz-src:///browser/components/migration/MigratorBase.sys.mjs"
+).MigratorBase.needsFolderSelectionToReadData = () => false;
+
 /**
  * Migrates the requested resource and waits for the migration to be complete.
  *
@@ -82,9 +88,20 @@ async function promiseMigration(
   }
 
   // Start the migration.
-  migrator.migrate(resourceType, null, aProfile);
+  let availableQuantity;
+  migrator.migrate(
+    resourceType,
+    null,
+    aProfile,
+    (migratedType, _success, _details, available) => {
+      if (migratedType == resourceType) {
+        availableQuantity = available;
+      }
+    }
+  );
 
-  return Promise.all(promises);
+  await Promise.all(promises);
+  return availableQuantity;
 }
 
 /**
@@ -156,6 +173,25 @@ function registerFakePath(key, file) {
       dirsvc.set(key, originalFile);
     }
   });
+}
+
+/**
+ * Copies a fixture directory into the test's temporary directory, so that
+ * tests can modify it without touching the test directory, which is shared
+ * with tests running in parallel.
+ *
+ * @param {string} relativePath
+ *   The path of the fixture directory, relative to the test directory.
+ *   For example: "Library/".
+ * @returns {Promise<nsIFile>}
+ *   The copy.
+ */
+async function copyFixtureDir(relativePath) {
+  let source = do_get_file(relativePath);
+  let target = do_get_tempdir();
+  target.append(source.leafName);
+  await IOUtils.copy(source.path, target.path, { recursive: true });
+  return target;
 }
 
 function getRootPath() {

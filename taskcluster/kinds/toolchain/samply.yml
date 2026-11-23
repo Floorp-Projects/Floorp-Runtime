@@ -12,7 +12,6 @@ task-defaults:
         env:
             FETCH: samply/samply
     run:
-        clone-with: hg
         script: build-rust-based-toolchain.sh
         toolchain-artifact: public/build/samply.tar.zst
     fetches:
@@ -28,7 +27,7 @@ linux64-samply:
     fetches:
         toolchain:
             - linux64-clang-toolchain
-            - linux64-rust
+            - linux64-rust-toolchain
             - sysroot-x86_64-linux-gnu
 
 linux64-aarch64-samply:
@@ -40,7 +39,7 @@ linux64-aarch64-samply:
     fetches:
         toolchain:
             - linux64-clang-toolchain
-            - linux64-rust
+            - linux64-rust-toolchain
             - sysroot-aarch64-linux-gnu
 
 macosx64-samply:
@@ -52,7 +51,7 @@ macosx64-samply:
     fetches:
         toolchain:
             - linux64-clang-toolchain
-            - linux64-rust-macos
+            - linux64-rust-macos-toolchain
             - macosx64-sdk-toolchain
 
 macosx64-aarch64-samply:
@@ -64,19 +63,21 @@ macosx64-aarch64-samply:
     fetches:
         toolchain:
             - linux64-clang-toolchain
-            - linux64-rust-macos
+            - linux64-rust-macos-toolchain
             - macosx64-sdk-toolchain
 
 win32-samply:
     description: "samply toolchain build for 32-bit Windows"
     treeherder:
         symbol: TW32(samply)
+    attributes:
+        local-toolchain: false
     run:
         arguments: ['i686-pc-windows-msvc']
     fetches:
         toolchain:
             - linux64-clang-toolchain
-            - linux64-rust-windows
+            - linux64-rust-windows-toolchain
             - vs-toolchain
 
 win64-samply:
@@ -88,5 +89,17 @@ win64-samply:
     fetches:
         toolchain:
             - linux64-clang-toolchain
-            - linux64-rust-windows
+            - linux64-rust-windows-toolchain
+            - vs-toolchain
+
+win64-aarch64-samply:
+    description: "samply toolchain build for aarch64 Windows"
+    treeherder:
+        symbol: TWA64(samply)
+    run:
+        arguments: ['aarch64-pc-windows-msvc']
+    fetches:
+        toolchain:
+            - linux64-clang-toolchain
+            - linux64-rust-windows-toolchain
             - vs-toolchain

@@ -391,6 +391,22 @@ projects:
     - components:tooling-lint
     - components:ui-colors
     - components:ui-icons
+  components:compose-draggable:
+    description: Draggable, reorderable Compose lists and grids.
+    path: components/compose/draggable
+    publish: true
+    upstream_dependencies:
+    - components:compose-base
+    - components:concept-base
+    - components:concept-fetch
+    - components:lib-publicsuffixlist
+    - components:support-base
+    - components:support-ktx
+    - components:support-test
+    - components:support-utils
+    - components:tooling-lint
+    - components:ui-colors
+    - components:ui-icons
   components:compose-engine:
     description: A component for integrating a concept-engine implementation into
       Jetpack Compose UI.
@@ -722,6 +738,7 @@ projects:
     upstream_dependencies:
     - components:browser-engine-gecko
     - components:browser-state
+    - components:compose-base
     - components:concept-awesomebar
     - components:concept-base
     - components:concept-engine
@@ -2091,6 +2108,16 @@ projects:
     - components:support-base
     - components:support-test
     - components:tooling-fetch-tests
+    - components:tooling-lint
+  components:lib-installation-blockstore:
+    description: A library for checking reinstalls
+    path: components/lib/installation-blockstore
+    publish: true
+    upstream_dependencies:
+    - components:concept-base
+    - components:concept-fetch
+    - components:support-base
+    - components:support-test
     - components:tooling-lint
   components:lib-integrity-googleplay:
     description: A library for verifying the integrity of an installation using Google

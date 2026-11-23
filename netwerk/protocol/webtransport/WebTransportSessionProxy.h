@@ -176,7 +176,8 @@ class WebTransportSessionProxy final
                       WebTransportSessionBase* aSession, bool aBidi);
   void SendDatagramInternal(const RefPtr<WebTransportSessionBase>& aSession,
                             nsTArray<uint8_t>&& aData, uint64_t aTrackingId,
-                            uint64_t aSendGroupId, int64_t aSendOrder);
+                            uint64_t aSendGroupId, int64_t aSendOrder,
+                            TimeStamp aTimestamp);
   void NotifyDatagramReceived(nsTArray<uint8_t>&& aData);
   void GetMaxDatagramSizeInternal(
       const RefPtr<WebTransportSessionBase>& aSession);
@@ -187,8 +188,17 @@ class WebTransportSessionProxy final
       const Maybe<mozilla::dom::WebTransportStatsData>& aStats);
   void OnOutgoingDatagramOutComeInternal(
       uint64_t aId, WebTransportSessionEventListener::DatagramOutcome aOutCome);
-  void OnStopSendingInternal(uint64_t aStreamId, nsresult aError);
-  void OnResetReceivedInternal(uint64_t aStreamId, nsresult aError);
+  void OnStopSendingInternal(uint64_t aStreamId, uint64_t aErrorCode);
+  void OnResetReceivedInternal(uint64_t aStreamId, uint64_t aErrorCode);
+  void SetDatagramMaxBufferedDatagramsInternal(
+      const RefPtr<WebTransportSessionBase>& aSession,
+      uint32_t aMaxBufferedDatagrams);
+  void SetDatagramMaxAgeInternal(
+      const RefPtr<WebTransportSessionBase>& aSession, double aMaxAge);
+  void SetAnticipatedConcurrentIncomingUnidirectionalStreamsInternal(
+      const RefPtr<WebTransportSessionBase>& aSession, uint16_t aValue);
+  void SetAnticipatedConcurrentIncomingBidirectionalStreamsInternal(
+      const RefPtr<WebTransportSessionBase>& aSession, uint16_t aValue);
 
   nsCOMPtr<nsIChannel> mChannel;
   uint64_t mHttpChannelID = 0;
@@ -200,6 +210,8 @@ class WebTransportSessionProxy final
   uint32_t mCloseStatus MOZ_GUARDED_BY(mMutex) = 0;
   nsCString mReason MOZ_GUARDED_BY(mMutex);
   nsCString mProtocol MOZ_GUARDED_BY(mMutex);
+  nsTArray<nsCString> mResponseHeaderNames MOZ_GUARDED_BY(mMutex);
+  nsTArray<nsCString> mResponseHeaderValues MOZ_GUARDED_BY(mMutex);
   nsTArray<nsString> mOfferedProtocols MOZ_GUARDED_BY(mMutex);
   bool mCleanly MOZ_GUARDED_BY(mMutex) = false;
   bool mStopRequestCalled MOZ_GUARDED_BY(mMutex) = false;
@@ -213,6 +225,12 @@ class WebTransportSessionProxy final
       MOZ_GUARDED_BY(mMutex);
   bool mDedicatedConnection = false;  // for WebTranport
   nsIWebTransport::HTTPVersion mHTTPVersion = nsIWebTransport::HTTPVersion::h3;
+  // 0 means "not requested". Indistinguishable from an explicit 0, which is
+  // harmless: neqo's limit is raise-only, so a 0 could never lower anything.
+  uint16_t mAnticipatedConcurrentIncomingUnidirectionalStreams
+      MOZ_GUARDED_BY(mMutex) = 0;
+  uint16_t mAnticipatedConcurrentIncomingBidirectionalStreams
+      MOZ_GUARDED_BY(mMutex) = 0;
 
   // Cached stats for when connection is closed (spec requirement)
   bool mHasCachedStats MOZ_GUARDED_BY(mMutex) = false;

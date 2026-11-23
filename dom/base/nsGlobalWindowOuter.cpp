@@ -15,10 +15,9 @@
 #include "Navigator.h"
 #include "WindowDestroyedEvent.h"
 #include "WindowNamedPropertiesHandler.h"
-#include "mozilla/AntiTrackingUtils.h"
+#include "mozilla/AntiTrackingOpenerHeuristics.h"
 #include "mozilla/IntegerPrintfMacros.h"
 #include "mozilla/Result.h"
-#include "mozilla/StorageAccessAPIHelper.h"
 #include "mozilla/dom/AutoPrintEventDispatcher.h"
 #include "mozilla/dom/BindingUtils.h"
 #include "mozilla/dom/BrowserChild.h"
@@ -88,6 +87,7 @@
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "mozilla/Likely.h"
+#include "mozilla/LookAndFeel.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/SchedulerGroup.h"
 #include "mozilla/SpinEventLoopUntil.h"
@@ -126,9 +126,6 @@
 // Interfaces Needed
 #include "AccessCheck.h"
 #include "Crypto.h"
-#include "FxRWindowManager.h"
-#include "VRShMem.h"
-#include "gfxVR.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/EventDispatcher.h"
@@ -1330,7 +1327,6 @@ static JSObject* NewOuterWindowProxy(JSContext* cx,
 nsGlobalWindowOuter::nsGlobalWindowOuter(uint64_t aWindowID)
     : nsPIDOMWindowOuter(aWindowID),
       mFullscreenHasChangedDuringProcessing(false),
-      mForceFullScreenInWidget(false),
       mIsClosed(false),
       mInClose(false),
       mHavePendingClose(false),
@@ -3972,6 +3968,11 @@ struct FullscreenTransitionDuration {
 
 static void GetFullscreenTransitionDuration(
     bool aEnterFullscreen, FullscreenTransitionDuration* aDuration) {
+  if (LookAndFeel::GetInt(LookAndFeel::IntID::PrefersReducedMotion)) {
+    MOZ_ASSERT(aDuration->IsSuppressed());
+    return;
+  }
+
   const char* pref = aEnterFullscreen
                          ? "full-screen-api.transition-duration.enter"
                          : "full-screen-api.transition-duration.leave";
@@ -4094,14 +4095,13 @@ FullscreenTransitionTask::Run() {
   } else if (stage == eToggleFullscreen) {
     PROFILER_MARKER_UNTYPED("Fullscreen toggle start", DOM);
     mFullscreenChangeStartTime = TimeStamp::Now();
-    // Toggle the fullscreen state on the widget
-    if (!mWindow->SetWidgetFullscreen(FullscreenReason::ForFullscreenAPI,
-                                      mFullscreen, mWidget)) {
-      // Fail to setup the widget, call FinishFullscreenChange to
-      // complete fullscreen change directly.
-      const RefPtr<nsGlobalWindowOuter> win = mWindow;
-      win->FinishFullscreenChange(mFullscreen);
-    }
+    // Toggle the fullscreen state on the widget. If the widget refuses,
+    // TryMakeWidgetFullscreen() finishes the fullscreen change for us, but we
+    // still have to run the remaining stages to undo the transition effect.
+    const RefPtr<nsGlobalWindowOuter> win = mWindow;
+    const nsCOMPtr<nsIWidget> widget = mWidget;
+    win->TryMakeWidgetFullscreen(FullscreenReason::ForFullscreenAPI,
+                                 mFullscreen, widget);
     // Set observer for the next content paint.
     nsCOMPtr<nsIObserver> observer = new Observer(this);
     nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
@@ -4184,8 +4184,10 @@ FullscreenTransitionTask::Observer::GetName(nsACString& aName) {
   return NS_OK;
 }
 
-static bool MakeWidgetFullscreen(nsGlobalWindowOuter* aWindow,
-                                 FullscreenReason aReason, bool aFullscreen) {
+// Returns false if the request could not be handed over to the widget at all,
+// in which case the caller is responsible for finishing the fullscreen change.
+MOZ_CAN_RUN_SCRIPT static bool MakeWidgetFullscreen(
+    nsGlobalWindowOuter* aWindow, FullscreenReason aReason, bool aFullscreen) {
   nsCOMPtr<nsIWidget> widget = aWindow->GetMainWidget();
   if (!widget) {
     return false;
@@ -4203,7 +4205,8 @@ static bool MakeWidgetFullscreen(nsGlobalWindowOuter* aWindow,
   }
 
   if (!performTransition) {
-    return aWindow->SetWidgetFullscreen(aReason, aFullscreen, widget);
+    aWindow->TryMakeWidgetFullscreen(aReason, aFullscreen, widget);
+    return true;
   }
 
   nsCOMPtr<nsIRunnable> task = new FullscreenTransitionTask(
@@ -4224,28 +4227,19 @@ nsresult nsGlobalWindowOuter::ProcessWidgetFullscreenRequest(
     appWin->SetIntrinsicallySized(false);
   }
 
-  // Sometimes we don't want the top-level widget to actually go fullscreen:
-  // - in the B2G desktop client, we don't want the emulated screen dimensions
-  //   to appear to increase when entering fullscreen mode; we just want the
-  //   content to fill the entire client area of the emulator window.
-  // - in FxR Desktop, we don't want fullscreen to take over the monitor, but
-  //   instead we want fullscreen to fill the FxR window in the the headset.
-  if (!StaticPrefs::full_screen_api_ignore_widgets() &&
-      !mForceFullScreenInWidget) {
+  // In the B2G desktop client, we don't want the emulated screen dimensions to
+  // appear to increase when entering fullscreen mode; we just want the content
+  // to fill the entire client area of the emulator window.
+  if (!StaticPrefs::full_screen_api_ignore_widgets()) {
     if (MakeWidgetFullscreen(this, aReason, aFullscreen)) {
       // The rest of code for switching fullscreen is in nsGlobalWindowOuter::
       // FinishFullscreenChange() which will be called after sizemodechange
-      // event is dispatched.
+      // event is dispatched, or directly by TryMakeWidgetFullscreen() if the
+      // widget refused the change.
       return NS_OK;
     }
   }
 
-#if defined(NIGHTLY_BUILD) && defined(XP_WIN)
-  if (FxRWindowManager::GetInstance()->IsFxRWindow(mWindowID)) {
-    mozilla::gfx::VRShMem shmem(nullptr, true /*aRequiresMutex*/);
-    shmem.SendFullscreenState(mWindowID, aFullscreen);
-  }
-#endif  // NIGHTLY_BUILD && XP_WIN
   FinishFullscreenChange(aFullscreen);
   return NS_OK;
 }
@@ -4372,17 +4366,9 @@ nsresult nsGlobalWindowOuter::SetFullscreenInternal(FullscreenReason aReason,
   return ProcessWidgetFullscreenRequest(aReason, aFullscreen);
 }
 
-// Support a per-window, dynamic equivalent of enabling
-// full-screen-api.ignore-widgets
-void nsGlobalWindowOuter::ForceFullScreenInWidget() {
-  MOZ_DIAGNOSTIC_ASSERT(XRE_IsParentProcess());
-
-  mForceFullScreenInWidget = true;
-}
-
-bool nsGlobalWindowOuter::SetWidgetFullscreen(FullscreenReason aReason,
-                                              bool aIsFullscreen,
-                                              nsIWidget* aWidget) {
+bool nsGlobalWindowOuter::TryMakeWidgetFullscreen(FullscreenReason aReason,
+                                                  bool aIsFullscreen,
+                                                  nsIWidget* aWidget) {
   MOZ_ASSERT(this == GetInProcessTopInternal(),
              "Only topmost window should call this");
   MOZ_ASSERT(!GetFrameElementInternal(), "Content window should not call this");
@@ -4406,7 +4392,20 @@ bool nsGlobalWindowOuter::SetWidgetFullscreen(FullscreenReason aReason,
                     // the native system behavior.
                     aWidget->MakeFullScreenWithNativeTransition(aIsFullscreen)
                     : aWidget->MakeFullScreen(aIsFullscreen);
-  return NS_SUCCEEDED(rv);
+  if (NS_FAILED(rv)) {
+    if (!NS_WARN_IF(!IsChromeWindow())) {
+      if (RefPtr<PresShell> presShell =
+              do_QueryReferent(mChromeFields.mFullscreenPresShell)) {
+        if (nsRefreshDriver* rd = presShell->GetRefreshDriver()) {
+          rd->Thaw();
+        }
+        mChromeFields.mFullscreenPresShell = nullptr;
+      }
+    }
+    FinishFullscreenChange(!aIsFullscreen);
+    return false;
+  }
+  return true;
 }
 
 /* virtual */
@@ -4428,8 +4427,7 @@ void nsGlobalWindowOuter::FullscreenWillChange(bool aIsFullscreen) {
       // fullscreen state, e.g. browser goes into fullscreen when widget
       // fullscreen is prevented, and then user triggers fullscreen from the OS
       // directly again.
-      MOZ_ASSERT(StaticPrefs::full_screen_api_ignore_widgets() ||
-                     mForceFullScreenInWidget,
+      MOZ_ASSERT(StaticPrefs::full_screen_api_ignore_widgets(),
                  "This should only happen when widget fullscreen is prevented");
     }
   }
@@ -5514,7 +5512,7 @@ void nsGlobalWindowOuter::SizeToContentOuter(
     return;
   }
 
-  if (mBrowsingContext->IsSubframe()) {
+  if (mBrowsingContext->IsSubframe() || mBrowsingContext->IsContent()) {
     return;
   }
 
@@ -7021,7 +7019,7 @@ nsresult nsGlobalWindowOuter::OpenInternal(
   // success!
 
   if (!aCalledNoScript && !windowExists && uri && !forceNoOpener) {
-    MaybeAllowStorageForOpenedWindow(uri);
+    MaybeAllowStorageForOpenedWindow(this, uri);
   }
 
   if (domReturn && aDoJSFixups) {
@@ -7042,42 +7040,6 @@ nsresult nsGlobalWindowOuter::OpenInternal(
 
   domReturn.forget(aReturn);
   return NS_OK;
-}
-
-void nsGlobalWindowOuter::MaybeAllowStorageForOpenedWindow(nsIURI* aURI) {
-  nsGlobalWindowInner* inner = GetCurrentInnerWindowInternal(this);
-  if (NS_WARN_IF(!inner)) {
-    return;
-  }
-
-  // Don't trigger the heuristic for third-party trackers.
-  if (StaticPrefs::
-          privacy_restrict3rdpartystorage_heuristic_exclude_third_party_trackers() &&
-      nsContentUtils::IsThirdPartyTrackingResourceWindow(inner)) {
-    return;
-  }
-
-  // No 3rd party URL/window.
-  if (!AntiTrackingUtils::IsThirdPartyWindow(inner, aURI)) {
-    return;
-  }
-
-  Document* doc = inner->GetDoc();
-  if (!doc) {
-    return;
-  }
-  nsCOMPtr<nsIPrincipal> principal = BasePrincipal::CreateContentPrincipal(
-      aURI, doc->NodePrincipal()->OriginAttributesRef());
-
-  // We don't care when the asynchronous work finishes here.
-  // Without e10s or fission enabled this is run in the parent process.
-  if (XRE_IsParentProcess()) {
-    (void)StorageAccessAPIHelper::AllowAccessForOnParentProcess(
-        principal, GetBrowsingContext(), ContentBlockingNotifier::eOpener);
-  } else {
-    (void)StorageAccessAPIHelper::AllowAccessForOnChildProcess(
-        principal, GetBrowsingContext(), ContentBlockingNotifier::eOpener);
-  }
 }
 
 //*****************************************************************************

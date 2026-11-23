@@ -8,19 +8,18 @@
  */
 
 import { UrlbarProvider } from "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
-const lazy = {};
-
-// Default icon shown for actions if no custom one is provided.
-const DEFAULT_ICON = "chrome://global/skin/icons/settings.svg";
-const DYNAMIC_TYPE_NAME = "actions";
-
-ChromeUtils.defineESModuleGetters(lazy, {
+const lazy = XPCOMUtils.declareLazy({
   ActionsProviderQuickActions:
     "moz-src:///browser/components/urlbar/ActionsProviderQuickActions.sys.mjs",
   UrlbarResult: "chrome://browser/content/urlbar/UrlbarResult.mjs",
   UrlbarShared: "chrome://browser/content/urlbar/UrlbarShared.mjs",
 });
+
+// Default icon shown for actions if no custom one is provided.
+const DEFAULT_ICON = "chrome://global/skin/icons/settings.svg";
+const DYNAMIC_TYPE_NAME = "actions";
 
 /**
  * A provider that lets the user view all available actions while in searchMode.
@@ -138,9 +137,9 @@ export class UrlbarProviderActionsSearchMode extends UrlbarProvider {
     let action = lazy.ActionsProviderQuickActions.getAction(result.payload.key);
 
     return {
-      label: {
-        l10n: { id: action.label },
-      },
+      label: action.label
+        ? { l10n: { id: action.label } }
+        : { textContent: action.labelText ?? "" },
     };
   }
 }

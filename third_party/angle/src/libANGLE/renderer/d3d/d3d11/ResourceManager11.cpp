@@ -446,7 +446,8 @@ static_assert(kResourceTypeErrors[NumResourceTypes - 1] != nullptr,
 }  // anonymous namespace
 
 // ResourceManager11 Implementation.
-ResourceManager11::ResourceManager11() : mInitializeAllocations(false)
+ResourceManager11::ResourceManager11(Renderer11 *renderer)
+    : mRenderer(renderer), mInitializeAllocations(false)
 {
     for (auto &count : mAllocatedResourceCounts)
     {
@@ -479,7 +480,7 @@ angle::Result ResourceManager11::allocate(d3d::Context *context,
                                           Resource11<T> *resourceOut)
 {
     ID3D11Device *device = renderer->getDevice();
-    T *resource          = nullptr;
+    angle::ComPtr<T> resource;
 
     GetInitDataFromD3D11<T> *shadowInitData = initData;
     if (!shadowInitData && mInitializeAllocations)
@@ -492,12 +493,12 @@ angle::Result ResourceManager11::allocate(d3d::Context *context,
 
     if (!shadowInitData && mInitializeAllocations)
     {
-        ANGLE_TRY(ClearResource(context, renderer, desc, resource));
+        ANGLE_TRY(ClearResource(context, renderer, desc, resource.Get()));
     }
 
     ASSERT(resource);
     incrResource(GetResourceTypeFromD3D11<T>(), ComputeMemoryUsage(desc));
-    *resourceOut = std::move(Resource11<T>(resource, this));
+    *resourceOut = std::move(Resource11<T>(std::move(resource), this));
     return angle::Result::Continue;
 }
 
@@ -526,6 +527,15 @@ void ResourceManager11::decrResource(ResourceType resourceType, uint64_t memoryS
 void ResourceManager11::onReleaseGeneric(ResourceType resourceType, ID3D11DeviceChild *resource)
 {
     ASSERT(resource);
+    // Only Buffer needs to notify StateManager11 here: mCurrentVertexBuffers and mAppliedIB are the
+    // only caches in StateManager11 that store raw COM pointers and re-submit cached slots to D3D11
+    // (via IASetVertexBuffers). Other resource types (textures/views, shaders, input layouts, and
+    // state objects) are tracked via integer serials or value structs and never re-submit cached
+    // pointers to D3D11.
+    if (resourceType == ResourceType::Buffer)
+    {
+        mRenderer->getStateManager()->onReleaseBuffer(static_cast<ID3D11Buffer *>(resource));
+    }
     decrResource(resourceType, ComputeGenericMemoryUsage(resourceType, resource));
 }
 

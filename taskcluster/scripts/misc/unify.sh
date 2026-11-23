@@ -16,6 +16,14 @@ $GECKO_PATH/mach python -m mozbuild.action.make_dmg x64 target.dmg
 mkdir -p $UPLOAD_DIR
 mv target.dmg $UPLOAD_DIR/
 
+for i in x64:x86_64 aarch64:aarch64; do
+    for sbom in sbom sbom-build-tooling; do
+        if [ -f $MOZ_FETCHES_DIR/${i%:*}/$sbom.json ]; then
+            mv $MOZ_FETCHES_DIR/${i%:*}/$sbom.json $UPLOAD_DIR/$sbom-${i#*:}.json
+        fi
+    done
+done
+
 python3 -c '
 import json
 import os
@@ -24,7 +32,7 @@ for artifact in json.loads(os.environ["MOZ_FETCHES"]):
     if artifact.get("extract") and artifact.get("dest", "").startswith("x64"):
         print(artifact["dest"], os.path.basename(artifact["artifact"]))
 ' | while read dir artifact; do
-    if [ "$artifact" = target.crashreporter-symbols.zip ]; then
+    if [ "$artifact" = target.crashreporter-symbols.zip ] || [ "$artifact" = target.crashreporter-symbols-gtest.zip ]; then
         $GECKO_PATH/mach python $GECKO_PATH/python/mozbuild/mozbuild/action/unify_symbols.py $MOZ_FETCHES_DIR/$dir $MOZ_FETCHES_DIR/aarch64${dir#x64}
     else
         $GECKO_PATH/mach python $GECKO_PATH/python/mozbuild/mozbuild/action/unify_tests.py $MOZ_FETCHES_DIR/$dir $MOZ_FETCHES_DIR/aarch64${dir#x64}

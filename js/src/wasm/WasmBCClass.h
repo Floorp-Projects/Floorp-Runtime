@@ -954,25 +954,21 @@ struct BaseCompiler final {
   // `Nothing` means the map is for a call; `Some(t)` means it is for a trap of
   // kind `t`.  See further comments on StackMapGenerator::createStackMap.
 
-  // Create a vanilla stackmap.
-  [[nodiscard]] bool createStackMap(Maybe<Trap> reason);
-
-  // Create a stackmap as vanilla, but for a custom assembler offset.
-  [[nodiscard]] bool createStackMap(Maybe<Trap> reason,
-                                    CodeOffset assemblerOffset);
-
-  // Create a stack map as vanilla, and note the presence of a ref-typed
-  // DebugFrame on the stack.
-  [[nodiscard]] bool createStackMap(
-      Maybe<Trap> reason, HasDebugFrameWithLiveRefs debugFrameWithLiveRefs);
-
-  // Create a stackmap for the instruction described by `insnRange`, and note
-  // the presence of a ref-typed DebugFrame on the stack.  The stackmap will be
-  // keyed to `insnRange.resumeOffset()`.  Prefer this method over the above 3,
-  // which are regarded as "legacy" and should be phased out.
+  // Create a stackmap for the instruction described by `insnRange`, and
+  // optionally note the presence of a ref-typed DebugFrame on the stack.  The
+  // stackmap will be keyed to `insnRange.resumeOffset()`.
   [[nodiscard]] bool createStackMap(
       Maybe<Trap> reason, FaultingCodeRange insnRange,
-      HasDebugFrameWithLiveRefs debugFrameWithLiveRefs);
+      HasDebugFrameWithLiveRefs debugFrameWithLiveRefs =
+          HasDebugFrameWithLiveRefs::No);
+
+  // The same, but key the map to `resumeOffset`.  Try to use the
+  // FaultingCodeRange variant in preference to this one, which is regarded as
+  // "legacy" and should be phased out.
+  [[nodiscard]] bool createStackMap(
+      Maybe<Trap> reason, CodeOffset resumeOffset,
+      HasDebugFrameWithLiveRefs debugFrameWithLiveRefs =
+          HasDebugFrameWithLiveRefs::No);
 
   // When compiling for debugging, creates a stack map for a non-resuming trap
   // instruction of kind `t1`, and, if specified, `t2`.  When not compiling for
@@ -995,8 +991,9 @@ struct BaseCompiler final {
   // Debugger API
 
   // Insert a breakpoint almost anywhere.  This will create a call, with all the
-  // overhead that entails.
-  void insertBreakablePoint(CallSiteKind kind);
+  // overhead that entails.  Returned value is the return offset of the call
+  // that gets baked into the generated sequence.
+  [[nodiscard]] CodeOffset insertBreakablePoint(CallSiteKind kind);
 
   // Insert code at the end of a function for breakpoint filtering.
   void insertPerFunctionDebugStub();
@@ -1152,10 +1149,6 @@ struct BaseCompiler final {
   // Emit a table switch, `theTable` is the jump table.
   void tableSwitch(Label* theTable, RegI32 switchValue, Label* dispatchCode);
 
-  // Compare i64 and set an i32 boolean result according to the condition.
-  inline void cmp64Set(Assembler::Condition cond, RegI64 lhs, RegI64 rhs,
-                       RegI32 dest);
-
   // Round floating to integer.
   [[nodiscard]] inline bool supportsRoundInstruction(RoundingMode mode);
   inline void roundF32(RoundingMode roundingMode, RegF32 f0);
@@ -1234,7 +1227,20 @@ struct BaseCompiler final {
   //
   // Global variable access.
 
-  Address addressOfGlobalVar(const GlobalDesc& global, RegPtr tmp);
+  // The address of a global variable, together with the scratch register it is
+  // based on when it needs one. Construct it as a temporary or local that
+  // outlives the access.
+  class GlobalVarAddress {
+    Maybe<ScratchPtr> tmp_;
+    Address address_;
+
+    Address init(BaseCompiler& bc, const GlobalDesc& global);
+
+   public:
+    GlobalVarAddress(BaseCompiler& bc, const GlobalDesc& global)
+        : address_(init(bc, global)) {}
+    operator Address() const { return address_; }
+  };
 
   //////////////////////////////////////////////////////////////////////
   //
@@ -1387,10 +1393,11 @@ struct BaseCompiler final {
   inline TrapSiteDesc trapSiteDesc() const;
 
   // Generate a trap instruction for the current bytecodeOffset.
-  inline void trap(Trap t);
+  inline FaultingCodeRange trap(Trap t);
 
   // Generate a trap instruction for given location and stack map.
-  inline void trap(Trap t, const TrapSiteDesc& trapSite, StackMap* stackMap);
+  inline FaultingCodeRange trap(Trap t, const TrapSiteDesc& trapSite,
+                                StackMap* stackMap);
 
   // Abstracted helper for throwing, used for throw, rethrow, and rethrowing
   // at the end of a series of catch blocks (if none matched the exception).

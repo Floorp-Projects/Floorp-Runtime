@@ -130,7 +130,8 @@ bool Rule::IsIncompleteImportRule() const {
   if (Type() != StyleCssRuleType::Import) {
     return false;
   }
-  auto* sheet = static_cast<const dom::CSSImportRule*>(this)->GetStyleSheet();
+  auto* sheet =
+      static_cast<const dom::CSSImportRule*>(this)->GetImportedSheet();
   return !sheet || !sheet->IsComplete();
 }
 
@@ -145,6 +146,10 @@ auto Rule::GetContainingRuleStateForParsing() const -> ContainingRuleState {
     }
   }
   return result;
+}
+
+bool Rule::SupportsDeclarations() {
+  return Servo_RuleType_Supports_Declarations(Type());
 }
 
 }  // namespace mozilla::css

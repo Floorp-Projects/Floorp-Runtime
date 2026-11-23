@@ -755,47 +755,6 @@ void TType::realize()
     getMangledName();
 }
 
-void TType::createSamplerSymbols(const ImmutableString &namePrefix,
-                                 const TString &apiNamePrefix,
-                                 TVector<const TVariable *> *outputSymbols,
-                                 TMap<const TVariable *, TString> *outputSymbolsToAPINames,
-                                 TSymbolTable *symbolTable) const
-{
-    if (isStructureContainingSamplers())
-    {
-        if (isArray())
-        {
-            TType elementType(*this);
-            elementType.toArrayElementType();
-            for (unsigned int arrayIndex = 0u; arrayIndex < getOutermostArraySize(); ++arrayIndex)
-            {
-                std::stringstream elementName = sh::InitializeStream<std::stringstream>();
-                elementName << namePrefix << "_" << arrayIndex;
-                TStringStream elementApiName;
-                elementApiName << apiNamePrefix << "[" << arrayIndex << "]";
-                elementType.createSamplerSymbols(ImmutableString(elementName.str()),
-                                                 elementApiName.str(), outputSymbols,
-                                                 outputSymbolsToAPINames, symbolTable);
-            }
-        }
-        else
-        {
-            mStructure->createSamplerSymbols(namePrefix.data(), apiNamePrefix, outputSymbols,
-                                             outputSymbolsToAPINames, symbolTable);
-        }
-        return;
-    }
-
-    ASSERT(IsSampler(type));
-    TVariable *variable =
-        new TVariable(symbolTable, namePrefix, new TType(*this), SymbolType::AngleInternal);
-    outputSymbols->push_back(variable);
-    if (outputSymbolsToAPINames)
-    {
-        (*outputSymbolsToAPINames)[variable] = apiNamePrefix;
-    }
-}
-
 TFieldListCollection::TFieldListCollection(const TFieldList *fields)
     : mFields(fields), mObjectSize(0), mDeepestNesting(0)
 {}
@@ -926,8 +885,10 @@ const TString &TFieldListCollection::mangledFieldList() const
 int TFieldListCollection::calculateDeepestNesting() const
 {
     int maxNesting = 0;
-    for (size_t i = 0; i < mFields->size(); ++i)
-        maxNesting = std::max(maxNesting, (*mFields)[i]->type()->getDeepestStructNesting());
+    for (const TField *field : *mFields)
+    {
+        maxNesting = std::max(maxNesting, field->type()->getDeepestStructNesting());
+    }
     return 1 + maxNesting;
 }
 

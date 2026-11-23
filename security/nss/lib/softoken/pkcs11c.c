@@ -2369,9 +2369,6 @@ sftk_doMACInit(CK_MECHANISM_TYPE mech, SFTKSessionContext *session,
         return crv;
     }
 
-    session->hashInfo = context;
-    session->multi = PR_TRUE;
-
     /* Required by FIPS 198 Section 4. Delay this check until after the MAC
      * has been initialized to steal the output size of the MAC. */
     if (isFIPS && (mac_size < 4 || mac_size < context->mac_size / 2)) {
@@ -2379,19 +2376,22 @@ sftk_doMACInit(CK_MECHANISM_TYPE mech, SFTKSessionContext *session,
         return CKR_BUFFER_TOO_SMALL;
     }
 
-    /* Configure our helper functions appropriately. Note that these casts
-     * ignore the return values. */
-    session->hashUpdate = SFTKHash_sftk_MAC_Update;
-    session->end = SFTKHash_sftk_MAC_End;
-    session->hashdestroy = SFTKHash_sftk_MAC_DestroyContext;
-
     intpointer = PORT_New(CK_ULONG);
     if (intpointer == NULL) {
         sftk_MAC_DestroyContext(context, PR_TRUE);
         return CKR_HOST_MEMORY;
     }
     *intpointer = mac_size;
+
     session->cipherInfo = intpointer;
+    session->hashInfo = context;
+    session->multi = PR_TRUE;
+
+    /* Configure our helper functions appropriately. Note that these casts
+     * ignore the return values. */
+    session->hashUpdate = SFTKHash_sftk_MAC_Update;
+    session->end = SFTKHash_sftk_MAC_End;
+    session->hashdestroy = SFTKHash_sftk_MAC_DestroyContext;
 
     /* Since we're only "hashing", copy the result from session->end to the
      * caller using sftk_SignCopy. */
@@ -7188,7 +7188,7 @@ sftk_PackagePrivateKey(SFTKObject *key, CK_RV *crvp)
             lk->u.genpq.keyItem = rawKey;
             if (seed.len) {
                 dummy = SEC_ASN1EncodeItem(arena, &pki->privateKey, lk,
-                                           nsslowkey_PQBothSeedAndPrivateKeyTemplate);
+                                           nsslowkey_PQSeedTemplate);
             } else {
                 dummy = SEC_ASN1EncodeItem(arena, &pki->privateKey, lk,
                                            nsslowkey_PQPrivateKeyTemplate);
@@ -7246,7 +7246,7 @@ sftk_PackagePrivateKey(SFTKObject *key, CK_RV *crvp)
 
             if (seed.len) {
                 dummy = SEC_ASN1EncodeItem(arena, &pki->privateKey, lk,
-                                           nsslowkey_PQBothSeedAndPrivateKeyTemplate);
+                                           nsslowkey_PQSeedTemplate);
             } else {
                 dummy = SEC_ASN1EncodeItem(arena, &pki->privateKey, lk,
                                            nsslowkey_PQPrivateKeyTemplate);
@@ -7583,6 +7583,11 @@ sftk_unwrapPrivateKey(SFTKObject *key, SECItem *bpki)
         mldsa_next:
             lpk->keyType = NSSLOWKEYMLDSAKey;
         pq_next:
+            /* RFC 9881 and RFC 9935: the parameters MUST be absent. */
+            if (pki->algorithm.parameters.len != 0) {
+                PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+                goto loser;
+            }
             if (pki->privateKey.data == NULL || pki->privateKey.len == 0) {
                 PORT_SetError(SEC_ERROR_BAD_KEY);
                 goto loser;
@@ -7829,12 +7834,10 @@ sftk_unwrapPrivateKey(SFTKObject *key, SECItem *bpki)
             ec_sign = CK_TRUE;
             /* if we weren't passed the CKA_NSS_DB, get it
              * from the public key. only do this for
-             * CKK_EC keys. */
-            if (!sftk_hasAttribute(key, CKA_NSS_DB)) {
-                if (lpk->u.ec.publicValue.len == 0) {
-                    crv = CKR_KEY_TYPE_INCONSISTENT;
-                    goto loser;
-                }
+             * CKK_EC keys. If that is absent too, sftk_mkPrivKey derives
+             * it, as it does for C_CreateObject. */
+            if (!sftk_hasAttribute(key, CKA_NSS_DB) &&
+                lpk->u.ec.publicValue.len != 0) {
                 crv = sftk_AddAttributeType(key, CKA_NSS_DB,
                                             sftk_item_expand(&lpk->u.ec.publicValue));
                 if (crv != CKR_OK) {

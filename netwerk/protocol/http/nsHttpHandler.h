@@ -16,6 +16,7 @@
 #include "mozilla/StaticPtr.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/net/Dictionary.h"
+#include "mozilla/net/HttpActivityArgs.h"
 #include "mozilla/net/HttpConnectionMgrShell.h"
 #include "nsCOMPtr.h"
 #include "nsHttp.h"
@@ -54,17 +55,14 @@ namespace mozilla::net {
 
 class ATokenBucketEvent;
 class EventTokenBucket;
-class HttpActivityArgs;
 class Tickler;
 class nsHttpConnection;
 class nsHttpConnectionInfo;
 class HttpBaseChannel;
-class HttpHandlerInitArgs;
 class HttpTransactionShell;
 class AltSvcMapping;
 class DNSUtils;
 class TRRServiceChannel;
-class SocketProcessChild;
 
 /*
  * FRAMECHECK_LAX - no check
@@ -121,7 +119,8 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
 
   [[nodiscard]] nsresult AddAcceptAndDictionaryHeaders(
       nsIURI* aURI, ExtContentPolicyType aType, nsHttpRequestHead* aRequest,
-      bool aSecure, nsHttpChannel* aChan, void (*aSuspend)(nsHttpChannel*),
+      bool aAllowDictionaries, nsHttpChannel* aChan,
+      void (*aSuspend)(nsHttpChannel*),
       const std::function<bool(bool, DictionaryCacheEntry*)>& aCallback);
   [[nodiscard]] nsresult AddStandardRequestHeaders(
       nsHttpRequestHead*, nsIURI* aURI, bool aIsHTTPS,
@@ -229,10 +228,7 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   nsHttpAuthCache* AuthCache(bool aPrivate) {
     return aPrivate ? mPrivateAuthCache : mAuthCache;
   }
-  nsHttpConnectionMgr* ConnMgr() {
-    MOZ_ASSERT_IF(nsIOService::UseSocketProcess(), XRE_IsSocketProcess());
-    return mConnMgr->AsHttpConnectionMgr();
-  }
+  nsHttpConnectionMgr* ConnMgr() { return mConnMgr->AsHttpConnectionMgr(); }
 
   AltSvcCache* AltServiceCache() const {
     MOZ_ASSERT(XRE_IsParentProcess());
@@ -316,7 +312,8 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
                                             uint32_t caps,
                                             SpeculativeTransaction* aTrans);
 
-  // Alternate Services Maps are main thread only
+  // Alternate Services Maps are updated on the main thread, but they can also
+  // be read on the TRR thread.
   void UpdateAltServiceMapping(AltSvcMapping* map, nsProxyInfo* proxyInfo,
                                nsIInterfaceRequestor* callbacks, uint32_t caps,
                                const OriginAttributes& originAttributes) {
@@ -468,7 +465,8 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   const nsCString& Http3QlogDir();
 
   float FocusedWindowTransactionRatio() const {
-    return mFocusedWindowTransactionRatio;
+    auto ratio = mFocusedWindowTransactionRatio.Lock();
+    return *ratio;
   }
 
   // Called when an optimization feature affecting active vs background tab load
@@ -484,6 +482,9 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   nsresult CompleteUpgrade(HttpTransactionShell* aTrans,
                            nsIHttpUpgradeListener* aUpgradeListener);
 
+  // Used for force-reloads: closes idle persistent connections and prevents
+  // reuse of active ones whose origin attributes match aCI, then resets aCI's
+  // Happy Eyeballs IP family preference.
   nsresult DoShiftReloadConnectionCleanupWithConnInfo(
       nsHttpConnectionInfo* aCI);
 
@@ -539,10 +540,6 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
 
   void NotifyObservers(nsIChannel* chan, const char* event);
 
-  friend class SocketProcessChild;
-  void SetHttpHandlerInitArgs(const HttpHandlerInitArgs& aArgs);
-  void SetDeviceModelId(const nsACString& aModelId);
-
   // We only allow DNSUtils and TRRServiceChannel itself to create
   // TRRServiceChannel.
   friend class TRRServiceChannel;
@@ -578,22 +575,22 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   // prefs
   //
 
-  enum HttpVersion mHttpVersion { HttpVersion::v1_1 };
-  enum HttpVersion mProxyHttpVersion { HttpVersion::v1_1 };
+  Atomic<enum HttpVersion, Relaxed> mHttpVersion{HttpVersion::v1_1};
+  Atomic<enum HttpVersion, Relaxed> mProxyHttpVersion{HttpVersion::v1_1};
   uint32_t mCapabilities{NS_HTTP_ALLOW_KEEPALIVE};
 
-  bool mFastFallbackToIPv4{false};
-  PRIntervalTime mIdleTimeout;
-  PRIntervalTime mSpdyTimeout;
-  PRIntervalTime mResponseTimeout;
+  Atomic<bool, Relaxed> mFastFallbackToIPv4{false};
+  Atomic<PRIntervalTime, Relaxed> mIdleTimeout;
+  Atomic<PRIntervalTime, Relaxed> mSpdyTimeout;
+  Atomic<PRIntervalTime, Relaxed> mResponseTimeout;
   Atomic<bool, Relaxed> mResponseTimeoutEnabled{false};
-  uint32_t mNetworkChangedTimeout{5000};  // milliseconds
-  uint16_t mMaxRequestAttempts{6};
+  Atomic<uint32_t, Relaxed> mNetworkChangedTimeout{5000};  // milliseconds
+  Atomic<uint32_t, Relaxed> mMaxRequestAttempts{6};
   uint16_t mMaxRequestDelay{10};
-  uint16_t mIdleSynTimeout{250};
-  uint16_t mFallbackSynTimeout{5};  // seconds
+  Atomic<uint32_t, Relaxed> mIdleSynTimeout{250};
+  Atomic<uint32_t, Relaxed> mFallbackSynTimeout{5};  // seconds
 
-  bool mH2MandatorySuiteEnabled{false};
+  Atomic<bool, Relaxed> mH2MandatorySuiteEnabled{false};
   uint16_t mMaxUrgentExcessiveConns{3};
   uint16_t mMaxConnections{24};
   uint8_t mMaxPersistentConnectionsPerServer{2};
@@ -618,7 +615,7 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
 
   bool mBeConservativeForProxy{true};
 
-  uint8_t mQoSBits{0x00};
+  Atomic<uint32_t, Relaxed> mQoSBits{0x00};
 
   bool mEnforceAssocReq{false};
 
@@ -678,65 +675,68 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   // The value of 'hidden' network.http.debug-observations : 1;
   uint32_t mDebugObservations : 1;
 
-  uint32_t mEnableAltSvc : 1;
+  Atomic<bool, Relaxed> mEnableAltSvc{false};
 
   // Try to use SPDY features instead of HTTP/1.1 over SSL
   SpdyInformation mSpdyInfo;
 
-  uint32_t mSpdySendingChunkSize{ASpdySession::kSendingChunkSize};
-  uint32_t mSpdySendBufferSize{ASpdySession::kTCPSendBufferSize};
-  uint32_t mSpdyPushAllowance{
+  Atomic<uint32_t, Relaxed> mSpdySendingChunkSize{
+      ASpdySession::kSendingChunkSize};
+  Atomic<uint32_t, Relaxed> mSpdySendBufferSize{
+      ASpdySession::kTCPSendBufferSize};
+  Atomic<uint32_t, Relaxed> mSpdyPushAllowance{
       ASpdySession::kInitialPushAllowance};  // match default pref
-  uint32_t mSpdyPullAllowance{ASpdySession::kInitialRwin};
-  uint32_t mDefaultSpdyConcurrent{ASpdySession::kDefaultMaxConcurrent};
-  PRIntervalTime mSpdyPingThreshold;
-  PRIntervalTime mSpdyPingTimeout;
+  Atomic<uint32_t, Relaxed> mSpdyPullAllowance{ASpdySession::kInitialRwin};
+  Atomic<uint32_t, Relaxed> mDefaultSpdyConcurrent{
+      ASpdySession::kDefaultMaxConcurrent};
+  Atomic<PRIntervalTime, Relaxed> mSpdyPingThreshold;
+  Atomic<PRIntervalTime, Relaxed> mSpdyPingTimeout;
 
   // The maximum amount of time to wait for socket transport to be
   // established. In milliseconds.
-  uint32_t mConnectTimeout{90000};
+  Atomic<uint32_t, Relaxed> mConnectTimeout{90000};
 
   // The maximum amount of time to wait for a tls handshake to be
   // established. In milliseconds.
-  uint32_t mTLSHandshakeTimeout{30000};
+  Atomic<uint32_t, Relaxed> mTLSHandshakeTimeout{30000};
 
   // The maximum number of current global half open sockets allowable
   // when starting a new speculative connection.
-  uint32_t mParallelSpeculativeConnectLimit{6};
+  Atomic<uint32_t, Relaxed> mParallelSpeculativeConnectLimit{6};
 
   // For Rate Pacing of HTTP/1 requests through a netwerk/base/EventTokenBucket
   // Active requests <= *MinParallelism are not subject to the rate pacing
-  bool mRequestTokenBucketEnabled{true};
+  Atomic<bool, Relaxed> mRequestTokenBucketEnabled{true};
   uint16_t mRequestTokenBucketMinParallelism{6};
   uint32_t mRequestTokenBucketHz{100};    // EventTokenBucket HZ
   uint32_t mRequestTokenBucketBurst{32};  // EventTokenBucket Burst
 
   // Whether or not to block requests for non head js/css items (e.g. media)
   // while those elements load.
-  bool mCriticalRequestPrioritization{true};
+  Atomic<bool, Relaxed> mCriticalRequestPrioritization{true};
 
   // TCP Keepalive configuration values.
 
   // True if TCP keepalive is enabled for short-lived conns.
-  bool mTCPKeepaliveShortLivedEnabled{false};
+  Atomic<bool, Relaxed> mTCPKeepaliveShortLivedEnabled{false};
   // Time (secs) indicating how long a conn is considered short-lived.
-  int32_t mTCPKeepaliveShortLivedTimeS{60};
+  Atomic<int32_t, Relaxed> mTCPKeepaliveShortLivedTimeS{60};
   // Time (secs) before first keepalive probe; between successful probes.
-  int32_t mTCPKeepaliveShortLivedIdleTimeS{10};
+  Atomic<int32_t, Relaxed> mTCPKeepaliveShortLivedIdleTimeS{10};
 
   // True if TCP keepalive is enabled for long-lived conns.
-  bool mTCPKeepaliveLongLivedEnabled{false};
+  Atomic<bool, Relaxed> mTCPKeepaliveLongLivedEnabled{false};
   // Time (secs) before first keepalive probe; between successful probes.
-  int32_t mTCPKeepaliveLongLivedIdleTimeS{600};
+  Atomic<int32_t, Relaxed> mTCPKeepaliveLongLivedIdleTimeS{600};
 
   // if true, generate NS_ERROR_PARTIAL_TRANSFER for h1 responses with
   // incorrect content lengths or malformed chunked encodings
-  FrameCheckLevel mEnforceH1Framing{FRAMECHECK_BARELY};
+  Atomic<FrameCheckLevel, Relaxed> mEnforceH1Framing{FRAMECHECK_BARELY};
 
   nsCOMPtr<nsIRequestContextService> mRequestContextService;
 
   // The default size (in bytes) of the HPACK decompressor table.
-  uint32_t mDefaultHpackBuffer{4096};
+  Atomic<uint32_t, Relaxed> mDefaultHpackBuffer{4096};
 
   // Http3 parameters
   Atomic<uint32_t, Relaxed> mQpackTableSize{4096};
@@ -746,7 +746,8 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   nsCString mHttp3QlogDir;
 
   // The ratio for dispatching transactions from the focused window.
-  float mFocusedWindowTransactionRatio{0.9f};
+  mutable DataMutex<float> mFocusedWindowTransactionRatio{
+      0.9f, "nsHttpHandler::FocusedWindowTransactionRatio"};
 
   HttpTrafficAnalyzer mHttpTrafficAnalyzer;
 

@@ -97,10 +97,6 @@ TestHangReport.prototype = {
   },
 };
 
-// on dev edition we add a button for js debugging of hung scripts.
-let buttonCount =
-  AppConstants.MOZ_DEV_EDITION || AppConstants.NIGHTLY_BUILD ? 2 : 1;
-
 add_setup(async function () {
   // Create a fake WebExtensionPolicy that we can use for
   // the add-on hang notification.
@@ -136,7 +132,7 @@ add_task(async function terminateScriptTest() {
     notification.currentNotification.buttonContainer.getElementsByTagName(
       "button"
     );
-  is(buttons.length, buttonCount, "proper number of buttons");
+  is(buttons.length, 1, "Only one button displayed");
 
   // Click the "Stop" button, we should get a terminate script callback
   buttons[0].click();
@@ -167,7 +163,7 @@ add_task(async function waitForScriptTest() {
     notification.currentNotification.buttonContainer.getElementsByTagName(
       "button"
     );
-  is(buttons.length, buttonCount, "proper number of buttons");
+  is(buttons.length, 1, "Only one button displayed");
 
   await pushPrefs(["browser.hangNotification.waitPeriod", 1000]);
 
