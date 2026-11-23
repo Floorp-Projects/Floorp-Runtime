@@ -2838,8 +2838,6 @@
       internal->transform_delta.x = 0;
       internal->transform_delta.y = 0;
 
-      internal->refcount = 1;
-
       internal->no_stem_darkening = -1;
     }
 
@@ -2970,9 +2968,11 @@
     error = FT_ERR( Invalid_Face_Handle );
     if ( face && face->driver )
     {
-      face->internal->refcount--;
       if ( face->internal->refcount > 0 )
+      {
+        face->internal->refcount--;
         error = FT_Err_Ok;
+      }
       else
       {
         driver = face->driver;
@@ -4773,7 +4773,7 @@
     FT_Error     error = FT_Err_Ok;
     FT_Face      face  = slot->face;
     FT_Renderer  renderer;
-    FT_ListNode  node = NULL;
+    FT_ListNode  node  = NULL;
 
 
     /* try to render colored glyph layers as a special case */
@@ -4867,7 +4867,7 @@
            FT_ERR_NEQ( error, Cannot_Render_Glyph ) )
         break;
 
-      /* FT_Err_Cannot_Render_Glyph is returned if the render mode   */
+      /* `FT_Err_Cannot_Render_Glyph` is returned if the render mode */
       /* is unsupported by the current renderer for this glyph image */
       /* format.                                                     */
 
@@ -5525,8 +5525,6 @@
     library->version_minor = FREETYPE_MINOR;
     library->version_patch = FREETYPE_PATCH;
 
-    library->refcount = 1;
-
     /* That's ok now */
     *alibrary = library;
 
@@ -5576,9 +5574,11 @@
     if ( !library )
       return FT_THROW( Invalid_Library_Handle );
 
-    library->refcount--;
     if ( library->refcount > 0 )
+    {
+      library->refcount--;
       goto Exit;
+    }
 
     memory = library->memory;
 

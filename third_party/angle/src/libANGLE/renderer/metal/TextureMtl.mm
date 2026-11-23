@@ -713,6 +713,19 @@ mtl::TextureRef &GetLayerLevelTextureView(
     return levelTextureViews[level];
 }
 
+// Returns the texture extents in GL terms, substituting arrayLength into depth for array textures
+// since MTLTexture stores layer count in arrayLength with depth == 1.
+gl::Extents GetTextureGLSize(const mtl::TextureRef &texture,
+                             const mtl::MipmapNativeLevel &nativeLevel)
+{
+    gl::Extents size = texture->size(nativeLevel);
+    if (texture->textureType() == MTLTextureType2DArray)
+    {
+        size.depth = static_cast<int>(texture->arrayLength());
+    }
+    return size;
+}
+
 }  // namespace
 
 // TextureMtl::NativeTextureWrapper implementation.
@@ -799,6 +812,10 @@ class TextureMtl::NativeTextureWrapper : angle::NonCopyable
     uint32_t depth(GLuint glLevel) const { return mNativeTexture->depth(getNativeLevel(glLevel)); }
 
     gl::Extents size(GLuint glLevel) const { return mNativeTexture->size(getNativeLevel(glLevel)); }
+    gl::Extents getGLSize(GLuint glLevel) const
+    {
+        return GetTextureGLSize(mNativeTexture, getNativeLevel(glLevel));
+    }
 
     // Get width, height, depth, size at base level.
     uint32_t widthAt0() const { return width(mBaseGLLevel); }
@@ -1419,21 +1436,15 @@ angle::Result TextureMtl::getRenderTarget(ContextMtl *context,
 
     GLuint layer         = GetImageLayerIndexFrom(imageIndex);
     RenderTargetMtl &rtt = mRenderTargets[imageIndex][renderToTextureIndex];
-    if (!rtt.getTexture())
+    CHECK(imageDef.image);
+    if (imageIndex.getType() == gl::TextureType::CubeMap)
     {
-        // Lazy initialization of render target:
-        if (imageDef.image)
-        {
-            if (imageIndex.getType() == gl::TextureType::CubeMap)
-            {
-                // Cube map is special, the image is already the view of its layer
-                rtt.set(imageDef.image, mtl::kZeroNativeMipLevel, 0, format);
-            }
-            else
-            {
-                rtt.set(imageDef.image, mtl::kZeroNativeMipLevel, layer, format);
-            }
-        }
+        // Cube map is special, the image is already the view of its layer
+        rtt.set(imageDef.image, mtl::kZeroNativeMipLevel, 0, format);
+    }
+    else
+    {
+        rtt.set(imageDef.image, mtl::kZeroNativeMipLevel, layer, format);
     }
 
     if (implicitSamples > 1 && !rtt.getImplicitMSTexture())
@@ -1456,7 +1467,7 @@ angle::Result TextureMtl::getRenderTarget(ContextMtl *context,
 }
 
 angle::Result TextureMtl::setImage(const gl::Context *context,
-                                   const gl::OwnImageIndex &ownIndex,
+                                   const gl::ImageIndex &index,
                                    GLenum internalFormat,
                                    const gl::Extents &size,
                                    GLenum format,
@@ -1465,8 +1476,6 @@ angle::Result TextureMtl::setImage(const gl::Context *context,
                                    gl::Buffer *unpackBuffer,
                                    const uint8_t *pixels)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     const gl::InternalFormat &dstFormatInfo = gl::GetInternalFormatInfo(internalFormat, type);
 
     return setImageImpl(context, index, dstFormatInfo, size, format, type, unpack, unpackBuffer,
@@ -1474,7 +1483,7 @@ angle::Result TextureMtl::setImage(const gl::Context *context,
 }
 
 angle::Result TextureMtl::setSubImage(const gl::Context *context,
-                                      const gl::OwnImageIndex &ownIndex,
+                                      const gl::ImageIndex &index,
                                       const gl::Box &area,
                                       GLenum format,
                                       GLenum type,
@@ -1482,23 +1491,19 @@ angle::Result TextureMtl::setSubImage(const gl::Context *context,
                                       gl::Buffer *unpackBuffer,
                                       const uint8_t *pixels)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     const gl::InternalFormat &formatInfo = gl::GetInternalFormatInfo(format, type);
 
     return setSubImageImpl(context, index, area, formatInfo, type, unpack, unpackBuffer, pixels);
 }
 
 angle::Result TextureMtl::setCompressedImage(const gl::Context *context,
-                                             const gl::OwnImageIndex &ownIndex,
+                                             const gl::ImageIndex &index,
                                              GLenum internalFormat,
                                              const gl::Extents &size,
                                              const gl::PixelUnpackState &unpack,
                                              size_t imageSize,
                                              const uint8_t *pixels)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     const gl::InternalFormat &formatInfo = gl::GetSizedInternalFormatInfo(internalFormat);
     const gl::State &glState             = context->getState();
     gl::Buffer *unpackBuffer             = glState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
@@ -1508,15 +1513,13 @@ angle::Result TextureMtl::setCompressedImage(const gl::Context *context,
 }
 
 angle::Result TextureMtl::setCompressedSubImage(const gl::Context *context,
-                                                const gl::OwnImageIndex &ownIndex,
+                                                const gl::ImageIndex &index,
                                                 const gl::Box &area,
                                                 GLenum format,
                                                 const gl::PixelUnpackState &unpack,
                                                 size_t imageSize,
                                                 const uint8_t *pixels)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     const gl::InternalFormat &formatInfo = gl::GetInternalFormatInfo(format, GL_UNSIGNED_BYTE);
 
     const gl::State &glState = context->getState();
@@ -1527,13 +1530,11 @@ angle::Result TextureMtl::setCompressedSubImage(const gl::Context *context,
 }
 
 angle::Result TextureMtl::copyImage(const gl::Context *context,
-                                    const gl::OwnImageIndex &ownIndex,
+                                    const gl::ImageIndex &index,
                                     const gl::Rectangle &sourceArea,
                                     GLenum internalFormat,
                                     gl::Framebuffer *source)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     gl::Extents newImageSize(sourceArea.width, sourceArea.height, 1);
     const gl::InternalFormat &internalFormatInfo =
         gl::GetInternalFormatInfo(internalFormat, GL_UNSIGNED_BYTE);
@@ -1562,7 +1563,7 @@ angle::Result TextureMtl::copyImage(const gl::Context *context,
     if ((context->isWebGL() || context->isRobustResourceInitEnabled()) &&
         !fbRect.encloses(sourceArea))
     {
-        ANGLE_TRY(initializeContents(context, GL_NONE, gl::OwnImageIndex(index)));
+        ANGLE_TRY(initializeContents(context, GL_NONE, index));
     }
 
     return copySubImageImpl(context, index, gl::Offset(0, 0, 0), sourceArea, internalFormatInfo,
@@ -1570,13 +1571,11 @@ angle::Result TextureMtl::copyImage(const gl::Context *context,
 }
 
 angle::Result TextureMtl::copySubImage(const gl::Context *context,
-                                       const gl::OwnImageIndex &ownIndex,
+                                       const gl::ImageIndex &index,
                                        const gl::Offset &destOffset,
                                        const gl::Rectangle &sourceArea,
                                        gl::Framebuffer *source)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     const gl::InternalFormat &currentFormat = *mState.getImageDesc(index).format.info;
     FramebufferMtl *srcFramebufferMtl       = mtl::GetImpl(source);
     RenderTargetMtl *colorReadRT            = srcFramebufferMtl->getColorReadRenderTarget(context);
@@ -1585,20 +1584,17 @@ angle::Result TextureMtl::copySubImage(const gl::Context *context,
 }
 
 angle::Result TextureMtl::copyTexture(const gl::Context *context,
-                                      const gl::OwnImageIndex &ownIndex,
+                                      const gl::ImageIndex &index,
                                       GLenum internalFormat,
                                       GLenum type,
-                                      gl::OwnLevel ownSourceLevel,
+                                      gl::LevelIndex sourceLevel,
                                       bool unpackFlipY,
                                       bool unpackPremultiplyAlpha,
                                       bool unpackUnmultiplyAlpha,
                                       const gl::Texture *source)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-    const uint32_t sourceLevel = ownSourceLevel.getUntranslated().get();
-
     const gl::ImageDesc &sourceImageDesc = source->getTextureState().getImageDesc(
-        NonCubeTextureTypeToTarget(source->getType()), sourceLevel);
+        NonCubeTextureTypeToTarget(source->getType()), sourceLevel.get());
     const gl::InternalFormat &internalFormatInfo = gl::GetInternalFormatInfo(internalFormat, type);
 
     // Only 2D textures are supported.
@@ -1612,28 +1608,26 @@ angle::Result TextureMtl::copyTexture(const gl::Context *context,
     ANGLE_TRY(redefineImage(context, index, mtlFormat, sourceImageDesc.size));
 
     return copySubTextureImpl(
-        context, index, gl::Offset(0, 0, 0), internalFormatInfo, sourceLevel,
+        context, index, gl::Offset(0, 0, 0), internalFormatInfo, sourceLevel.get(),
         gl::Box(0, 0, 0, sourceImageDesc.size.width, sourceImageDesc.size.height, 1), unpackFlipY,
         unpackPremultiplyAlpha, unpackUnmultiplyAlpha, source);
 }
 
 angle::Result TextureMtl::copySubTexture(const gl::Context *context,
-                                         const gl::OwnImageIndex &ownIndex,
+                                         const gl::ImageIndex &index,
                                          const gl::Offset &destOffset,
-                                         gl::OwnLevel ownSourceLevel,
+                                         gl::LevelIndex sourceLevel,
                                          const gl::Box &sourceBox,
                                          bool unpackFlipY,
                                          bool unpackPremultiplyAlpha,
                                          bool unpackUnmultiplyAlpha,
                                          const gl::Texture *source)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-    const uint32_t sourceLevel = ownSourceLevel.getUntranslated().get();
-
     const gl::InternalFormat &currentFormat = *mState.getImageDesc(index).format.info;
 
-    return copySubTextureImpl(context, index, destOffset, currentFormat, sourceLevel, sourceBox,
-                              unpackFlipY, unpackPremultiplyAlpha, unpackUnmultiplyAlpha, source);
+    return copySubTextureImpl(context, index, destOffset, currentFormat, sourceLevel.get(),
+                              sourceBox, unpackFlipY, unpackPremultiplyAlpha, unpackUnmultiplyAlpha,
+                              source);
 }
 
 angle::Result TextureMtl::copyCompressedTexture(const gl::Context *context,
@@ -1906,12 +1900,10 @@ angle::Result TextureMtl::releaseTexImage(const gl::Context *context)
 
 angle::Result TextureMtl::getAttachmentRenderTarget(const gl::Context *context,
                                                     GLenum binding,
-                                                    const gl::OwnImageIndex &ownImageIndex,
+                                                    const gl::ImageIndex &imageIndex,
                                                     GLsizei samples,
                                                     FramebufferAttachmentRenderTarget **rtOut)
 {
-    const gl::ImageIndex imageIndex = ownImageIndex.getUntranslated();
-
     ANGLE_TRY(
         ensureNativeStorageCreated(context, /*keepImages=*/true, ImageMipLevels::EnabledLevels));
 
@@ -2119,7 +2111,7 @@ angle::Result TextureMtl::redefineImage(const gl::Context *context,
         // must release it.
         ASSERT(mNativeTextureStorage->textureType() == mtl::GetTextureType(index.getType()));
         if (mNativeTextureStorage->getFormat() != mtlFormat ||
-            size != mNativeTextureStorage->size(glLevel))
+            size != mNativeTextureStorage->getGLSize(glLevel))
         {
             // Keep other images
             deallocateNativeStorage(/*keepImages=*/true);
@@ -2143,7 +2135,7 @@ angle::Result TextureMtl::redefineImage(const gl::Context *context,
             imageDef.image->textureType() ==
                 mtl::GetTextureType(GetTextureImageType(index.getType())) &&
             imageDef.formatID == mNativeTextureStorage->getFormat().intendedFormatId &&
-            imageDef.image->sizeAt0() == size)
+            GetTextureGLSize(imageDef.image, mtl::kZeroNativeMipLevel) == size)
         {
             // Keep it! (No-op)
         }
@@ -2675,10 +2667,8 @@ angle::Result TextureMtl::initializeNowIfNeeded(const gl::Context *context,
 
 angle::Result TextureMtl::initializeContents(const gl::Context *context,
                                              GLenum binding,
-                                             const gl::OwnImageIndex &ownIndex)
+                                             const gl::ImageIndex &index)
 {
-    const gl::ImageIndex index = ownIndex.getUntranslated();
-
     if (index.isLayered())
     {
         // InitializeTextureContents is only able to initialize one layer at a time.
@@ -2697,7 +2687,7 @@ angle::Result TextureMtl::initializeContents(const gl::Context *context,
         while (ite.hasNext())
         {
             gl::ImageIndex layerIndex = ite.next();
-            ANGLE_TRY(initializeContents(context, GL_NONE, gl::OwnImageIndex(layerIndex)));
+            ANGLE_TRY(initializeContents(context, GL_NONE, layerIndex));
         }
         return angle::Result::Continue;
     }
@@ -2708,7 +2698,7 @@ angle::Result TextureMtl::initializeContents(const gl::Context *context,
             int layerIdx = layer + index.getLayerIndex();
             gl::ImageIndex layerIndex =
                 gl::ImageIndex::MakeFromType(index.getType(), index.getLevelIndex(), layerIdx);
-            ANGLE_TRY(initializeContents(context, GL_NONE, gl::OwnImageIndex(layerIndex)));
+            ANGLE_TRY(initializeContents(context, GL_NONE, layerIndex));
         }
         return angle::Result::Continue;
     }

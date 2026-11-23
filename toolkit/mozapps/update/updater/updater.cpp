@@ -52,6 +52,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <chrono>
+#include <memory>
 #include <time.h>
 
 #include <sys/stat.h>
@@ -63,6 +64,7 @@
 #ifdef XP_MACOSX
 #  include "UpdateSettingsUtil.h"
 #  include "updaterfileutils_osx.h"
+#  include <sys/xattr.h>
 #endif  // XP_MACOSX
 
 #include "mozilla/CmdLineAndEnvUtils.h"
@@ -1250,6 +1252,28 @@ static int backup_discard(const NS_tchar* path, const NS_tchar* relPath) {
   return NS_tvsnprintf(draft, MAXPATHLEN, NS_T("%s") DRAFT_EXT, path);
 }
 
+#ifdef TEST_UPDATER
+// Returns true if a test asks for writing the draft of the specified file to
+// fail. Matching is on the leaf name only, and exact.
+static bool test_draft_write_fails(const NS_tchar* path) {
+#  ifdef XP_WIN
+  const wchar_t* failName = _wgetenv(L"MOZ_TEST_DRAFT_WRITE_FAIL");
+#  else
+  const char* failName = getenv("MOZ_TEST_DRAFT_WRITE_FAIL");
+#  endif
+  if (!failName || !*failName) {
+    return false;
+  }
+  const NS_tchar* leaf = path;
+  for (const NS_tchar* c = path; *c; ++c) {
+    if (*c == NS_T('\\') || *c == NS_T('/')) {
+      leaf = c + 1;
+    }
+  }
+  return !NS_tstrcmp(leaf, failName);
+}
+#endif
+
 // Discard the file that holds the draft contents of the specified file. This is
 // also used to get rid of files that a previous updater instance left behind
 // when it crashed, so it only ever discards drafts for paths that the update
@@ -1402,7 +1426,7 @@ int RemoveFile::Parse(NS_tchar* line) {
     return PARSE_ERROR;
   }
 
-  mRelPath = mozilla::MakeUnique<NS_tchar[]>(MAXPATHLEN);
+  mRelPath = std::make_unique<NS_tchar[]>(MAXPATHLEN);
   NS_tstrcpy(mRelPath.get(), validPath);
 
   mFile.reset(get_full_path(validPath));
@@ -1526,7 +1550,7 @@ int RemoveDir::Parse(NS_tchar* line) {
     return PARSE_ERROR;
   }
 
-  mRelPath = mozilla::MakeUnique<NS_tchar[]>(MAXPATHLEN);
+  mRelPath = std::make_unique<NS_tchar[]>(MAXPATHLEN);
   NS_tstrcpy(mRelPath.get(), validPath);
 
   mDir.reset(get_full_path(validPath));
@@ -1636,7 +1660,7 @@ int AddFile::Parse(NS_tchar* line) {
     return PARSE_ERROR;
   }
 
-  mRelPath = mozilla::MakeUnique<NS_tchar[]>(MAXPATHLEN);
+  mRelPath = std::make_unique<NS_tchar[]>(MAXPATHLEN);
   NS_tstrcpy(mRelPath.get(), validPath);
 
   mFile.reset(get_full_path(validPath));
@@ -1679,6 +1703,16 @@ int AddFile::Draft() {
   if (rv) {
     return rv;
   }
+
+#ifdef TEST_UPDATER
+  if (test_draft_write_fails(mFile.get())) {
+    LOG(
+        ("AddFile::Draft: TEST fault injection, pretending the draft write "
+         "failed: " LOG_S,
+         mRelPath.get()));
+    return WRITE_ERROR;
+  }
+#endif
 
   return extract_file(mRelPath.get(), draft);
 }
@@ -1758,7 +1792,8 @@ class PatchFileDecoder {
   template <typename ChildClass>
   static mozilla::UniquePtr<PatchFileDecoder> TryLoadAs(FILE* aPatchFile,
                                                         int* aReturnValue) {
-    // We cannot use MakeUnique because child classes hide their constructors.
+    // We cannot use std::make_unique because child classes hide their
+    // constructors.
     mozilla::UniquePtr<ChildClass> ptr{new ChildClass()};
     fseek(aPatchFile, 0, SEEK_SET);
     int rv = ptr->Load(aPatchFile);
@@ -1852,7 +1887,8 @@ off_t BSPatchFileDecoder::DestinationSize() {
 unsigned int BSPatchFileDecoder::SourceCrc32() { return mHeader.scrc32; }
 
 int BSPatchFileDecoder::Apply(const uint8_t* aCheckedSrcBuf,
-                              size_t aCheckedSrcBufSize, FILE* aDstFile) {
+                              [[maybe_unused]] size_t aCheckedSrcBufSize,
+                              FILE* aDstFile) {
   return MBS_ApplyPatch(&mHeader, mPatchFile, aCheckedSrcBuf, aDstFile);
 }
 #endif  // defined(MOZ_BSPATCH)
@@ -2101,7 +2137,7 @@ int PatchFile::Parse(NS_tchar* line) {
     return PARSE_ERROR;
   }
 
-  mFileRelPath = mozilla::MakeUnique<NS_tchar[]>(MAXPATHLEN);
+  mFileRelPath = std::make_unique<NS_tchar[]>(MAXPATHLEN);
   NS_tstrcpy(mFileRelPath.get(), validPath);
 
   mFile.reset(get_full_path(validPath));
@@ -2574,6 +2610,7 @@ void PatchIfFile::Finish(int status) {
 #  include "EnterprisePoliciesFlagFile.h"
 #  include "nsWindowsRestart.cpp"
 #  include "nsWindowsHelpers.h"
+#  include "PostUpdateEnvironment.h"
 #  include "uachelper.h"
 #  ifdef MOZ_MAINTENANCE_SERVICE
 #    include "pathhash.h"
@@ -2727,23 +2764,16 @@ bool LaunchWinPostProcess(const WCHAR* installationDir,
   si.lpDesktop = const_cast<LPWSTR>(L"");  // -Wwritable-strings
   PROCESS_INFORMATION pi = {0};
 
-  // Invoke post-update with a minimal environment to avoid environment
-  // variables intended to relaunch Firefox impacting post-update operations, in
-  // particular background tasks.  The updater will invoke the callback
-  // application with the current (non-minimal) environment.
-  //
-  // N.b.: two null terminating characters!  The first terminates a non-existent
-  // key-value pair, the second (automatically added) terminates the block of
-  // key-value pairs.
-  const WCHAR* emptyEnvironment = L"\0";
+  PostUpdateEnvironment postUpdateEnvironment{sElevationType};
 
   bool ok =
       CreateProcessW(exefullpath, cmdline,
                      nullptr,  // no special security attributes
                      nullptr,  // no special thread attributes
                      false,    // don't inherit filehandles
-                     0,        // No special process creation flags
-                     (LPVOID)emptyEnvironment, workingDirectory, &si, &pi);
+                     CREATE_UNICODE_ENVIRONMENT, postUpdateEnvironment.get(),
+                     workingDirectory, &si, &pi);
+
   free(cmdline);
   if (ok) {
     LOG(("LaunchWinPostProcess - Waiting for process to complete"));
@@ -2759,8 +2789,9 @@ bool LaunchWinPostProcess(const WCHAR* installationDir,
 
 #endif
 
-static void LaunchCallbackApp(const NS_tchar* workingDir, int argc,
-                              NS_tchar** argv, bool usingService) {
+static void LaunchCallbackApp(const NS_tchar* workingDir,
+                              [[maybe_unused]] int argc, NS_tchar** argv,
+                              [[maybe_unused]] bool usingService) {
   putenv(const_cast<char*>("MOZ_LAUNCHED_CHILD=1"));
 
   // Run from the specified working directory (see bug 312360).
@@ -2790,12 +2821,7 @@ static void LaunchCallbackApp(const NS_tchar* workingDir, int argc,
 #endif
 }
 
-#ifndef XP_MACOSX
 static void WriteUpdateTelemetry(const NS_tchar* aInstallDir) {
-  NS_tchar path[MAXPATHLEN];
-  NS_tsnprintf(path, sizeof(path) / sizeof(path[0]),
-               NS_T("%s/update_telemetry.json"), aInstallDir);
-
   auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                    std::chrono::system_clock::now().time_since_epoch())
                    .count();
@@ -2803,12 +2829,22 @@ static void WriteUpdateTelemetry(const NS_tchar* aInstallDir) {
   snprintf(content, sizeof(content) / sizeof(content[0]),
            "{\"install_timestamp\":\"%lld\"}", (long long)nowMs);
 
+#ifdef XP_MACOSX
+  if (setxattr(aInstallDir, "org.mozilla.update-telemetry", content,
+               strlen(content), 0, 0) != 0) {
+    LOG(("Failed to set org.mozilla.update-telemetry xattr: %d", errno));
+  }
+#else
+  NS_tchar path[MAXPATHLEN];
+  NS_tsnprintf(path, sizeof(path) / sizeof(path[0]),
+               NS_T("%s/update_telemetry.json"), aInstallDir);
+
   AutoFile file(CreateAndOpenFile(path, true));
   if (file != nullptr) {
     fwrite(content, strlen(content), 1, file);
   }
-}
 #endif
+}
 
 static bool WriteToFile(const NS_tchar* aFilename, const char* aStatus) {
   LOG(("Writing status to file: %s", aStatus));
@@ -3285,9 +3321,7 @@ static int ProcessReplaceRequest() {
 #endif
 
   gSucceeded = true;
-#ifndef XP_MACOSX
   WriteUpdateTelemetry(gInstallDirPath);
-#endif
 
   return 0;
 }
@@ -3370,7 +3404,7 @@ static int GetUpdateFileName(NS_tchar* fileName, int maxChars) {
   return OK;
 }
 
-static void UpdateThreadFunc(void* param) {
+static void UpdateThreadFunc([[maybe_unused]] void* param) {
   // open ZIP archive and process...
   int rv;
   if (sReplaceRequest) {
@@ -3486,11 +3520,9 @@ static void UpdateThreadFunc(void* param) {
         LOG(("Couldn't set access/modification time on application bundle."));
       }
 #endif
-#ifndef XP_MACOSX
       if (!sStagedUpdate) {
         WriteUpdateTelemetry(gInstallDirPath);
       }
-#endif
       LOG(("succeeded"));
     }
     WriteStatusFile(rv);
@@ -3648,7 +3680,7 @@ int NS_main(int argc, NS_tchar** argv) {
   // modify.
   int suiArgc = argc;
   mozilla::UniquePtr<const NS_tchar*[]> suiArgv =
-      mozilla::MakeUnique<const NS_tchar*[]>(suiArgc);
+      std::make_unique<const NS_tchar*[]>(suiArgc);
   for (int argIndex = 0; argIndex < suiArgc; argIndex++) {
     suiArgv.get()[argIndex] = argv[argIndex];
   }
@@ -5319,7 +5351,7 @@ int add_dir_entries(const NS_tchar* dirpath, ActionList* list) {
             rv = UPDATER_QUOTED_PATH_MEM_ERROR;
             break;
           }
-          action.reset(new RemoveFile());
+          action = std::make_unique<RemoveFile>();
           rv = action->Parse(quotedpath);
           free(quotedpath);
           if (!rv) {
@@ -5338,7 +5370,7 @@ int add_dir_entries(const NS_tchar* dirpath, ActionList* list) {
             break;
           }
 
-          action.reset(new RemoveDir());
+          action = std::make_unique<RemoveDir>();
           rv = action->Parse(quotedpath);
           free(quotedpath);
           if (!rv) {

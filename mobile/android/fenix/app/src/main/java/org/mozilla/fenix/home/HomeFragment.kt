@@ -14,14 +14,17 @@ import android.widget.FrameLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -30,14 +33,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -51,14 +60,17 @@ import androidx.navigation.fragment.navArgs
 import java.lang.ref.WeakReference
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.modifier.thenConditional
 import mozilla.components.compose.base.snackbar.Snackbar
 import mozilla.components.compose.base.snackbar.displaySnackbar
-import mozilla.components.compose.browser.toolbar.store.BrowserToolbarState
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarStore
 import mozilla.components.concept.engine.utils.ABOUT_HOME_URL
 import mozilla.components.concept.sync.AccountObserver
@@ -69,6 +81,7 @@ import mozilla.components.feature.ipprotection.IPProtectionWarningBinding
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.top.sites.presenter.DefaultTopSitesPresenter
 import mozilla.components.lib.state.ext.flow
+import mozilla.components.lib.state.ext.flowScoped
 import mozilla.components.lib.state.ext.observeAsComposableState
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
@@ -95,6 +108,7 @@ import org.mozilla.fenix.browser.TabPreview
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.tabstrip.TabStrip
 import org.mozilla.fenix.browser.tabstrip.TabStripColors
+import org.mozilla.fenix.browser.tabstrip.ext.handleTabStripLastTabClosed
 import org.mozilla.fenix.components.Components
 import org.mozilla.fenix.components.HomepageThumbnailIntegration
 import org.mozilla.fenix.components.LensFeature
@@ -111,7 +125,9 @@ import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.metrics.installSourcePackage
 import org.mozilla.fenix.components.toolbar.ToolbarPosition
+import org.mozilla.fenix.components.toolbar.TopDividerColumn
 import org.mozilla.fenix.compose.snackbar.SnackbarState
+import org.mozilla.fenix.compose.verticalFadingEdges
 import org.mozilla.fenix.ext.application
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.hideToolbar
@@ -149,6 +165,7 @@ import org.mozilla.fenix.home.toolbar.FenixHomeToolbar
 import org.mozilla.fenix.home.toolbar.HomeNavigationBar
 import org.mozilla.fenix.home.toolbar.HomeToolbarComposable
 import org.mozilla.fenix.home.toolbar.HomeToolbarComposable.Companion.DirectToSearchConfig
+import org.mozilla.fenix.home.toolbar.WallpaperToolbarScrim
 import org.mozilla.fenix.home.toolbar.homepageToolbarColors
 import org.mozilla.fenix.home.topsites.DefaultTopSitesView
 import org.mozilla.fenix.home.topsites.TopSitesBinding
@@ -180,6 +197,9 @@ import org.mozilla.fenix.search.awesomebar.AwesomeBarComposable
 import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
 import org.mozilla.fenix.snackbar.SnackbarBinding
 import org.mozilla.fenix.tabgroups.TabGroupsStrip
+import org.mozilla.fenix.tabgroups.strip.redux.TabGroupsStripAction
+import org.mozilla.fenix.tabgroups.strip.redux.TabGroupsStripMiddleware
+import org.mozilla.fenix.tabgroups.strip.redux.TabGroupsStripStore
 import org.mozilla.fenix.tabstray.redux.state.Page
 import org.mozilla.fenix.tabstray.ui.AccessPoint
 import org.mozilla.fenix.termsofuse.store.DefaultPrivacyNoticeBannerRepository
@@ -239,6 +259,18 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
 
     private val dateTimeProvider: DateTimeProvider by lazy { DefaultDateTimeProvider() }
 
+    private val tabGroupsStripStore by lazy {
+        TabGroupsStripStore(
+            middleware =
+                listOf(
+                    TabGroupsStripMiddleware(
+                        tabDataCoordinator = requireComponents.tabDataCoordinator,
+                        scope = lifecycleScope,
+                    )
+                )
+        )
+    }
+
     private lateinit var privacyNoticeBannerStore: PrivacyNoticeBannerStore
     private lateinit var collectionsMigrationCardStore: CollectionsMigrationCardStore
 
@@ -281,7 +313,6 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
     private val ipProtectionWarningBinding = ViewBoundFeatureWrapper<IPProtectionWarningBinding>()
     private val continuousOnboardingFeature = ViewBoundFeatureWrapper<ContinuousOnboardingFeature>()
 
-    private val homepageEdgeToEdgeFeature = ViewBoundFeatureWrapper<HomepageEdgeToEdgeFeature>()
     private var qrScanFenixFeature: ViewBoundFeatureWrapper<QrScanFenixFeature>? = ViewBoundFeatureWrapper()
     private val qrScanLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -358,6 +389,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
         bundleArgs = args.toBundle()
         if (savedInstanceState != null) {
             bundleArgs.putBoolean(FOCUS_ON_ADDRESS_BAR, false)
+            bundleArgs.remove(SESSION_TO_START_SEARCH_FOR)
         }
         bundleArgs.getString(SESSION_TO_DELETE)?.let {
             homeViewModel.sessionToDelete = it
@@ -439,25 +471,9 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
     private fun buildToolbar(activity: HomeActivity, view: View): FenixHomeToolbar {
         val toolbarStore by buildToolbarStore(activity)
 
-        if (homepageEdgeToEdgeFeature.get() == null) {
-            homepageEdgeToEdgeFeature.set(
-                feature =
-                    HomepageEdgeToEdgeFeature(
-                        appStore = requireComponents.appStore,
-                        activity = activity,
-                        settings = activity.components.settings,
-                        browsingModeManager = browsingModeManager,
-                        toolbarStore = toolbarStore,
-                    ),
-                owner = viewLifecycleOwner,
-                view = view,
-            )
-        }
-
         homeNavigationBar =
             HomeNavigationBar(
                 toolbarStore = toolbarStore,
-                appStore = activity.components.appStore,
                 browsingModeManager = activity.browsingModeManager,
                 settings = activity.components.settings,
                 hideWhenKeyboardShown = true,
@@ -476,11 +492,11 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                     startSearch =
                         bundleArgs.getBoolean(FOCUS_ON_ADDRESS_BAR) || FxNimbus.features.oneClickSearch.value().enabled,
                     startVoiceSearch = bundleArgs.getBoolean(START_VOICE_SEARCH),
-                    sessionId = args.sessionToStartSearchFor,
+                    sessionId = bundleArgs.getString(SESSION_TO_START_SEARCH_FOR),
                     source = args.searchAccessPoint,
                 ),
             coroutineScope = view.toScope(),
-            tabStripContent = { TabStrip(toolbarStore) },
+            tabStripContent = { TabStrip() },
             searchSuggestionsContent = { modifier ->
                 (awesomeBarComposable ?: initializeAwesomeBarComposable(toolbarStore, modifier))?.SearchSuggestions()
             },
@@ -503,7 +519,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
             val messagingFeature =
                 MessagingFeature(
                     appStore = requireComponents.appStore,
-                    surface = FenixMessageSurfaceId.HOMESCREEN,
+                    surfaces = listOf(FenixMessageSurfaceId.HOMESCREEN),
                 )
             messagingFeatureHomescreen.set(
                 feature = messagingFeature,
@@ -523,7 +539,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
             val messagingFeature =
                 MessagingFeature(
                     appStore = requireComponents.appStore,
-                    surface = FenixMessageSurfaceId.MICROSURVEY,
+                    surfaces = listOf(FenixMessageSurfaceId.MICROSURVEY),
                 )
             messagingFeatureMicrosurvey.set(
                 feature = messagingFeature,
@@ -548,7 +564,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                 .navigate(NavGraphDirections.actionGlobalUnlockPrivateTabsFragment(NavigationOrigin.HOME_PAGE))
         }
 
-        toolbarView.build(requireComponents.settings.enableHomepageSearchBar)
+        toolbarView.build(requireComponents.settings.isHomepageMiddleSearchEnabled)
 
         requireComponents.appStore.state.wasLastTabClosedPrivate?.also {
             showUndoSnackbar(requireContext().tabClosedUndoMessage(it))
@@ -573,6 +589,11 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
         initSnackbarBinding(view = view)
         initIpProtectionBindings(view = view)
         initContinuousOnboardingFeature()
+
+        if (requireComponents.settings.shouldShowTabGroupsStrip) {
+            tabGroupsStripStore.dispatch(TabGroupsStripAction.InitializeDataObservation)
+            observeSelectedTabForNavigation()
+        }
 
         privacyNoticeBannerStore =
             PrivacyNoticeBannerStore(
@@ -680,95 +701,61 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                         !appState.value.mode.isPrivate &&
                         appState.value.microsurvey.current != null
 
-                LaunchedEffect(microsurveyVisible) {
-                    settings.shouldShowMicrosurveyPrompt = microsurveyVisible
-                }
-
                 val isPrivateMode = appState.value.mode.isPrivate
                 val currentWallpaper = appState.value.wallpaperState.currentWallpaper
-                val universalEdgeToEdge = settings.enableUniversalEdgeToEdgeWallpapers
+                val showToolbarScrim = shouldShowToolbarScrim(appState.value)
+                var topBarHeight by remember { mutableIntStateOf(0) }
+                var bottomBarHeight by remember { mutableIntStateOf(0) }
+                val fadeContentEdges = isOverUniversalEdgeToEdgeWallpaper(appState.value)
+                val searchBackgroundColor = toolbarView.searchBackgroundColor()
 
-                LaunchedEffect(currentWallpaper.name, isPrivateMode, universalEdgeToEdge) {
-                    if (universalEdgeToEdge) {
-                        applyWallpaperSystemBarsTheme(activity as HomeActivity, settings, isPrivateMode)
-                    }
+                LaunchedEffect(currentWallpaper.name, isPrivateMode, searchBackgroundColor) {
+                    applyWallpaperSystemBarsTheme(
+                        activity = activity as HomeActivity,
+                        settings = settings,
+                        isPrivateMode = isPrivateMode,
+                        searchBackgroundColor = searchBackgroundColor,
+                    )
                 }
 
                 CompositionLocalProvider(LocalWallpaperState provides appState.value.wallpaperState) {
-                    Box(
-                        modifier =
-                            Modifier.fillMaxSize().thenConditional(
-                                // Without the universal treatment the wallpaper is inset by the system
-                                // bars; with it, the wallpaper stays edge-to-edge and only the Scaffold
-                                // content is inset (below).
-                                Modifier.systemBarsPadding().displayCutoutPadding()
-                            ) {
-                                !universalEdgeToEdge
-                            }
-                    ) {
+                    // The wallpaper stays edge-to-edge and only the Scaffold content is inset (below).
+                    Box(modifier = Modifier.fillMaxSize()) {
                         if (!isPrivateMode) {
-                            WallpaperBackground(
-                                wallpaper = currentWallpaper,
-                                loadBitmap = components.useCases.wallpaperUseCases.loadBitmap::invoke,
-                                onLoadFailed = {
-                                    requireComponents.settings.currentWallpaperTextColor = 0L
-                                    showComposeSnackbar(
-                                        SnackbarState(
-                                            message =
-                                                resources.getString(R.string.wallpaper_select_error_snackbar_message)
-                                        )
-                                    )
-                                },
+                            WallpaperBackground(currentWallpaper)
+                        }
+
+                        if (searchBackgroundColor != null && searchBackgroundColor.alpha > 0f) {
+                            // The search screen is laid out inside the system bars and display cutout, which can be
+                            // on any edge, so cover the whole wallpaper with its background.
+                            Box(modifier = Modifier.fillMaxSize().background(searchBackgroundColor))
+                        }
+
+                        if (showToolbarScrim) {
+                            WallpaperToolbarScrim(
+                                topContentHeight = topBarHeight,
+                                bottomContentHeight = bottomBarHeight,
                             )
                         }
 
                         Scaffold(
-                            modifier =
-                                Modifier.fillMaxSize()
-                                    .thenConditional(Modifier.systemBarsPadding().displayCutoutPadding()) {
-                                        universalEdgeToEdge
-                                    }
-                                    .imePadding(),
+                            modifier = Modifier.fillMaxSize().systemBarsPadding().displayCutoutPadding().imePadding(),
                             topBar = {
-                                if (isToolbarAtTop) {
-                                    ToolbarSlot(captureToolbarBounds, { toolbarBoundsInRoot = it }) {
-                                        toolbarView.Content()
-                                    }
-                                } else {
-                                    if (settings.shouldShowTabStripAtTop) {
-                                        TabStrip()
-                                    }
-                                }
+                                HomeTopBar(
+                                    settings = settings,
+                                    isToolbarAtTop = isToolbarAtTop,
+                                    captureToolbarBounds = captureToolbarBounds,
+                                    modifier = Modifier.onSizeChanged { topBarHeight = it.height },
+                                )
                             },
                             bottomBar = {
-                                val tabGroupsStripColor =
-                                    homepageToolbarColors(
-                                            isPrivateMode = isPrivateMode,
-                                            shouldUseEdgeToEdgeColors = isEdgeToEdgeBackgroundEnabled(),
-                                        )
-                                        .surface
-                                if (isToolbarAtTop) {
-                                    ToolbarSlot(captureToolbarBounds, { navbarBoundsInRoot = it }) {
-                                        Column {
-                                            if (settings.shouldShowTabStripAtBottom) {
-                                                TabStrip()
-                                            }
-                                            if (settings.shouldShowTabGroupsStrip) {
-                                                TabGroupsStrip(containerColor = tabGroupsStripColor)
-                                            }
-                                            homeNavigationBar?.Content()
-                                        }
-                                    }
-                                } else {
-                                    ToolbarSlot(captureToolbarBounds, { toolbarBoundsInRoot = it }) {
-                                        Column {
-                                            if (settings.shouldShowTabGroupsStrip) {
-                                                TabGroupsStrip(containerColor = tabGroupsStripColor)
-                                            }
-                                            toolbarView.Content()
-                                        }
-                                    }
-                                }
+                                HomeBottomBar(
+                                    settings = settings,
+                                    isToolbarAtTop = isToolbarAtTop,
+                                    isPrivateMode = isPrivateMode,
+                                    captureToolbarBounds = captureToolbarBounds,
+                                    modifier = Modifier.onSizeChanged { bottomBarHeight = it.height },
+                                )
                             },
                             containerColor = Color.Transparent,
                         ) { innerPadding ->
@@ -778,6 +765,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                                 collectionsMigrationCardState = collectionsMigrationCardState.value,
                                 settings = settings,
                                 innerPadding = innerPadding,
+                                fadeContentEdges = fadeContentEdges,
                                 microsurveyVisible = microsurveyVisible,
                                 microsurvey = appState.value.microsurvey.current,
                             )
@@ -788,6 +776,115 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                 LaunchedEffect(Unit) {
                     onFirstHomepageFrameDrawn()
                 }
+            }
+        }
+    }
+
+    /**
+     * Draws [currentWallpaper] behind the homepage content. If its image fails to load, clears the saved wallpaper text
+     * color and shows an error snackbar.
+     */
+    @Composable
+    private fun WallpaperBackground(currentWallpaper: Wallpaper) {
+        WallpaperBackground(
+            wallpaper = currentWallpaper,
+            loadBitmap = components.useCases.wallpaperUseCases.loadBitmap::invoke,
+            onLoadFailed = {
+                requireComponents.settings.currentWallpaperTextColor = 0L
+                showComposeSnackbar(
+                    SnackbarState(message = resources.getString(R.string.wallpaper_select_error_snackbar_message))
+                )
+            },
+        )
+    }
+
+    /**
+     * Content of the homepage Scaffold's top bar: the toolbar when it is at the top, otherwise the tab strip if
+     * enabled.
+     */
+    @Composable
+    private fun HomeTopBar(
+        settings: Settings,
+        isToolbarAtTop: Boolean,
+        captureToolbarBounds: Boolean,
+        modifier: Modifier = Modifier,
+    ) {
+        Box(modifier = modifier) {
+            if (isToolbarAtTop) {
+                ToolbarSlot(captureToolbarBounds, { toolbarBoundsInRoot = it }) {
+                    toolbarView.Content()
+                }
+            } else if (settings.shouldShowTabStripAtTop) {
+                TabStrip()
+            }
+        }
+    }
+
+    /**
+     * Content of the homepage Scaffold's bottom bar: the navigation bar when the toolbar is at the top, otherwise the
+     * toolbar. Either is preceded by the enabled tab strips.
+     */
+    @Composable
+    private fun HomeBottomBar(
+        settings: Settings,
+        isToolbarAtTop: Boolean,
+        isPrivateMode: Boolean,
+        captureToolbarBounds: Boolean,
+        modifier: Modifier = Modifier,
+    ) {
+        val bottomChromeColors = homepageToolbarColors(isPrivateMode = isPrivateMode, shouldUseEdgeToEdgeColors = true)
+        Box(modifier = modifier) {
+            if (isToolbarAtTop) {
+                HomeNavigationBottomBar(settings, captureToolbarBounds, bottomChromeColors)
+            } else {
+                HomeToolbarBottomBar(settings, captureToolbarBounds, bottomChromeColors)
+            }
+        }
+    }
+
+    /** Bottom bar used when the toolbar is at the top: the enabled tab strips above the navigation bar. */
+    @Composable
+    private fun HomeNavigationBottomBar(
+        settings: Settings,
+        captureToolbarBounds: Boolean,
+        colors: ColorScheme,
+    ) {
+        val isSearchActive = requireComponents.appStore.observeAsComposableState { it.searchState.isSearchActive }.value
+        ToolbarSlot(captureToolbarBounds, { navbarBoundsInRoot = it }) {
+            TopDividerColumn(
+                showDivider =
+                    (settings.shouldShowTabStripAtBottom && !isSearchActive) || settings.shouldShowTabGroupsStrip,
+                modifier = Modifier.fillMaxWidth(),
+                dividerColor = colors.outlineVariant,
+            ) {
+                if (settings.shouldShowTabStripAtBottom) {
+                    TabStrip()
+                }
+                if (settings.shouldShowTabGroupsStrip) {
+                    TabGroupsStrip(store = tabGroupsStripStore, containerColor = colors.surface)
+                }
+                homeNavigationBar?.Content()
+            }
+        }
+    }
+
+    /** Bottom bar used when the toolbar is at the bottom: the tab groups strip, if enabled, above the toolbar. */
+    @Composable
+    private fun HomeToolbarBottomBar(
+        settings: Settings,
+        captureToolbarBounds: Boolean,
+        colors: ColorScheme,
+    ) {
+        ToolbarSlot(captureToolbarBounds, { toolbarBoundsInRoot = it }) {
+            TopDividerColumn(
+                showDivider = settings.shouldShowTabGroupsStrip,
+                modifier = Modifier.fillMaxWidth(),
+                dividerColor = colors.outlineVariant,
+            ) {
+                if (settings.shouldShowTabGroupsStrip) {
+                    TabGroupsStrip(store = tabGroupsStripStore, containerColor = colors.surface)
+                }
+                toolbarView.Content()
             }
         }
     }
@@ -823,22 +920,31 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
     /**
      * Matches the status bar and navigation bar icon appearance to the current wallpaper's text color so they stay
      * legible over the edge-to-edge wallpaper. Falls back to the theme's system bar appearance when there is no
-     * wallpaper text color or while in private browsing mode.
+     * wallpaper text color or while in private browsing mode. While searching, the system bar icons instead contrast
+     * with [searchBackgroundColor], unless it is transparent and the wallpaper shows through.
      */
     private fun applyWallpaperSystemBarsTheme(
         activity: HomeActivity,
         settings: Settings,
         isPrivateMode: Boolean,
+        searchBackgroundColor: Color?,
     ) {
         val wallpaperTextColor = settings.currentWallpaperTextColor
+        val windowInsetsController = activity.window.createWindowInsetsController()
         if (isPrivateMode || wallpaperTextColor == 0L) {
             activity.themeManager.applyStatusBarTheme(activity)
         } else {
             val isLightAppearance = isDark(wallpaperTextColor.toInt())
-            activity.window.createWindowInsetsController().apply {
+            windowInsetsController.apply {
                 isAppearanceLightStatusBars = isLightAppearance
                 isAppearanceLightNavigationBars = isLightAppearance
             }
+        }
+
+        if (searchBackgroundColor != null && searchBackgroundColor.alpha > 0f) {
+            val isLightAppearance = !isDark(searchBackgroundColor.toArgb())
+            windowInsetsController.isAppearanceLightStatusBars = isLightAppearance
+            windowInsetsController.isAppearanceLightNavigationBars = isLightAppearance
         }
     }
 
@@ -850,6 +956,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
         collectionsMigrationCardState: CollectionsMigrationCardState,
         settings: Settings,
         innerPadding: PaddingValues,
+        fadeContentEdges: Boolean,
         microsurveyVisible: Boolean,
         microsurvey: MicrosurveyUIData?,
     ) {
@@ -886,6 +993,13 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                 onTopSitesItemBound = {
                     StartupTimeline.onTopSitesItemBound(activity = (requireActivity() as HomeActivity))
                 },
+                onMiddleSearchBarVisibilityChanged = { isVisible ->
+                    toolbarView.updateAddressBarVisibility(!isVisible)
+                },
+                modifier =
+                    Modifier.thenConditional(Modifier.verticalFadingEdges(HOMEPAGE_EDGE_FADE_LENGTH)) {
+                        fadeContentEdges
+                    },
             )
 
             if (microsurveyVisible) {
@@ -955,23 +1069,32 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
         appStore.dispatch(AppAction.UpdateFirstFrameDrawn(drawn = true))
     }
 
+    /** Whether the homepage is drawn over a universal edge-to-edge wallpaper, outside private mode and search. */
+    private fun isOverUniversalEdgeToEdgeWallpaper(appState: AppState): Boolean =
+        !appState.mode.isPrivate && !appState.searchState.isSearchActive
+
+    /** Whether the gradient scrims are drawn behind the homepage toolbars over a universal edge-to-edge wallpaper. */
+    private fun shouldShowToolbarScrim(appState: AppState): Boolean =
+        isOverUniversalEdgeToEdgeWallpaper(appState) &&
+            !Wallpaper.isLocalWallpaper(appState.wallpaperState.currentWallpaper.name)
+
     @Composable
-    private fun TabStrip(toolbarStore: BrowserToolbarStore? = null) {
+    private fun TabStrip() {
+        val isSearchActive = requireComponents.appStore.observeAsComposableState { it.searchState.isSearchActive }.value
+        if (isSearchActive) return
+
         // Tabs will not be shown as selected on the homepage when Homepage as a New Tab is not
         // enabled.
         val isSelectDisabled = !requireComponents.settings.enableHomepageAsNewTab
-        val toolbarState: BrowserToolbarState? = toolbarStore?.observeAsComposableState { it }?.value
+        // Tab strip doesn't show its background when displayed over edge to edge wallpaper.
+        val isOverEdgeToEdgeWallpaper =
+            requireComponents.appStore.observeAsComposableState { isOverUniversalEdgeToEdgeWallpaper(it) }.value
 
         FirefoxTheme {
             TabStrip(
                 isSelectDisabled = isSelectDisabled,
                 showTabCounterButton = false,
-                tabStripColors =
-                    TabStripColors.build(
-                        toolbarState = toolbarState,
-                        browsingModeManager = (requireActivity() as HomeActivity).browsingModeManager,
-                        settings = requireComponents.settings,
-                    ),
+                tabStripColors = TabStripColors.build(isOverEdgeToEdgeWallpaper = isOverEdgeToEdgeWallpaper),
                 hideWhenKeyboardShown = requireComponents.settings.shouldUseBottomTabStrip,
                 onAddTabClick = {
                     if (requireComponents.settings.enableHomepageAsNewTab) {
@@ -992,12 +1115,39 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                         (requireActivity() as HomeActivity).openToBrowser(BrowserDirection.FromHome)
                     }
                 },
-                onLastTabClose = {},
+                onLastTabClose = { isPrivate ->
+                    handleTabStripLastTabClosed(
+                        isHomepageAsNewTabEnabled = requireComponents.settings.enableHomepageAsNewTab,
+                        isLastTabClosedPrivate = isPrivate,
+                        navigateFromId = R.id.homeFragment,
+                        appStore = requireComponents.appStore,
+                        browsingMode = browsingModeManager.mode,
+                        navController = findNavController(),
+                    ) {
+                        showUndoSnackbar(requireContext().tabClosedUndoMessage(isPrivate))
+                    }
+                },
                 onCloseTabClick = { isPrivate ->
                     showUndoSnackbar(requireContext().tabClosedUndoMessage(isPrivate))
                 },
                 onTabCounterClick = { openTabsTray() },
             )
+        }
+    }
+
+    // Navigates from the homepage to the browser when the tab group strip selects a non-homepage tab.
+    private fun observeSelectedTabForNavigation() {
+        requireComponents.core.store.flowScoped(viewLifecycleOwner, Main) { flow ->
+            flow
+                .map { it.selectedTabId }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    val url = requireComponents.core.store.state.selectedTab?.content?.url
+                    if (url != null && url != ABOUT_HOME_URL) {
+                        findNavController().nav(R.id.homeFragment, HomeFragmentDirections.actionGlobalBrowser(null))
+                    }
+                }
         }
     }
 
@@ -1050,11 +1200,6 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
     override fun onStart() {
         super.onStart()
 
-        val settings = requireComponents.settings
-        if (settings.privateModeAndStoriesEntryPointEnabled) {
-            settings.incrementNewsButtonForegroundCount()
-        }
-
         findNavController().addOnDestinationChangedListener(destinationChangedListener)
 
         subscribeToTabCollections()
@@ -1096,7 +1241,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
 
     @VisibleForTesting
     internal fun removeCollection(tabCollection: TabCollection) {
-        lifecycleScope.launch(IO) {
+        requireComponents.applicationScope.launch {
             requireComponents.core.tabCollectionStorage.removeCollection(tabCollection)
         }
     }
@@ -1106,8 +1251,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
         lifecycleScope.launch(IO) {
             val settings = components.settings
 
-            val showStories =
-                settings.showPocketRecommendationsFeature || settings.privateModeAndStoriesEntryPointEnabled
+            val showStories = settings.showPocketRecommendationsFeature
 
             val showSponsoredStories = showStories && settings.showPocketSponsoredStories
 
@@ -1255,20 +1399,11 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
      * This function should be called when the fragment's view is active (e.g., in response to a user interaction). It
      * launches a coroutine within the [viewLifecycleOwner]'s [androidx.lifecycle.LifecycleCoroutineScope] to display
      * the widget prompt using [showAddSearchWidgetPromptIfSupported].
-     *
-     * The actual display logic, including handling success and failure callbacks, is managed by
-     * [showAddSearchWidgetPromptIfSupported].
      */
     private fun showAddSearchWidgetPrompt() {
         viewLifecycleOwner.lifecycleScope.launch {
             showAddSearchWidgetPromptIfSupported(requireActivity())
         }
-    }
-
-    internal fun isEdgeToEdgeBackgroundEnabled(): Boolean {
-        val settings = requireComponents.settings
-        return settings.enableHomepageEdgeToEdgeBackgroundFeature &&
-            settings.currentWallpaperName == Wallpaper.EDGE_TO_EDGE
     }
 
     private fun initializeAwesomeBarComposable(
@@ -1284,9 +1419,8 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                 browserStore = requireComponents.core.store,
                 toolbarStore = toolbarStore,
                 navController = findNavController(),
-                tabId = args.sessionToStartSearchFor,
+                tabId = bundleArgs.getString(SESSION_TO_START_SEARCH_FOR),
                 searchAccessPoint = args.searchAccessPoint,
-                isEdgeToEdgeBackgroundEnabled = isEdgeToEdgeBackgroundEnabled(),
             )
             .also {
                 awesomeBarComposable = it
@@ -1630,6 +1764,7 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
                     appStore = requireComponents.appStore,
                     navControllerRef = WeakReference(findNavController()),
                     viewLifecycleScope = viewLifecycleOwner.lifecycleScope,
+                    applicationScope = requireComponents.applicationScope,
                     shareUseCases = requireComponents.useCases.shareUseCases,
                     showAddSearchWidgetPrompt = ::showAddSearchWidgetPrompt,
                     requestSetDefaultBrowserPrompt = {
@@ -1690,5 +1825,9 @@ class HomeFragment : Fragment(), UserInteractionHandler, OnLongPressedListener {
         const val FOCUS_ON_ADDRESS_BAR = "focusOnAddressBar"
         const val START_VOICE_SEARCH = "startVoiceSearch"
         private const val SESSION_TO_DELETE = "sessionToDelete"
+        private const val SESSION_TO_START_SEARCH_FOR = "sessionToStartSearchFor"
+
+        // Distance over which the homepage content fades out where it meets the toolbars.
+        private val HOMEPAGE_EDGE_FADE_LENGTH = 24.dp
     }
 }

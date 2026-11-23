@@ -52,14 +52,28 @@ SVGDocumentWrapper::~SVGDocumentWrapper() {
   }
 }
 
+static MOZ_CAN_RUN_SCRIPT void DoDestroyViewer(nsIDocumentViewer* aViewer) {
+  if (RefPtr doc = aViewer->GetDocument()) {
+    doc->OnPageHide(false, nullptr);
+  }
+  aViewer->Close();
+  aViewer->Destroy();
+}
+
 void SVGDocumentWrapper::DestroyViewer() {
   MOZ_ASSERT(NS_IsMainThread());
-  if (mViewer) {
-    const RefPtr<Document> doc = mViewer->GetDocument();
-    doc->OnPageHide(false, nullptr);
-    mViewer->Close();
-    mViewer->Destroy();
-    mViewer = nullptr;
+  nsCOMPtr viewer = mViewer.forget();
+  if (!viewer) {
+    return;
+  }
+
+  if (nsContentUtils::IsSafeToRunScript()) {
+    DoDestroyViewer(viewer);
+  } else {
+    nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+        "DestroyViewer",
+        [viewer = std::move(viewer)]()
+            MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA { DoDestroyViewer(viewer); }));
   }
 }
 
@@ -254,8 +268,9 @@ SVGDocumentWrapper::OnStopRequest(nsIRequest* aRequest, nsresult status) {
 
 /** nsIObserver Methods **/
 NS_IMETHODIMP
-SVGDocumentWrapper::Observe(nsISupports* aSubject, const char* aTopic,
-                            const char16_t* aData) MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+SVGDocumentWrapper::Observe(nsISupports* /*aSubject*/, const char* aTopic,
+                            const char16_t* /*aData*/)
+    MOZ_CAN_RUN_SCRIPT_BOUNDARY {
   if (!strcmp(aTopic, NS_XPCOM_SHUTDOWN_OBSERVER_ID)) {
     // Sever ties from rendering observers to helper-doc's root SVG node
     SVGSVGElement* svgElem = GetSVGRootElement();

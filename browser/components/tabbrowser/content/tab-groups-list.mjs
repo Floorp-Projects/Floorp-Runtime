@@ -10,7 +10,7 @@ import {
   classMap,
 } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://global/content/elements/moz-button.mjs";
 
 const { XPCOMUtils } = ChromeUtils.importESModule(
@@ -18,6 +18,8 @@ const { XPCOMUtils } = ChromeUtils.importESModule(
 );
 const lazy = XPCOMUtils.declareLazy({
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+  SessionStore:
+    "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
   TabMetrics: "moz-src:///browser/components/tabbrowser/TabMetrics.sys.mjs",
 });
 
@@ -42,7 +44,7 @@ class TabGroupsList extends MozLitElement {
   }
 
   get #win() {
-    return this.documentGlobal;
+    return /** @type {BrowserWindow} */ (this.documentGlobal);
   }
 
   connectedCallback() {
@@ -63,7 +65,7 @@ class TabGroupsList extends MozLitElement {
     });
     this._savedGroups = lazy.PrivateBrowsingUtils.isWindowPrivate(win)
       ? []
-      : win.SessionStore.savedGroups.toSorted(
+      : lazy.SessionStore.savedGroups.toSorted(
           (a, b) => b.closedAt - a.closedAt
         );
   }
@@ -74,8 +76,8 @@ class TabGroupsList extends MozLitElement {
       group.select();
       group.documentGlobal.focus();
     } else {
-      this.#win.SessionStore.openSavedTabGroup(group.id, this.#win, {
-        source: lazy.TabMetrics.METRIC_SOURCE.TAB_OVERFLOW_MENU,
+      lazy.SessionStore.openSavedTabGroup(group.id, this.#win, {
+        source: lazy.TabMetrics.METRIC_SOURCE.APP_MENU_GROUP_LIST,
       });
     }
   }

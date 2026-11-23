@@ -18,8 +18,6 @@ describe("Smart Window telemetry", () => {
       set: [
         ["browser.preferences.aiControls", true],
         ["browser.smartwindow.enabled", true],
-        // TODO: Bug 2053495 - Refactor tests upon pref removal
-        ["browser.smartwindow.mistralRelease", false],
         ["browser.smartwindow.tos.consentTime", 1770830464],
       ],
     });
@@ -50,7 +48,7 @@ describe("Smart Window telemetry", () => {
     );
 
     const fastRadio = doc.querySelector(
-      'moz-radio[data-l10n-id="smart-window-model-fast"]'
+      'moz-radio[data-l10n-id="smart-window-model-fast-v2"]'
     );
     const prefChanged = TestUtils.waitForPrefChange(
       "browser.smartwindow.firstrun.modelChoice"
@@ -99,7 +97,7 @@ describe("Smart Window telemetry", () => {
     Assert.equal(modelSelection.value, 2, "Model 2 was previously selected");
 
     const fastRadio = doc.querySelector(
-      'moz-radio[data-l10n-id="smart-window-model-fast"]'
+      'moz-radio[data-l10n-id="smart-window-model-fast-v2"]'
     );
     const prefChanged = TestUtils.waitForPrefChange(
       "browser.smartwindow.firstrun.modelChoice"
@@ -395,6 +393,57 @@ describe("Smart Window telemetry", () => {
       settingsMemoriesEvents[1].extra.enabled,
       "false",
       "Settings memory telemetry for browsing was updated to false for second event"
+    );
+  });
+
+  it("sends telemetry when open sidebar by default checkbox is updated", async () => {
+    await SpecialPowers.pushPrefEnv({
+      set: [["browser.smartwindow.sidebar.openByDefault", true]],
+    });
+    Services.fog.testResetFOG();
+
+    let { doc, win } = await openSmartWindowPanel();
+
+    const checkbox = doc.getElementById("openSidebarByDefault");
+    Assert.ok(checkbox.checked, "Checkbox is checked initially");
+
+    checkbox.scrollIntoView();
+    EventUtils.synthesizeMouseAtCenter(checkbox.labelEl, {}, win);
+    await checkbox.updateComplete;
+
+    Assert.ok(!checkbox.checked, "Checkbox is now unchecked");
+    Assert.equal(
+      Glean.smartWindow.sidebarOpenByDefault.testGetValue(),
+      false,
+      "sidebarOpenByDefault metric is false after unchecking"
+    );
+
+    checkbox.labelEl.click();
+    await checkbox.updateComplete;
+
+    Assert.ok(checkbox.checked, "Checkbox is checked again");
+    Assert.equal(
+      Glean.smartWindow.sidebarOpenByDefault.testGetValue(),
+      true,
+      "sidebarOpenByDefault metric is true after checking"
+    );
+
+    const changeEvents =
+      Glean.smartWindow.sidebarOpenByDefaultChange.testGetValue();
+    Assert.equal(
+      changeEvents.length,
+      2,
+      "Two sidebarOpenByDefaultChange events were recorded"
+    );
+    Assert.equal(
+      changeEvents[0].extra.enabled,
+      "false",
+      "First event records the sidebar no longer opening by default"
+    );
+    Assert.equal(
+      changeEvents[1].extra.enabled,
+      "true",
+      "Second event records the sidebar opening by default again"
     );
   });
 

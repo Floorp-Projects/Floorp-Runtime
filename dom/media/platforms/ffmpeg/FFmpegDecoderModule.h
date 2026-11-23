@@ -156,53 +156,15 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   explicit FFmpegDecoderModule(const FFmpegLibWrapper* aLib) : mLib(aLib) {}
   virtual ~FFmpegDecoderModule() = default;
 
-  already_AddRefed<MediaDataDecoder> CreateVideoDecoder(
+  RefPtr<CreateDecoderPromise> AsyncCreateDecoder(
       const CreateDecoderParams& aParams) override {
-    if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
-      return nullptr;
+    RefPtr<MediaDataDecoder> decoder;
+    if (aParams.IsAudio()) {
+      decoder = CreateAudioDecoder(aParams);
+    } else if (aParams.IsVideo()) {
+      decoder = CreateVideoDecoder(aParams);
     }
-    auto decoder = MakeRefPtr<FFmpegVideoDecoder<V>>(
-        mLib, aParams.VideoConfig(), aParams.mKnowsCompositor,
-        aParams.mImageContainer,
-        aParams.mOptions.contains(CreateDecoderParams::Option::LowLatency),
-        aParams.mOptions.contains(
-            CreateDecoderParams::Option::HardwareDecoderNotAllowed),
-        aParams.mOptions.contains(
-            CreateDecoderParams::Option::Output8BitPerChannel),
-        aParams.mTrackingId, aParams.mCDM);
-
-#ifdef XP_WIN
-    // Ensure that decoding is exclusively performed using HW decoding in
-    // the GPU process. If FFmpeg does not support HW decoding, reset the
-    // decoder to allow PDMFactory to select an alternative HW-capable decoder
-    // module if available. In contrast, in the RDD process, it is acceptable
-    // to fallback to SW decoding when HW decoding is not available.
-    if (XRE_IsGPUProcess()) {
-      AVCodecID videoCodec =
-          FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType);
-      if (IsHWDecodingSupported(videoCodec) &&
-          !decoder->IsHardwareAccelerated()) {
-        MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
-                    "FFmpeg video decoder can't perform hw decoding, abort!");
-        (void)decoder->Shutdown();
-        decoder = nullptr;
-      }
-    }
-#endif
-    return decoder.forget();
-  }
-
-  already_AddRefed<MediaDataDecoder> CreateAudioDecoder(
-      const CreateDecoderParams& aParams) override {
-    if (XRE_IsGPUProcess()) {
-      // Only allow video in the GPU process.
-      return nullptr;
-    }
-    if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
-      return nullptr;
-    }
-    RefPtr<MediaDataDecoder> decoder = new FFmpegAudioDecoder<V>(mLib, aParams);
-    return decoder.forget();
+    return CreateDecoderPromiseFrom(decoder.forget(), aParams);
   }
 
   media::DecodeSupportSet SupportsMimeType(
@@ -223,12 +185,18 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return media::DecodeSupportSet{};
     }
 
-    // In GPU process, only support decoding if video. This only gives a hint of
-    // what the GPU decoder *may* support. The actual check will occur in
-    // CreateVideoDecoder.
+    // In GPU process, only support decoding if video, or audio with a CDM on
+    // Android. This only gives a hint of what the GPU decoder *may* support.
+    // The actual check will occur when creating the decoder.
     const auto& trackInfo = aParams.mConfig;
     if (XRE_IsGPUProcess() && !trackInfo.GetAsVideoInfo()) {
+#if defined(MOZ_WIDGET_ANDROID) && defined(FFVPX_VERSION)
+      if (!aParams.mCDM) {
+        return media::DecodeSupportSet{};
+      }
+#else
       return media::DecodeSupportSet{};
+#endif
     }
 
     // Temporary - forces use of VPXDecoder when alpha is present.
@@ -277,37 +245,61 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         audioCodec != AV_CODEC_ID_NONE ? audioCodec : videoCodec;
 
     media::DecodeSupportSet supports;
-    if (IsSWDecodingSupported(codecId)) {
+    if (IsSWDecodingSupported(codecId, aParams)) {
       supports += media::DecodeSupport::SoftwareDecode;
     }
     if (IsHWDecodingSupported(codecId)) {
 #ifdef MOZ_WIDGET_ANDROID
-      // Because we don't provide software implementations of H264 or HEVC on
-      // Android, we must use the platform software decoders even if true
-      // hardware decoding support is missing.
-      switch (codecId) {
-        case AV_CODEC_ID_H264:
-          supports += gfx::gfxVars::UseH264HwDecode()
-                          ? media::DecodeSupport::HardwareDecode
-                          : media::DecodeSupport::SoftwareDecode;
-          break;
-        case AV_CODEC_ID_HEVC:
-          supports += gfx::gfxVars::UseHEVCHwDecode()
-                          ? media::DecodeSupport::HardwareDecode
-                          : media::DecodeSupport::SoftwareDecode;
-          break;
-        default:
-          supports += media::DecodeSupport::HardwareDecode;
-          break;
-      }
+      const auto* videoInfo = trackInfo.GetAsVideoInfo();
+      const gfx::ColorDepth colorDepth =
+          videoInfo ? videoInfo->mColorDepth : gfx::ColorDepth::COLOR_8;
+      const gfx::IntSize size = videoInfo ? videoInfo->mImage : gfx::IntSize();
+      supports +=
+          GetMediaCodecDecodeSupport(codecId, mimeType, colorDepth, size);
 #else
       supports += media::DecodeSupport::HardwareDecode;
 #endif
     }
 
-#ifdef XP_WIN
-    // TODO : add this for Android as well in bug 1974849.
-    MOZ_ASSERT_IF(XRE_IsGPUProcess() && IsVideoCodec(codecId),
+#if defined(MOZ_WIDGET_ANDROID) && defined(FFVPX_VERSION) && \
+    defined(MOZ_USE_HWDECODE)
+    if (!supports.contains(media::DecodeSupport::HardwareDecode) &&
+        aParams.mCDM && audioCodec != AV_CODEC_ID_NONE &&
+        StaticPrefs::media_ffvpx_hw_enabled() &&
+        FFmpegDataDecoder<V>::FindHardwareAVCodec(mLib, audioCodec,
+                                                  AV_HWDEVICE_TYPE_NONE)) {
+      // Audio decoding with a CDM requires MediaCodec, which may support more
+      // codecs than we otherwise use it for.
+      supports += media::DecodeSupport::HardwareDecode;
+    }
+
+    const auto* videoInfo = trackInfo.GetAsVideoInfo();
+    if (!supports.contains(media::DecodeSupport::SoftwareDecode) &&
+        aParams.mCDM && videoInfo && StaticPrefs::media_ffvpx_hw_enabled() &&
+        FFmpegDataDecoder<V>::FindHardwareAVCodec(
+            mLib, videoCodec, AV_HWDEVICE_TYPE_MEDIACODEC)) {
+      // Video decoding with a CDM always uses MediaCodec, so its software
+      // decoders may be used even where pure software decoding is not
+      // permitted, such as in the GPU process.
+      const media::MediaCodec codec =
+          media::MCSInfo::GetMediaCodecFromMimeType(mimeType);
+      if (media::MCSInfo::SupportsSoftwareDecode(
+              gfx::gfxVars::PlatformMediaCodecsSupported(), codec)) {
+        supports += media::MCSInfo::GetMediaCodecDecodeSupportForSize(
+            codec,
+            media::MCSInfo::GetMediaCodecDecodeSupportForColorDepth(
+                codec, media::DecodeSupport::SoftwareDecode,
+                videoInfo->mColorDepth),
+            videoInfo->mImage);
+      }
+    }
+#endif
+
+#ifndef MOZ_WIDGET_ANDROID
+    // We need to disable this assert on Android because we can advertise
+    // H264/HEVC software support backed by MediaCodec, which does need to run
+    // in the GPU process.
+    MOZ_ASSERT_IF(XRE_IsGPUProcess(),
                   !supports.contains(media::DecodeSupport::SoftwareDecode));
 #endif
 
@@ -322,16 +314,59 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   bool SupportsColorDepth(
       gfx::ColorDepth aColorDepth,
       DecoderDoctorDiagnostics* aDiagnostics) const override {
-#if defined(MOZ_WIDGET_ANDROID)
-    return aColorDepth == gfx::ColorDepth::COLOR_8;
-#endif
     return true;
   }
 
-  bool IsSWDecodingSupported(const AVCodecID& aCodec) const {
-#ifdef XP_WIN
-    // SW video decoding is not allowed in the GPU process.
-    if (IsVideoCodec(aCodec) && XRE_IsGPUProcess()) {
+#ifdef MOZ_WIDGET_ANDROID
+  // Returns the support for decoding with MediaCodec given the color depth and
+  // frame size.
+  static media::DecodeSupportSet GetMediaCodecDecodeSupport(
+      AVCodecID aCodec, const nsACString& aMimeType,
+      gfx::ColorDepth aColorDepth, const gfx::IntSize& aSize) {
+    // Because we don't provide software implementations of H264 or HEVC on
+    // Android, we must use the platform software decoders even if true
+    // hardware decoding support is missing. These are permitted in the GPU
+    // process because they still use MediaCodec.
+    const media::MediaCodec codec =
+        media::MCSInfo::GetMediaCodecFromMimeType(aMimeType);
+    media::DecodeSupportSet support;
+    switch (aCodec) {
+      case AV_CODEC_ID_H264:
+      case AV_CODEC_ID_HEVC:
+        if (media::MCSInfo::SupportsSoftwareDecode(
+                gfx::gfxVars::PlatformMediaCodecsSupported(), codec)) {
+          support += media::DecodeSupport::SoftwareDecode;
+        }
+        if (aCodec == AV_CODEC_ID_H264 ? gfx::gfxVars::UseH264HwDecode()
+                                       : gfx::gfxVars::UseHEVCHwDecode()) {
+          support += media::DecodeSupport::HardwareDecode;
+        }
+        break;
+      default:
+        support += media::DecodeSupport::HardwareDecode;
+        break;
+    }
+    return media::MCSInfo::GetMediaCodecDecodeSupportForSize(
+        codec,
+        media::MCSInfo::GetMediaCodecDecodeSupportForColorDepth(codec, support,
+                                                                aColorDepth),
+        aSize);
+  }
+#endif
+
+  bool IsSWDecodingSupported(const AVCodecID& aCodec,
+                             const SupportDecoderParams& aParams) const {
+    // FFmpeg SW decoding is not allowed in the GPU process.
+    if (XRE_IsGPUProcess()) {
+      return false;
+    }
+#ifdef MOZ_WIDGET_ANDROID
+    // With a CDM, video is always decoded with MediaCodec, so it must support
+    // the color depth.
+    const auto* videoInfo = aParams.mConfig.GetAsVideoInfo();
+    if (aParams.mCDM && videoInfo &&
+        !FFmpegVideoDecoder<V>::MediaCodecSupportsColorDepth(
+            aCodec, aParams.MimeType(), videoInfo->mColorDepth)) {
       return false;
     }
 #endif
@@ -351,6 +386,57 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   }
 
  private:
+  already_AddRefed<MediaDataDecoder> CreateVideoDecoder(
+      const CreateDecoderParams& aParams) {
+    if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
+      return nullptr;
+    }
+#ifdef MOZ_WIDGET_ANDROID
+    // If only a platform decoder can be used, then it must be used in the GPU
+    // process instead, unless we were given a CDM in this process.
+    if (!aParams.mCDM && FFmpegVideoDecoder<V>::ShouldDecodeInGPUProcess() &&
+        !IsSWDecodingSupported(
+            FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType),
+            SupportDecoderParams(aParams))) {
+      MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
+                  "FFmpeg video decoder must be created in the GPU process");
+      return nullptr;
+    }
+#endif
+    auto decoder = MakeRefPtr<FFmpegVideoDecoder<V>>(
+        mLib, aParams.VideoConfig(), aParams.mKnowsCompositor,
+        aParams.mImageContainer,
+        aParams.mOptions.contains(CreateDecoderParams::Option::LowLatency),
+        aParams.mOptions.contains(
+            CreateDecoderParams::Option::HardwareDecoderNotAllowed),
+        aParams.mOptions.contains(
+            CreateDecoderParams::Option::Output8BitPerChannel),
+        aParams.mTrackingId, aParams.mCDM);
+
+    // Ensure that decoding is exclusively performed using HW decoding in
+    // the GPU process. If the decoder could not create a HW (or on Android,
+    // MediaCodec) decoding context, reset the decoder to allow PDMFactory to
+    // select an alternative HW-capable decoder module if available. In
+    // contrast, in the RDD process, it is acceptable to fallback to SW decoding
+    // when HW decoding is not available.
+    if (XRE_IsGPUProcess() && !decoder->IsHardwareAccelerated()) {
+      MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
+                  "FFmpeg video decoder can't perform hw decoding, abort!");
+      (void)decoder->Shutdown();
+      decoder = nullptr;
+    }
+    return decoder.forget();
+  }
+
+  already_AddRefed<MediaDataDecoder> CreateAudioDecoder(
+      const CreateDecoderParams& aParams) {
+    if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
+      return nullptr;
+    }
+    RefPtr<MediaDataDecoder> decoder = new FFmpegAudioDecoder<V>(mLib, aParams);
+    return decoder.forget();
+  }
+
   const FFmpegLibWrapper* mLib;
   constinit static inline StaticDataMutex<nsTArray<AVCodecID>>
       sSupportedHWCodecs{"sSupportedHWCodecs"};

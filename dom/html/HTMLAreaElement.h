@@ -10,6 +10,8 @@
 #include "nsGenericHTMLElement.h"
 #include "nsGkAtoms.h"
 
+class nsIFrame;
+
 namespace mozilla {
 class EventChainPostVisitor;
 class EventChainPreVisitor;
@@ -153,11 +155,21 @@ class HTMLAreaElement final : public nsGenericHTMLElement, public Link {
     nsGenericHTMLElement::NodeInfoChanged(aOldDoc);
   }
 
+  // The frame of the image using the map this <area> is in.  If multiple
+  // images share a map, this is the one that last set up the map.
+  nsIFrame* GetImageFrame() const { return mImageFrame; }
+  void SetImageFrame(nsIFrame* aFrame) { mImageFrame = aFrame; }
+
  protected:
   virtual ~HTMLAreaElement();
 
   virtual JSObject* WrapNode(JSContext* aCx,
                              JS::Handle<JSObject*> aGivenProto) override;
+
+  bool ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,
+                      const nsAString& aValue,
+                      nsIPrincipal* aMaybeScriptedPrincipal,
+                      nsAttrValue& aResult) override;
 
   virtual void AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
                             const nsAttrValue* aValue,
@@ -166,6 +178,7 @@ class HTMLAreaElement final : public nsGenericHTMLElement, public Link {
                             bool aNotify) override;
 
   RefPtr<nsDOMTokenList> mRelList;
+  nsIFrame* mImageFrame = nullptr;
 };
 
 }  // namespace dom

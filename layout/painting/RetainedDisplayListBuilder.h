@@ -161,11 +161,8 @@ class RetainedDisplayListBuilder {
  public:
   RetainedDisplayListBuilder(nsIFrame* aReferenceFrame,
                              nsDisplayListBuilderMode aMode, bool aBuildCaret)
-      : mBuilder(aReferenceFrame, aMode, aBuildCaret, true), mList(&mBuilder) {}
-  ~RetainedDisplayListBuilder() {
-    mBuilder.SetIsDestroying();
-    mList.DeleteAll(&mBuilder);
-  }
+      : mBuilder(aReferenceFrame, aMode, aBuildCaret, true) {}
+  ~RetainedDisplayListBuilder() { mList.DeleteAll(&mBuilder); }
 
   nsDisplayListBuilder* Builder() { return &mBuilder; }
 

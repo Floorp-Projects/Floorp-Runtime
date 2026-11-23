@@ -47,8 +47,8 @@ internal const val LENS_IMAGES_DIR = "lens_images"
 
 /**
  * Activity that hosts [LensCameraFragment] for capturing images for Google Lens. Handles camera permission and gallery
- * picking. A captured image is returned as an image URI. A photo picker image is uploaded here by [LensUploadOverlay]
- * and returned as the Lens result URL, so a cancelled or failed upload can fall back to the camera.
+ * picking. A captured or photo picker image is uploaded here by [LensUploadOverlay] and returned as the Lens result
+ * URL, so a cancelled or failed upload can fall back to the camera.
  */
 class LensCameraActivity : AppCompatActivity() {
 
@@ -113,7 +113,11 @@ class LensCameraActivity : AppCompatActivity() {
     @VisibleForTesting
     internal fun handleGalleryResult(uri: Uri?) {
         if (uri == null) return
-        uploadOverlay.start(uri, isPrivate = intent.getBooleanExtra(EXTRA_IS_PRIVATE, false))
+        uploadOverlay.start(
+            uri,
+            isPrivate = intent.getBooleanExtra(EXTRA_IS_PRIVATE, false),
+            source = IMAGE_SOURCE_PHOTO_PICKER,
+        )
     }
 
     private val qrGalleryLauncher =
@@ -136,6 +140,15 @@ class LensCameraActivity : AppCompatActivity() {
             this,
         ) { _, bundle ->
             handleOptOutResult(bundle.getString(GoogleLensOptOutBottomSheetFragment.RESULT_ACTION))
+        }
+
+        supportFragmentManager.setFragmentResultListener(
+            LensCameraFragment.MODE_CHANGED_REQUEST_KEY,
+            this,
+        ) { _, bundle ->
+            CameraMode.fromNameOrNull(bundle.getString(LensCameraFragment.RESULT_CAMERA_MODE))?.let {
+                components.settings.lensCameraLastMode = it
+            }
         }
 
         supportFragmentManager.setFragmentResultListener(
@@ -173,15 +186,14 @@ class LensCameraActivity : AppCompatActivity() {
                     Uri::class.java,
                 )
             if (imageUri != null) {
-                val resultIntent =
-                    Intent().apply {
-                        data = imageUri
-                        putExtra(EXTRA_IMAGE_SOURCE, IMAGE_SOURCE_CAMERA)
-                    }
-                setResult(RESULT_OK, resultIntent)
-            } else {
-                setResult(RESULT_CANCELED)
+                uploadOverlay.start(
+                    imageUri,
+                    isPrivate = intent.getBooleanExtra(EXTRA_IS_PRIVATE, false),
+                    source = IMAGE_SOURCE_CAMERA,
+                )
+                return@setFragmentResultListener
             }
+            setResult(RESULT_CANCELED)
             finish()
         }
 
@@ -348,9 +360,18 @@ class LensCameraActivity : AppCompatActivity() {
             return
         }
         supportFragmentManager.commit {
-            add(R.id.lens_fragment_container_view, LensCameraFragment::class.java, null)
+            add(
+                R.id.lens_fragment_container_view,
+                LensCameraFragment::class.java,
+                Bundle().apply { putString(LensCameraFragment.ARG_INITIAL_MODE, resolveInitialMode().name) },
+            )
         }
     }
+
+    /** The mode requested through [EXTRA_INITIAL_MODE], falling back to the one the user last selected. */
+    @VisibleForTesting
+    internal fun resolveInitialMode(): CameraMode =
+        CameraMode.fromNameOrNull(intent.getStringExtra(EXTRA_INITIAL_MODE)) ?: components.settings.lensCameraLastMode
 
     private fun launchGalleryPicker() {
         galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -467,19 +488,13 @@ class LensCameraActivity : AppCompatActivity() {
 
         private const val STATE_PERMISSION_REQUESTED = "permission_requested"
 
-        /**
-         * Result intent extra naming the upload method that produced the image, read by `LensFeature` to attribute the
-         * Google Lens search telemetry.
-         */
-        internal const val EXTRA_IMAGE_SOURCE = "lens_image_source"
-
-        @VisibleForTesting internal const val IMAGE_SOURCE_CAMERA = "camera"
+        internal const val IMAGE_SOURCE_CAMERA = "camera"
 
         internal const val IMAGE_SOURCE_PHOTO_PICKER = "photo_picker"
 
         /**
-         * Result intent extra carrying the Lens results URL of an image this activity already uploaded. When present,
-         * the result carries no image URI and the search telemetry has already been recorded.
+         * Result intent extra carrying the Lens results URL of the image this activity uploaded. The search telemetry
+         * has already been recorded.
          */
         internal const val EXTRA_LENS_RESULT_URL = "lens_result_url"
 
@@ -489,14 +504,20 @@ class LensCameraActivity : AppCompatActivity() {
          */
         internal const val EXTRA_IS_PRIVATE = "lens_is_private"
 
+        @VisibleForTesting internal const val EXTRA_INITIAL_MODE = "lens_initial_mode"
+
         /**
          * Creates an intent to launch [LensCameraActivity].
          *
          * @param context The context to launch the activity from.
          * @param isPrivate Whether an image uploaded by this activity should use the private cookie context.
+         * @param initialMode The [CameraMode] to open in, or null to reopen the mode the user last selected.
          */
-        fun newIntent(context: Context, isPrivate: Boolean): Intent {
-            return Intent(context, LensCameraActivity::class.java).putExtra(EXTRA_IS_PRIVATE, isPrivate)
+        fun newIntent(context: Context, isPrivate: Boolean, initialMode: CameraMode? = null): Intent {
+            return Intent(context, LensCameraActivity::class.java).apply {
+                putExtra(EXTRA_IS_PRIVATE, isPrivate)
+                initialMode?.let { putExtra(EXTRA_INITIAL_MODE, it.name) }
+            }
         }
     }
 }

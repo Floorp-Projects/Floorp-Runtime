@@ -121,7 +121,7 @@ class PCUuidGenerator : public JsepUuidGenerator {
  public:
   virtual bool Generate(std::string* idp) override;
   virtual UniquePtr<JsepUuidGenerator> Clone() const override {
-    return MakeUnique<PCUuidGenerator>(*this);
+    return std::make_unique<PCUuidGenerator>(*this);
   }
 
  private:
@@ -896,6 +896,11 @@ class PeerConnectionImpl final
 
   // Set if prefs dictate that we should force the use of a web proxy.
   bool mForceProxy = false;
+
+  // Set if the window's Connection Allowlists block WebRTC, which makes every
+  // local address, remote candidate and ICE server administratively
+  // prohibited.
+  bool mBlockedByConnectionAllowlists = false;
 
   // Used to cancel incoming stun addrs response
   RefPtr<net::StunAddrsRequestChild> mStunAddrsRequest;

@@ -186,6 +186,35 @@
         {
           "type": "object",
           "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "args": {
+                  "type": "string",
+                  "description": "The support page, relative to the app.support.baseURL pref. E.g. \"firefox-backup\" for https://support.mozilla.org/kb/firefox-backup"
+                },
+                "where": {
+                  "type": "string",
+                  "enum": ["current", "save", "tab", "tabshifted", "window"],
+                  "description": "Where the URL is opened",
+                  "default": "current"
+                }
+              },
+              "required": ["args"],
+              "additionalProperties": false
+            },
+            "type": {
+              "type": "string",
+              "enum": ["OPEN_SUPPORT_PAGE"]
+            }
+          },
+          "required": ["data", "type"],
+          "additionalProperties": false,
+          "description": "Opens a support.mozilla.org article"
+        },
+        {
+          "type": "object",
+          "properties": {
             "type": {
               "type": "string",
               "enum": ["OPEN_PRIVATE_BROWSER_WINDOW"]
@@ -218,6 +247,33 @@
           "required": ["type"],
           "additionalProperties": false,
           "description": "Opens the Smart Window monitor panel straight to the create form"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["SUBMIT_SMARTWINDOW_PROMPT"]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string",
+                  "description": "Request sent to the Smart Window sidebar chat."
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Identifies the surface that sent the prompt, recorded as submit_type on chat telemetry and how_initiated on AI Tab telemetry. Defaults to \"fxms\"."
+                }
+              },
+              "required": ["prompt"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "data"],
+          "additionalProperties": false,
+          "description": "Sends a prompt to the Smart Window sidebar chat, opening the sidebar if needed"
         },
         {
           "type": "object",
@@ -296,6 +352,29 @@
           "properties": {
             "type": {
               "type": "string",
+              "enum": ["SHOW_QR_CODE"]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "args": {
+                  "type": "string",
+                  "description": "URL to encode in the QR code"
+                }
+              },
+              "required": ["args"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["data", "type"],
+          "additionalProperties": false,
+          "description": "Shows a QR code for the given URL in a dialog over the current tab"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "enum": ["PIN_CURRENT_TAB"]
             }
           },
@@ -343,6 +422,10 @@
                 "source": {
                   "type": "string",
                   "description": "Identitifer of the browser that should be pre-selected in the import migration wizard popup (e.g. 'chrome'), See https://searchfox.org/mozilla-central/rev/8dae1cc76a6b45e05198bc0d5d4edb7bf1003265/browser/components/migration/MigrationUtils.jsm#917"
+                },
+                "tabModal": {
+                  "type": "boolean",
+                  "description": "Open the migration wizard as a dialog over the current tab instead of in about:preferences."
                 }
               },
               "additionalProperties": false
@@ -448,6 +531,10 @@
                 "fireAndForget": {
                   "type": "boolean",
                   "description": "Whether or not to wait for user confirmation before resolving the action"
+                },
+                "promptOnly": {
+                  "type": "boolean",
+                  "description": "Only pin through the OS prompt that asks for the user's consent, never through an API that may pin silently. Set automatically for action_only messages."
                 }
               },
               "additionalProperties": false
@@ -486,6 +573,10 @@
                 "fireAndForget": {
                   "type": "boolean",
                   "description": "Whether or not to wait for user confirmation before resolving the action"
+                },
+                "promptOnly": {
+                  "type": "boolean",
+                  "description": "Only pin through the OS prompt that asks for the user's consent, never through an API that may pin silently. Set automatically for action_only messages."
                 }
               },
               "additionalProperties": false
@@ -908,6 +999,18 @@
           "properties": {
             "type": {
               "type": "string",
+              "enum": ["ACCEPT_SMARTWINDOW_TOU"]
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false,
+          "description": "Notify Smart Window that the user accepted its Terms of Use."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "enum": ["CREATE_NEW_SELECTABLE_PROFILE"]
             }
           },
@@ -1154,6 +1257,31 @@
           "required": ["type"],
           "additionalProperties": false,
           "description": "Gets the user's referral code or generates one if it doesn't exist, and opens about:referrals with the code as a param"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["SELECT_AND_MARK_MENU_ITEM"]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "itemIds": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 1,
+                  "description": "Ids of the items to select and mark. The first is in the app menu's main view; each later id is marked once the user opens the subview holding it."
+                }
+              },
+              "required": ["itemIds"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "data"],
+          "additionalProperties": false,
+          "description": "Opens the app menu and marks an item in it, to point the user at a feature."
         }
       ]
     }

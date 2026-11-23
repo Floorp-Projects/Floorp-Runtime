@@ -30,12 +30,17 @@ impl fmt::Display for SdpMediaLine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{media} {port}{pcount} {proto} {formats}",
+            "{media} {port}{pcount} {proto}{fmt_space}{formats}",
             media = self.media,
             port = self.port,
             pcount = maybe_print_param("/", self.port_count, 0),
             proto = self.proto,
-            formats = self.formats
+            // We need to avoid emitting a trailing space if an unknown media
+            // type is used and the format list is empty. We want to maintain
+            // string comparability between the parsed and reserialized media
+            // lines.
+            fmt_space = if self.formats.is_empty() { "" } else { " " },
+            formats = self.formats,
         )
     }
 }
@@ -46,6 +51,7 @@ pub enum SdpMediaValue {
     Audio,
     Video,
     Application,
+    Unknown(String),
 }
 
 impl fmt::Display for SdpMediaValue {
@@ -54,6 +60,7 @@ impl fmt::Display for SdpMediaValue {
             SdpMediaValue::Audio => "audio",
             SdpMediaValue::Video => "video",
             SdpMediaValue::Application => "application",
+            SdpMediaValue::Unknown(ref s) => s,
         }
         .fmt(f)
     }
@@ -100,15 +107,34 @@ impl fmt::Display for SdpProtocolValue {
 pub enum SdpFormatList {
     Integers(Vec<u32>),
     Strings(Vec<String>),
+    // Unknown media types have unknown format list types, and are not parsed
+    Unknown(String),
 }
 
 impl fmt::Display for SdpFormatList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            SdpFormatList::Integers(ref x) => maybe_vector_to_string!("{}", x, " "),
-            SdpFormatList::Strings(ref x) => x.join(" "),
+            SdpFormatList::Integers(ref x) => write!(
+                f,
+                "{}",
+                x.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            SdpFormatList::Strings(ref x) => write!(f, "{}", x.join(" ")),
+            SdpFormatList::Unknown(ref x) => write!(f, "{}", x),
         }
-        .fmt(f)
+    }
+}
+
+impl SdpFormatList {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            SdpFormatList::Integers(x) => x.is_empty(),
+            SdpFormatList::Strings(x) => x.is_empty(),
+            SdpFormatList::Unknown(unparsed) => unparsed.is_empty(),
+        }
     }
 }
 
@@ -126,11 +152,11 @@ impl fmt::Display for SdpFormatList {
 #[cfg_attr(feature = "enhanced_debug", derive(Debug))]
 pub struct SdpMedia {
     media: SdpMediaLine,
+    information: Option<String>,
     connection: Option<SdpConnection>,
     bandwidth: Vec<SdpBandwidth>,
     attribute: Vec<SdpAttribute>,
     // unsupported values:
-    // information: Option<String>,
     // key: Option<String>,
 }
 
@@ -138,7 +164,7 @@ impl fmt::Display for SdpMedia {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "m={mline}\r\n{bw}{connection}{attributes}",
+            "m={mline}\r\n{connection}{bw}{attributes}",
             mline = self.media,
             bw = maybe_vector_to_string!("b={}\r\n", self.bandwidth, "\r\nb="),
             connection = option_to_string!("c={}\r\n", self.connection),
@@ -151,6 +177,7 @@ impl SdpMedia {
     pub fn new(media: SdpMediaLine) -> SdpMedia {
         SdpMedia {
             media,
+            information: None,
             connection: None,
             bandwidth: Vec::new(),
             attribute: Vec::new(),
@@ -179,6 +206,14 @@ impl SdpMedia {
 
     pub fn get_formats(&self) -> &SdpFormatList {
         &self.media.formats
+    }
+
+    pub fn get_information(&self) -> &Option<String> {
+        &self.information
+    }
+
+    pub fn set_information(&mut self, information: Option<String>) {
+        self.information = information;
     }
 
     pub fn get_bandwidth(&self) -> &Vec<SdpBandwidth> {
@@ -222,6 +257,7 @@ impl SdpMedia {
         match self.media.formats {
             SdpFormatList::Integers(_) => self.media.formats = SdpFormatList::Integers(Vec::new()),
             SdpFormatList::Strings(_) => self.media.formats = SdpFormatList::Strings(Vec::new()),
+            SdpFormatList::Unknown(_) => self.media.formats = SdpFormatList::Unknown(String::new()),
         }
 
         self.attribute.retain({
@@ -238,10 +274,12 @@ impl SdpMedia {
         });
     }
 
+    // This seems like it could be test-only
     pub fn add_codec(&mut self, rtpmap: SdpAttributeRtpmap) -> Result<(), SdpParserInternalError> {
         match self.media.formats {
             SdpFormatList::Integers(ref mut x) => x.push(u32::from(rtpmap.payload_type)),
             SdpFormatList::Strings(ref mut x) => x.push(rtpmap.payload_type.to_string()),
+            SdpFormatList::Unknown(_) => {}
         }
 
         self.add_attribute(SdpAttribute::Rtpmap(rtpmap))?;
@@ -299,6 +337,7 @@ impl AnonymizingClone for SdpMedia {
     fn masked_clone(&self, anon: &mut StatefulSdpAnonymizer) -> Self {
         let mut masked = SdpMedia {
             media: self.media.clone(),
+            information: self.information.clone(),
             bandwidth: self.bandwidth.clone(),
             connection: self.connection.clone(),
             attribute: Vec::new(),
@@ -315,11 +354,12 @@ fn parse_media_token(value: &str) -> Result<SdpMediaValue, SdpParserInternalErro
         "audio" => SdpMediaValue::Audio,
         "video" => SdpMediaValue::Video,
         "application" => SdpMediaValue::Application,
-        _ => {
-            return Err(SdpParserInternalError::Unsupported(format!(
-                "unsupported media value: {value}"
-            )));
+        "" => {
+            return Err(SdpParserInternalError::Generic(
+                "empty media value".to_string(),
+            ))
         }
+        _ => SdpMediaValue::Unknown(value.to_string()),
     })
 }
 
@@ -345,13 +385,37 @@ fn parse_protocol_token(value: &str) -> Result<SdpProtocolValue, SdpParserIntern
 }
 
 pub fn parse_media(value: &str) -> Result<SdpType, SdpParserInternalError> {
-    let mv: Vec<&str> = value.split_whitespace().collect();
-    if mv.len() < 4 {
+    // Split out the media type, port, and protocol tokens, with the remainder
+    // being the format list in single string.
+    let mv: Vec<&str> = value.splitn(4, char::is_whitespace).collect();
+    if mv.is_empty() {
         return Err(SdpParserInternalError::Generic(
-            "media attribute must have at least four tokens".to_string(),
+            "media attribute must have a media type".to_string(),
         ));
     }
     let media = parse_media_token(mv[0])?;
+    match (&media, mv.len()) {
+        (SdpMediaValue::Unknown(_), l) if l < 3 => {
+            // RFC 8866: https://www.rfc-editor.org/info/rfc8866/#MediaTypes
+            // While spec requires a <fmt> token, it leaves the definition of
+            // what is in that token to the specification that defines the
+            // media type. It could conceivably allow for an empty string.
+            // Since we ignore unknown media types, we refrain from having
+            // an opinion on the contents of <fmt>.
+            return Err(SdpParserInternalError::Generic(
+                "media attribute with unknown type must have at least 3 tokens".to_string(),
+            ));
+        }
+        (
+            m @ SdpMediaValue::Audio | m @ SdpMediaValue::Video | m @ SdpMediaValue::Application,
+            l,
+        ) if l < 4 => {
+            return Err(SdpParserInternalError::Generic(format!(
+                "media attribute of type {m} must have at least 4 tokens"
+            )));
+        }
+        _ => {}
+    }
     let mut ptokens = mv[1].split('/');
     let port = match ptokens.next() {
         None => {
@@ -371,12 +435,13 @@ pub fn parse_media(value: &str) -> Result<SdpType, SdpParserInternalError> {
         Some(c) => c.parse::<u32>()?,
     };
     let proto = parse_protocol_token(mv[2])?;
-    let fmt_slice: &[&str] = &mv[3..];
     let formats = match media {
         SdpMediaValue::Audio | SdpMediaValue::Video => {
+            let fmt_slice = &mv[3].split_whitespace().collect::<Vec<&str>>();
             let mut fmt_vec: Vec<u32> = vec![];
             for num in fmt_slice {
                 let fmt_num = num.parse::<u32>()?;
+                #[cfg(feature = "pedantic")]
                 if matches!(fmt_num, 1 | 2 | 19 | 64..=95 | 128 .. ) {
                     return Err(SdpParserInternalError::Generic(
                         "format number in media line is out of range".to_string(),
@@ -387,6 +452,7 @@ pub fn parse_media(value: &str) -> Result<SdpType, SdpParserInternalError> {
             SdpFormatList::Integers(fmt_vec)
         }
         SdpMediaValue::Application => {
+            let fmt_slice = &mv[3].split_whitespace().collect::<Vec<&str>>();
             let mut fmt_vec: Vec<String> = vec![];
             // TODO enforce length == 1 and content 'webrtc-datachannel' only?
             for token in fmt_slice {
@@ -394,6 +460,11 @@ pub fn parse_media(value: &str) -> Result<SdpType, SdpParserInternalError> {
             }
             SdpFormatList::Strings(fmt_vec)
         }
+        SdpMediaValue::Unknown(_) => SdpFormatList::Unknown(if mv.len() > 3 {
+            mv[3].to_string()
+        } else {
+            "".to_string()
+        }),
     };
     let m = SdpMediaLine {
         media,
@@ -424,6 +495,15 @@ pub fn parse_media_vector(lines: &mut Vec<SdpLine>) -> Result<Vec<SdpMedia>, Sdp
         let line = lines.remove(0);
         let _line_number = line.line_number;
         match line.sdp_type {
+            SdpType::Information(i) => {
+                if sdp_media.information.is_some() {
+                    return Err(SdpParserError::Sequence {
+                        message: "information type already exists at this media level".to_string(),
+                        line_number: _line_number,
+                    });
+                }
+                sdp_media.set_information(Some(i));
+            }
             SdpType::Connection(c) => {
                 if sdp_media.connection.is_some() {
                     return Err(SdpParserError::Sequence {

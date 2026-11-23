@@ -87,7 +87,8 @@ add_task(async function test_createTable_already_created() {
 
 add_task(async function test_attach_createTable_tableExists_indexExists() {
   var msc = getOpenedDatabase();
-  var file = do_get_file("storage_attach.sqlite", true);
+  var file = do_get_profile();
+  file.append("storage_attach.sqlite");
   var msc2 = getDatabase(file);
   msc.executeSimpleSQL("ATTACH DATABASE '" + file.path + "' AS sample");
 
@@ -636,7 +637,7 @@ add_task(async function test_clone_copies_pragmas() {
     { name: "journal_size_limit", value: 524288, copied: true },
     { name: "synchronous", value: 2, copied: true },
     { name: "wal_autocheckpoint", value: 16, copied: true },
-    { name: "busy_timeout", value: 50, copied: true },
+    { name: "busy_timeout", value: 50, copied: false },
     { name: "ignore_check_constraints", value: 1, copied: false },
   ];
 

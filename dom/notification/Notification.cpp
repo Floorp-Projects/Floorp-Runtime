@@ -280,9 +280,13 @@ already_AddRefed<Notification> Notification::Constructor(
       },
       notification);
 
-  ContextInfo contextInfo = notification->GetContextInfo();
+  Maybe<ContextInfo> contextInfo = notification->GetContextInfo();
+  if (!contextInfo) {
+    aRv.ThrowInvalidStateError("Failed by an invalidated global context");
+    return nullptr;
+  }
   notification->LoadImageAndShow(WrapNotNull(promise.get()),
-                                 std::move(contextInfo));
+                                 contextInfo.extract());
 
   notification->KeepAliveIfHasListenersFor(nsGkAtoms::onclick);
   notification->KeepAliveIfHasListenersFor(nsGkAtoms::onshow);
@@ -301,7 +305,7 @@ Result<Ok, nsresult> ValidateBase64Data(const nsAString& aData) {
   // To and from to ensure it is valid base64.
   RefPtr<nsStructuredCloneContainer> container =
       new nsStructuredCloneContainer();
-  MOZ_TRY(container->InitFromBase64(aData, JS_STRUCTURED_CLONE_VERSION));
+  MOZ_TRY(container->InitFromBase64(aData));
 
   nsString result;
   MOZ_TRY(container->GetDataAsBase64(result));
@@ -630,7 +634,9 @@ void Notification::Close() {
     return;
   }
   if (!mActor) {
-    CreateActor(GetContextInfo());
+    if (Maybe<ContextInfo> context = GetContextInfo()) {
+      CreateActor(context.extract());
+    }
   }
   if (mActor) {
     (void)mActor->SendClose();
@@ -656,7 +662,7 @@ void Notification::GetData(JSContext* aCx,
     nsresult rv;
     RefPtr<nsStructuredCloneContainer> container =
         new nsStructuredCloneContainer();
-    rv = container->InitFromBase64(dataSerialized, JS_STRUCTURED_CLONE_VERSION);
+    rv = container->InitFromBase64(dataSerialized);
     if (NS_WARN_IF(NS_FAILED(rv))) {
       aRetval.setNull();
       return;
@@ -743,32 +749,35 @@ already_AddRefed<Promise> Notification::ShowPersistentNotification(
     return nullptr;
   }
 
-  ContextInfo contextInfo = notification->GetContextInfo();
-  if (!notification->CreateActor(contextInfo)) {
+  Maybe<ContextInfo> contextInfo = notification->GetContextInfo();
+  if (!contextInfo || !notification->CreateActor(contextInfo.ref())) {
     aRv.ThrowUnknownError("Failed to create actor.");
     return nullptr;
   }
-  notification->LoadImageAndShow(WrapNotNull(p), std::move(contextInfo));
+  notification->LoadImageAndShow(WrapNotNull(p), contextInfo.extract());
 
   return p.forget();
 }
 
-Notification::ContextInfo Notification::GetContextInfo() {
+Maybe<Notification::ContextInfo> Notification::GetContextInfo() {
   // TODO: Should get nsIGlobalObject methods for each method
   if (WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate()) {
-    return {.mTarget = workerPrivate->HybridEventTarget(),
-            .mPrincipal = workerPrivate->GetPrincipal(),
-            .mEffectiveStoragePrincipal =
-                workerPrivate->GetEffectiveStoragePrincipal(),
-            .mIsSecureContext = workerPrivate->IsSecureContext()};
+    return Some(
+        ContextInfo{.mTarget = workerPrivate->HybridEventTarget(),
+                    .mPrincipal = workerPrivate->GetPrincipal(),
+                    .mEffectiveStoragePrincipal =
+                        workerPrivate->GetEffectiveStoragePrincipal(),
+                    .mIsSecureContext = workerPrivate->IsSecureContext()});
   }
 
-  nsGlobalWindowInner* win = GetOwnerWindow();
-  return {
-      .mPrincipal = win->GetPrincipal(),
-      .mEffectiveStoragePrincipal = win->GetEffectiveStoragePrincipal(),
-      .mIsSecureContext = win->IsSecureContext(),
-  };
+  if (nsGlobalWindowInner* win = GetOwnerWindow()) {
+    return Some(ContextInfo{
+        .mPrincipal = win->GetPrincipal(),
+        .mEffectiveStoragePrincipal = win->GetEffectiveStoragePrincipal(),
+        .mIsSecureContext = win->IsSecureContext(),
+    });
+  }
+  return Nothing();
 }
 
 WeakPtr<notification::NotificationChild> Notification::CreateActor(

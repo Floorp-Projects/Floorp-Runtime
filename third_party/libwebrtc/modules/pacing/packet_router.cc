@@ -87,11 +87,14 @@ void PacketRouter::RegisterNotifyBweCallback(
   notify_bwe_callback_ = std::move(callback);
 }
 
-void PacketRouter::ConfigureForRtcpFeedback(bool set_transport_seq,
-                                            bool send_rtp_packets_as_ect1) {
+void PacketRouter::SetGenerateTransportSequenceNumbers(bool generate) {
   RTC_DCHECK_RUN_ON(&thread_checker_);
-  set_transport_seq_ = set_transport_seq;
-  send_rtp_packets_as_ect1_ = send_rtp_packets_as_ect1;
+  set_transport_seq_ = generate;
+}
+
+void PacketRouter::SetSendPacketsAsEct1(bool send_as_ect1) {
+  RTC_DCHECK_RUN_ON(&thread_checker_);
+  send_rtp_packets_as_ect1_ = send_as_ect1;
 }
 
 void PacketRouter::AddSendRtpModuleToMap(RtpRtcpInterface* rtp_module,
@@ -201,14 +204,18 @@ void PacketRouter::SendPacket(std::unique_ptr<RtpPacketToSend> packet,
   // if the TransportSequenceNumber header extension is negotiated for the
   // specific media type. Historically, webrtc only used TransportSequenceNumber
   // on video packets.
-  if (set_transport_seq_ || packet->HasExtension<TransportSequenceNumber>()) {
+  // TODO(bugs.webrtc.org/564720400): Either remove or make permanent skipping
+  // transport sequence number assignment and BWE notification if allow_sending
+  // is false.
+  if (packet->allow_sending() &&
+      (set_transport_seq_ || packet->HasExtension<TransportSequenceNumber>())) {
     packet->set_transport_sequence_number(transport_seq_++);
   }
   if (send_rtp_packets_as_ect1_) {
     packet->set_send_as_ect1();
   }
   rtp_module->AssignSequenceNumber(*packet);
-  if (notify_bwe_callback_) {
+  if (notify_bwe_callback_ && packet->allow_sending()) {
     notify_bwe_callback_(*packet, cluster_info);
   }
 

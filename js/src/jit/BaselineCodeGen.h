@@ -144,6 +144,10 @@ class BaselineCodeGen {
 
   void prepareVMCall();
 
+  void ensureDebugModeOSRPointSpace();
+  void emitDebugModeOSRResumeTarget(RetAddrEntry::Kind kind,
+                                    uint32_t returnOffset);
+
   void storeFrameSizeAndPushDescriptor(uint32_t argSize, Register scratch);
 
   enum class CallVMPhase { BeforePushingLocals, AfterPushingLocals };
@@ -319,6 +323,7 @@ class BaselineCompilerHandler {
 #endif
   FixedList<Label> labels_;
   RetAddrEntryVector retAddrEntries_;
+  mozilla::Maybe<uint32_t> lastDebugModeOSRPointOffset_;
   AllocSiteIndexVector allocSiteIndices_;
 
   // Native code offsets for OSR at JSOp::LoopHead ops.
@@ -346,6 +351,7 @@ class BaselineCompilerHandler {
   uint32_t baseWarmUpThreshold_;
 
   bool compileDebugInstrumentation_;
+  bool compileDebugModeOSRResumeTargets_;
   bool ionCompileable_;
 
   bool compilingOffThread_ = false;
@@ -405,6 +411,11 @@ class BaselineCompilerHandler {
     return compileDebugInstrumentation_;
   }
 
+  bool shouldEmitDebugModeOSRResumeTarget(RetAddrEntry::Kind kind) const {
+    return compileDebugModeOSRResumeTargets_ &&
+           CanResumeBaselineScriptAfterDebugModeOSR(kind);
+  }
+
   bool maybeIonCompileable() const { return ionCompileable_; }
   void setIonCompileable(bool value) { ionCompileable_ = value; }
 
@@ -415,6 +426,10 @@ class BaselineCompilerHandler {
 
   RetAddrEntryVector& retAddrEntries() { return retAddrEntries_; }
   OSREntryVector& osrEntries() { return osrEntries_; }
+
+  const mozilla::Maybe<uint32_t>& lastDebugModeOSRPointOffset() const {
+    return lastDebugModeOSRPointOffset_;
+  }
 
   [[nodiscard]] bool recordCallRetAddr(RetAddrEntry::Kind kind,
                                        uint32_t retOffset);
@@ -472,6 +487,8 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
 
   CodeOffset profilerPushToggleOffset_;
 
+  CodeOffset debugModeOSREpilogueOffset_;
+
   BaselinePerfSpewer perfSpewer_;
 
  public:
@@ -497,6 +514,7 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
   bool emitBody();
 
   [[nodiscard]] bool emitDebugTrap();
+  void emitDebugModeOSREpilogue();
 };
 
 // Interface used by BaselineCodeGen for BaselineInterpreterGenerator.
@@ -591,6 +609,10 @@ class BaselineInterpreterHandler {
 
   const BaselineInterpreter::CallVMOffsets& callVMOffsets() const {
     return callVMOffsets_;
+  }
+
+  bool shouldEmitDebugModeOSRResumeTarget(RetAddrEntry::Kind kind) const {
+    return CanResumeBaselineInterpreterAfterDebugModeOSR(kind);
   }
 
   [[nodiscard]] bool recordCallRetAddr(RetAddrEntry::Kind kind,

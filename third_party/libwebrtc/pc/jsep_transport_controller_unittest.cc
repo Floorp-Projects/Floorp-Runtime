@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/nullability.h"
 #include "absl/strings/string_view.h"
 #include "api/candidate.h"
 #include "api/crypto/crypto_options.h"
@@ -75,6 +76,7 @@ namespace webrtc {
 namespace {
 
 using ::testing::ElementsAre;
+using ::testing::Optional;
 using ::testing::Pair;
 
 constexpr TimeDelta kTimeout = TimeDelta::Millis(100);
@@ -112,6 +114,35 @@ class FakeDtlsTransportFactory : public DtlsTransportFactory {
       const CryptoOptions& crypto_options,
       SSLProtocolVersion max_version) override {
     return std::make_unique<FakeDtlsTransport>(std::move(ice));
+  }
+};
+
+// Unlike FakeDtlsTransport, notifies about DTLS role changes the same way that
+// DtlsTransportInternalImpl does.
+class RoleChangeNotifyingFakeDtlsTransport : public FakeDtlsTransport {
+ public:
+  using FakeDtlsTransport::FakeDtlsTransport;
+
+  bool SetDtlsRole(SSLRole role) override {
+    SSLRole current_role;
+    const bool changed = !GetDtlsRole(&current_role) || current_role != role;
+    FakeDtlsTransport::SetDtlsRole(role);
+    if (changed) {
+      SendDtlsRoleChange(this, role);
+    }
+    return true;
+  }
+};
+
+class RoleChangeNotifyingFakeDtlsTransportFactory
+    : public FakeDtlsTransportFactory {
+ public:
+  std::unique_ptr<DtlsTransportInternal> CreateDtlsTransport(
+      scoped_refptr<IceTransportInterface> ice,
+      const CryptoOptions& crypto_options,
+      SSLProtocolVersion max_version) override {
+    return std::make_unique<RoleChangeNotifyingFakeDtlsTransport>(
+        std::move(ice));
   }
 };
 
@@ -202,6 +233,24 @@ class JsepTransportControllerTest : public JsepTransportController::Observer,
     bundle_group.AddContentName(kAudioMid1);
     bundle_group.AddContentName(kVideoMid1);
     bundle_group.AddContentName(kDataMid1);
+    description->AddGroup(bundle_group);
+    return description;
+  }
+
+  // Creates an audio and a video section in a BUNDLE group, both using
+  // `conn_role` and the fingerprint of `cert`.
+  absl_nonnull std::unique_ptr<SessionDescription>
+  CreateBundledDescriptionWithDtls(
+      ConnectionRole conn_role,
+      absl_nonnull scoped_refptr<RTCCertificate> cert) {
+    auto description = std::make_unique<SessionDescription>();
+    AddAudioSection(description.get(), kAudioMid1, kIceUfrag1, kIcePwd1,
+                    ICEMODE_FULL, conn_role, cert);
+    AddVideoSection(description.get(), kVideoMid1, kIceUfrag1, kIcePwd1,
+                    ICEMODE_FULL, conn_role, cert);
+    ContentGroup bundle_group(GROUP_TYPE_BUNDLE);
+    bundle_group.AddContentName(kAudioMid1);
+    bundle_group.AddContentName(kVideoMid1);
     description->AddGroup(bundle_group);
     return description;
   }
@@ -670,6 +719,95 @@ TEST_F(JsepTransportControllerTest, GetDtlsRole) {
 
   ASSERT_TRUE(role);
   EXPECT_EQ(SSL_CLIENT, *role);
+}
+
+// A DTLS role change while a remote answer is applied (here, while the video
+// section gets bundled onto the audio transport) posts a snapshot of the
+// transport states to the signaling thread. That snapshot is older than the one
+// that SetRemoteDescription() stores and must not replace it.
+TEST_F(JsepTransportControllerTest, DtlsRoleNotOverwrittenByMidHopSnapshot) {
+  network_thread_ = Thread::CreateWithSocketServer();
+  network_thread_->Start();
+  fake_dtls_transport_factory_ =
+      std::make_unique<RoleChangeNotifyingFakeDtlsTransportFactory>();
+  CreateJsepTransportController(JsepTransportController::Config(),
+                                network_thread_.get());
+  auto offer_certificate =
+      RTCCertificate::Create(SSLIdentity::Create("offer", KT_DEFAULT));
+  auto answer_certificate =
+      RTCCertificate::Create(SSLIdentity::Create("answer", KT_DEFAULT));
+  EXPECT_TRUE(transport_controller_->SetLocalCertificate(offer_certificate));
+
+  // With the balanced bundle policy, the offer creates one transport per m=
+  // section and the answer bundles them.
+  auto offer = CreateBundledDescriptionWithDtls(CONNECTIONROLE_ACTPASS,
+                                                offer_certificate);
+  auto answer = CreateBundledDescriptionWithDtls(CONNECTIONROLE_PASSIVE,
+                                                 answer_certificate);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kOffer, offer.get(), nullptr)
+                  .ok());
+  EXPECT_TRUE(
+      transport_controller_
+          ->SetRemoteDescription(SdpType::kAnswer, offer.get(), answer.get())
+          .ok());
+  // Run the tasks that were posted to the signaling thread.
+  main_thread_.Flush();
+
+  EXPECT_THAT(transport_controller_->GetDtlsRole(kAudioMid1),
+              Optional(SSL_CLIENT));
+  EXPECT_THAT(transport_controller_->GetDtlsRole(kVideoMid1),
+              Optional(SSL_CLIENT));
+
+  SendTask(network_thread_.get(), [&] { transport_controller_.reset(); });
+}
+
+// The DTLS role can also be set outside of SetLocalDescription() and
+// SetRemoteDescription(), e.g. when a DTLS ClientHello arrives before the
+// answer has been applied. If the snapshot that is posted for that change is
+// still queued when a description is applied, it must not replace the newer
+// snapshot.
+TEST_F(JsepTransportControllerTest,
+       DtlsRoleNotOverwrittenBySnapshotQueuedBeforeDescription) {
+  network_thread_ = Thread::CreateWithSocketServer();
+  network_thread_->Start();
+  fake_dtls_transport_factory_ =
+      std::make_unique<RoleChangeNotifyingFakeDtlsTransportFactory>();
+  CreateJsepTransportController(JsepTransportController::Config(),
+                                network_thread_.get());
+  auto offer_certificate =
+      RTCCertificate::Create(SSLIdentity::Create("offer", KT_DEFAULT));
+  auto answer_certificate =
+      RTCCertificate::Create(SSLIdentity::Create("answer", KT_DEFAULT));
+  EXPECT_TRUE(transport_controller_->SetLocalCertificate(offer_certificate));
+
+  auto offer = CreateBundledDescriptionWithDtls(CONNECTIONROLE_ACTPASS,
+                                                offer_certificate);
+  auto answer = CreateBundledDescriptionWithDtls(CONNECTIONROLE_ACTIVE,
+                                                 answer_certificate);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kOffer, offer.get(), nullptr)
+                  .ok());
+
+  // Simulate an early ClientHello, which makes the audio transport the DTLS
+  // server before the answer is applied.
+  SendTask(network_thread_.get(), [&] {
+    transport_controller_->GetDtlsTransport(kAudioMid1)
+        ->SetDtlsRole(SSL_SERVER);
+  });
+  // Apply the answer before the posted snapshot has been processed.
+  EXPECT_TRUE(
+      transport_controller_
+          ->SetRemoteDescription(SdpType::kAnswer, offer.get(), answer.get())
+          .ok());
+  main_thread_.Flush();
+
+  EXPECT_THAT(transport_controller_->GetDtlsRole(kAudioMid1),
+              Optional(SSL_SERVER));
+  EXPECT_THAT(transport_controller_->GetDtlsRole(kVideoMid1),
+              Optional(SSL_SERVER));
+
+  SendTask(network_thread_.get(), [&] { transport_controller_.reset(); });
 }
 
 TEST_F(JsepTransportControllerTest, GetStats) {
@@ -2940,6 +3078,127 @@ TEST_F(JsepTransportControllerTest, CustomRtpTransportFactory) {
   EXPECT_EQ(factory->audio_transport_, audio_rtp_transport);
   EXPECT_NE(nullptr, video_rtp_transport);
   EXPECT_EQ(factory->video_transport_, video_rtp_transport);
+}
+
+TEST_F(JsepTransportControllerTest, IceRolePreservedOnSubsequentAnswer) {
+  CreateJsepTransportController(JsepTransportController::Config());
+
+  // Local Offer (Full ICE) -> Controlling
+  auto local_offer = std::make_unique<SessionDescription>();
+  AddAudioSection(local_offer.get(), kAudioMid1, kIceUfrag1, kIcePwd1,
+                  ICEMODE_FULL, CONNECTIONROLE_ACTPASS, nullptr);
+  EXPECT_TRUE(
+      transport_controller_
+          ->SetLocalDescription(SdpType::kOffer, local_offer.get(), nullptr)
+          .ok());
+
+  auto fake_dtls = static_cast<FakeDtlsTransport*>(
+      transport_controller_->GetDtlsTransport(kAudioMid1));
+  ASSERT_NE(fake_dtls, nullptr);
+  EXPECT_EQ(ICEROLE_CONTROLLING, fake_dtls->fake_ice_transport()->GetIceRole());
+
+  // Remote Answer -> Established
+  auto remote_answer = std::make_unique<SessionDescription>();
+  AddAudioSection(remote_answer.get(), kAudioMid1, kIceUfrag2, kIcePwd2,
+                  ICEMODE_FULL, CONNECTIONROLE_PASSIVE, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetRemoteDescription(SdpType::kAnswer, local_offer.get(),
+                                         remote_answer.get())
+                  .ok());
+
+  // Subsequent Remote Offer -> Local Answer (No ICE Restart)
+  auto remote_reoffer = std::make_unique<SessionDescription>();
+  AddAudioSection(remote_reoffer.get(), kAudioMid1, kIceUfrag2, kIcePwd2,
+                  ICEMODE_FULL, CONNECTIONROLE_ACTPASS, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetRemoteDescription(SdpType::kOffer, local_offer.get(),
+                                         remote_reoffer.get())
+                  .ok());
+
+  auto local_reanswer = std::make_unique<SessionDescription>();
+  AddAudioSection(local_reanswer.get(), kAudioMid1, kIceUfrag1, kIcePwd1,
+                  ICEMODE_FULL, CONNECTIONROLE_PASSIVE, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kAnswer, local_reanswer.get(),
+                                        remote_reoffer.get())
+                  .ok());
+
+  EXPECT_EQ(ICEROLE_CONTROLLING, fake_dtls->fake_ice_transport()->GetIceRole());
+}
+
+TEST_F(JsepTransportControllerTest, IceRolePreservedOnSubsequentOffer) {
+  CreateJsepTransportController(JsepTransportController::Config());
+
+  // Remote Offer -> Local Answer -> Controlled
+  auto remote_offer = std::make_unique<SessionDescription>();
+  AddAudioSection(remote_offer.get(), kAudioMid1, kIceUfrag1, kIcePwd1,
+                  ICEMODE_FULL, CONNECTIONROLE_ACTPASS, nullptr);
+  EXPECT_TRUE(
+      transport_controller_
+          ->SetRemoteDescription(SdpType::kOffer, nullptr, remote_offer.get())
+          .ok());
+
+  auto local_answer = std::make_unique<SessionDescription>();
+  AddAudioSection(local_answer.get(), kAudioMid1, kIceUfrag2, kIcePwd2,
+                  ICEMODE_FULL, CONNECTIONROLE_PASSIVE, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kAnswer, local_answer.get(),
+                                        remote_offer.get())
+                  .ok());
+
+  auto fake_dtls = static_cast<FakeDtlsTransport*>(
+      transport_controller_->GetDtlsTransport(kAudioMid1));
+  ASSERT_NE(fake_dtls, nullptr);
+  EXPECT_EQ(ICEROLE_CONTROLLED, fake_dtls->fake_ice_transport()->GetIceRole());
+
+  // Subsequent Local Offer (No ICE Restart)
+  auto local_reoffer = std::make_unique<SessionDescription>();
+  AddAudioSection(local_reoffer.get(), kAudioMid1, kIceUfrag2, kIcePwd2,
+                  ICEMODE_FULL, CONNECTIONROLE_ACTPASS, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kOffer, local_reoffer.get(),
+                                        local_answer.get())
+                  .ok());
+
+  EXPECT_EQ(ICEROLE_CONTROLLED, fake_dtls->fake_ice_transport()->GetIceRole());
+}
+
+TEST_F(JsepTransportControllerTest, IceRoleRedeterminedOnIceRestart) {
+  CreateJsepTransportController(JsepTransportController::Config());
+
+  // Remote Offer -> Local Answer -> Controlled
+  auto remote_offer = std::make_unique<SessionDescription>();
+  AddAudioSection(remote_offer.get(), kAudioMid1, kIceUfrag1, kIcePwd1,
+                  ICEMODE_FULL, CONNECTIONROLE_ACTPASS, nullptr);
+  EXPECT_TRUE(
+      transport_controller_
+          ->SetRemoteDescription(SdpType::kOffer, nullptr, remote_offer.get())
+          .ok());
+
+  auto local_answer = std::make_unique<SessionDescription>();
+  AddAudioSection(local_answer.get(), kAudioMid1, kIceUfrag2, kIcePwd2,
+                  ICEMODE_FULL, CONNECTIONROLE_PASSIVE, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kAnswer, local_answer.get(),
+                                        remote_offer.get())
+                  .ok());
+
+  auto fake_dtls = static_cast<FakeDtlsTransport*>(
+      transport_controller_->GetDtlsTransport(kAudioMid1));
+  ASSERT_NE(fake_dtls, nullptr);
+  EXPECT_EQ(ICEROLE_CONTROLLED, fake_dtls->fake_ice_transport()->GetIceRole());
+
+  // Subsequent Local Offer with ICE Restart -> Controlling
+  auto restart_local_offer = std::make_unique<SessionDescription>();
+  AddAudioSection(restart_local_offer.get(), kAudioMid1, kIceUfrag3, kIcePwd3,
+                  ICEMODE_FULL, CONNECTIONROLE_ACTPASS, nullptr);
+  EXPECT_TRUE(transport_controller_
+                  ->SetLocalDescription(SdpType::kOffer,
+                                        restart_local_offer.get(),
+                                        remote_offer.get())
+                  .ok());
+
+  EXPECT_EQ(ICEROLE_CONTROLLING, fake_dtls->fake_ice_transport()->GetIceRole());
 }
 
 }  // namespace

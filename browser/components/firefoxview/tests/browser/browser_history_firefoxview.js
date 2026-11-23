@@ -18,20 +18,12 @@ const IMPORT_HISTORY_DISMISSED_PREF =
   "browser.tabs.firefox-view.importHistory.dismissed";
 const NEVER_REMEMBER_HISTORY_PREF = "browser.privatebrowsing.autostart";
 
-// Different strings used for Nova UI.
-const isNovaEnabled = Services.prefs.getBoolPref("browser.nova.enabled", false);
-const EMPTY_HEADER_L10N_ID = isNovaEnabled
-  ? "firefoxview-history-empty-header-2"
-  : "firefoxview-history-empty-header";
-const EMPTY_DESCRIPTION_L10N_ID = isNovaEnabled
-  ? "firefoxview-history-empty-description-2"
-  : "firefoxview-history-empty-description";
-const NEVER_REMEMBER_HEADER_L10N_ID = isNovaEnabled
-  ? "firefoxview-dont-remember-history-empty-header-3"
-  : "firefoxview-dont-remember-history-empty-header-2";
-const NEVER_REMEMBER_DESCRIPTION_L10N_ID = isNovaEnabled
-  ? "firefoxview-dont-remember-history-empty-description-2"
-  : "firefoxview-dont-remember-history-empty-description-one";
+const EMPTY_HEADER_L10N_ID = "firefoxview-history-empty-header-2";
+const EMPTY_DESCRIPTION_L10N_ID = "firefoxview-history-empty-description-2";
+const NEVER_REMEMBER_HEADER_L10N_ID =
+  "firefoxview-dont-remember-history-empty-header-3";
+const NEVER_REMEMBER_DESCRIPTION_L10N_ID =
+  "firefoxview-dont-remember-history-empty-description-2";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const today = new Date();
@@ -138,7 +130,7 @@ add_task(async function test_list_ordering() {
       () => document.querySelector("view-history"),
       "History component rendered"
     );
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
 
     await historyComponentReady(historyComponent, historyEntries.length);
 
@@ -234,7 +226,7 @@ add_task(async function test_empty_states() {
     await navigateToViewAndWait(document, "history");
 
     let historyComponent = document.querySelector("view-history");
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     await TestUtils.waitForCondition(
       () => historyComponent.emptyState,
       "Waiting for the history component to be in the empty state"
@@ -288,7 +280,7 @@ add_task(async function test_empty_states() {
     Services.prefs.setBoolPref(IMPORT_HISTORY_DISMISSED_PREF, false);
     Services.prefs.setBoolPref(HAS_IMPORTED_HISTORY_PREF, true);
     ok(!historyComponent.cards.length, "Import history banner not shown yet");
-    historyComponent.profileAge = 0;
+    historyComponent.controller.profileAge = 0;
     await TestUtils.waitForCondition(
       () => historyComponent.fullyUpdated,
       "Waiting for the history component to be fully updated"
@@ -323,7 +315,7 @@ add_task(async function test_empty_states() {
       "Import history banner has been dismissed."
     );
     // Reset profileAge to greater than 7 to avoid affecting other tests
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     Services.prefs.setBoolPref(IMPORT_HISTORY_DISMISSED_PREF, false);
 
     gBrowser.removeTab(gBrowser.selectedTab);
@@ -341,7 +333,7 @@ add_task(async function test_observers_removed_when_view_is_hidden() {
     const { document } = browser.contentWindow;
     await navigateToViewAndWait(document, "history");
     const historyComponent = document.querySelector("view-history");
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     let visitList = await TestUtils.waitForCondition(
       () => historyComponent.cards?.[0]?.querySelector("fxview-tab-list"),
       "the first history card to have a tab list"
@@ -395,7 +387,7 @@ add_task(async function test_show_all_history_telemetry() {
     await navigateToViewAndWait(document, "history");
 
     let historyComponent = document.querySelector("view-history");
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     await historyComponentReady(historyComponent, historyEntries.length);
 
     Services.fog.testResetFOG();
@@ -427,7 +419,7 @@ add_task(async function test_search_history() {
     const { document } = browser.contentWindow;
     await navigateToViewAndWait(document, "history");
     const historyComponent = document.querySelector("view-history");
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     await historyComponentReady(historyComponent, historyEntries.length);
     const searchTextbox = await TestUtils.waitForCondition(
       () => historyComponent.searchTextbox,
@@ -525,7 +517,7 @@ add_task(async function test_search_ignores_stale_queries() {
     const { document } = browser.contentWindow;
     await navigateToViewAndWait(document, "history");
     const historyComponent = document.querySelector("view-history");
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     await historyComponentReady(historyComponent, historyEntries.length);
     const searchTextbox = await TestUtils.waitForCondition(
       () => historyComponent.searchTextbox,
@@ -568,7 +560,7 @@ add_task(async function test_persist_collapse_card_after_view_change() {
     const { document } = browser.contentWindow;
     await navigateToViewAndWait(document, "history");
     const historyComponent = document.querySelector("view-history");
-    historyComponent.profileAge = 8;
+    historyComponent.controller.profileAge = 8;
     await TestUtils.waitForCondition(
       () => historyComponent.controller.totalVisitsCount === 4,
       "The history component to have a total visit count of 4"

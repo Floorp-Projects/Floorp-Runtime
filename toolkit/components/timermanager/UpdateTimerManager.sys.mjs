@@ -218,6 +218,9 @@ TimerManager.prototype = {
         timerID,
         function () {
           ChromeUtils.idleDispatch(() => {
+            if (Services.startup.shuttingDown) {
+              return;
+            }
             try {
               let startTime = ChromeUtils.now();
               if (method == "getService") {
@@ -266,6 +269,9 @@ TimerManager.prototype = {
         function () {
           if (timerData.callback && timerData.callback.notify) {
             ChromeUtils.idleDispatch(() => {
+              if (Services.startup.shuttingDown) {
+                return;
+              }
               try {
                 let startTime = ChromeUtils.now();
                 timerData.callback.notify(timer);

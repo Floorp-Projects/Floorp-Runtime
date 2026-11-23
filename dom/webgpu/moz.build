@@ -57,6 +57,7 @@ h_and_cpp = [
     "ValidationError",
 ]
 EXPORTS.mozilla.webgpu += [x + ".h" for x in h_and_cpp]
+EXPORTS.mozilla.webgpu += ["FrontBufferSnapshot.h"]
 UNIFIED_SOURCES += [x + ".cpp" for x in h_and_cpp]
 
 IPDL_SOURCES += [
@@ -64,12 +65,14 @@ IPDL_SOURCES += [
 ]
 
 EXPORTS.mozilla.webgpu += [
+    "ipc/MappedRangeGuard.h",
     "ipc/WebGPUChild.h",
     "ipc/WebGPUParent.h",
     "ipc/WebGPUTypes.h",
 ]
 
 UNIFIED_SOURCES += [
+    "ipc/MappedRangeGuard.cpp",
     "ipc/WebGPUChild.cpp",
     "ipc/WebGPUParent.cpp",
 ]

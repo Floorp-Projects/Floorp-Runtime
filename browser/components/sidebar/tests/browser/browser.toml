@@ -1,12 +1,15 @@
 [DEFAULT]
 support-files = ["head.js"]
 prefs = [
+  "browser.tabs.firefox-view.importHistory.dismissed=true",
   "sidebar.revamp=true",
 ]
 
 ["browser_a11y_sidebar.js"]
 
 ["browser_adopt_sidebar_from_opener.js"]
+
+["browser_bookmarks_a11y_tree.js"]
 
 ["browser_bookmarks_keyboard_navigation.js"]
 
@@ -46,13 +49,19 @@ prefs = [
 
 ["browser_hide_sidebar_on_popup.js"]
 
+["browser_history_a11y_tree.js"]
+
 ["browser_history_keyboard_navigation.js"]
 
 ["browser_history_multiselect.js"]
 
 ["browser_history_sidebar.js"]
 
+["browser_history_sidebar_drag_and_drop.js"]
+
 ["browser_history_sidebar_glean.js"]
+
+["browser_history_sidebar_import_promo.js"]
 
 ["browser_launcher_dividers.js"]
 tags = "vertical-tabs"
@@ -74,11 +83,12 @@ tags = "vertical-tabs"
 ["browser_opentabs_sidebar.js"]
 
 ["browser_resize_sidebar.js"]
-skip-if = [
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64'", # Bug 1946263
-]
+
+["browser_resource_monitor_telemetry.js"]
 
 ["browser_sidebar_animation.js"]
+
+["browser_sidebar_backup_state.js"]
 
 ["browser_sidebar_collapsed_close_tab_button.js"]
 
@@ -96,9 +106,6 @@ run-if = [
 ]
 
 ["browser_sidebar_max_width.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && opt && socketprocess_networking", # Bug 1935442
-]
 
 ["browser_sidebar_menubar_item_commands.js"]
 

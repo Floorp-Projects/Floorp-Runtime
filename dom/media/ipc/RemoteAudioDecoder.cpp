@@ -8,6 +8,7 @@
 #include "RemoteCDMParent.h"
 #include "RemoteMediaManagerChild.h"
 #include "RemoteMediaManagerParent.h"
+#include "mozilla/PRemoteCDMChild.h"
 #include "mozilla/StaticPrefs_media.h"
 
 namespace mozilla {
@@ -69,11 +70,17 @@ MediaResult RemoteAudioDecoderChild::InitIPDL(
           NS_ERROR_DOM_MEDIA_FATAL_ERR,
           RESULT_DETAIL("PRemoteCDMActor is not PRemoteCDMChild."));
     }
+
+    // If the CDM's process crashed, then the CDM must be recreated by the
+    // caller, and we cannot send it.
+    if (!cdm->CanSend() || cdm->Manager() != manager) {
+      return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                         RESULT_DETAIL("PRemoteCDMChild is in stale process."));
+    }
   }
 
   if (!manager->SendPRemoteDecoderConstructor(this, aAudioInfo, aOptions,
-                                              Nothing(), aMediaEngineId,
-                                              Nothing(), cdm)) {
+                                              aMediaEngineId, Nothing(), cdm)) {
     return MediaResult(
         NS_ERROR_DOM_MEDIA_FATAL_ERR,
         RESULT_DETAIL("RemoteMediaManager unable to construct."));
@@ -93,8 +100,17 @@ RemoteAudioDecoderParent::RemoteAudioDecoderParent(
 
 IPCResult RemoteAudioDecoderParent::RecvConstruct(
     ConstructResolver&& aResolver) {
+  if (XRE_IsGPUProcess() && !mCDM) {
+    return IPC_FAIL(this, "Audio decoding in GPU process requires a CDM");
+  }
+
   if (mDecoder || mShutdown) {
     aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
+    return IPC_OK();
+  }
+
+  if (!IsMediaEngineIdAllowed()) {
+    aResolver(MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR, __func__));
     return IPC_OK();
   }
 

@@ -527,6 +527,9 @@ _cairo_ft_unscaled_font_init (cairo_ft_unscaled_font_t *unscaled,
         }
 
         if (getVar && getVarDesignCoords) {
+            /* The external face may already be in use by another renderer. */
+            if (face_context)
+                mozilla_LockSharedFTFace (face_context, NULL);
 	    if (0 == (*getVar) (face, &ft_mm_var))
 	    {
 		unscaled->variations = _cairo_calloc_ab (ft_mm_var->num_axis, sizeof (FT_Fixed));
@@ -537,6 +540,8 @@ _cairo_ft_unscaled_font_init (cairo_ft_unscaled_font_t *unscaled,
 		else
 		    free (ft_mm_var);
 	    }
+            if (face_context)
+                mozilla_UnlockSharedFTFace (face_context);
 	}
     } else {
 	char *filename_copy;
@@ -1029,12 +1034,13 @@ _compute_xrender_bitmap_size(FT_Bitmap      *target,
     /* compute the size of the final bitmap */
     ftbit = &slot->bitmap;
 
+    /* Reject absurd glyph dimensions to avoid overflow below. */
+    if (ftbit->width > INT_MAX / 4 || ftbit->rows > INT_MAX) {
+      return -1;
+    }
+
     width = ftbit->width;
     height = ftbit->rows;
-
-    /* Reject absurd glyph dimensions to avoid overflow below. */
-    if (width < 0 || width > INT_MAX / 4 || height < 0)
-	return -1;
 
     pitch = (width + 3) & ~3;
 
@@ -1087,11 +1093,12 @@ _compute_xrender_bitmap_size(FT_Bitmap      *target,
     target->pitch = pitch;
     target->buffer = NULL;
 
-    /* Reject this size if the multiplication overflows. */
-    if ((cairo_int64_t) pitch * height > INT_MAX)
+    /* Reject this size if the multiplication would overflow an int. */
+    size_t result;
+    if (_cairo_mul_size_t_overflow(pitch, height, &result) || result > INT_MAX)
 	return -1;
 
-    return pitch * height;
+    return (int) result;
 }
 
 /* this functions converts the glyph bitmap found in a FT_GlyphSlot

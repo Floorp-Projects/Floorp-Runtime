@@ -785,7 +785,7 @@ void MarkingTracerT<opts>::markEphemeronEdges(EphemeronEdgeVector& edges,
     MarkColor targetColor = std::min(srcColor, MarkColor(edge.color()));
     MOZ_ASSERT(markColor() >= targetColor);
 
-    Zone* zone = edge.target()->zone();
+    Zone* zone = edge.target()->zoneFromAnyThread();
     if (targetColor == markColor() && zone->shouldMarkInZone(targetColor)) {
       ApplyGCThingTyped(edge.target(), edge.target()->getTraceKind(),
                         [this](auto t) { this->markAndTraverse(t); });
@@ -932,7 +932,8 @@ bool MarkingTracerT<opts>::onEdge(T** thingp, const char* name) {
 }
 
 template <uint32_t opts>
-bool MarkingTracerT<opts>::onBufferEdge(void** bufferp, const char* name) {
+JSTracer::TraceBufferResult MarkingTracerT<opts>::onBufferEdge(
+    void** bufferp, const char* name) {
   return BufferAllocator::MarkBuffer(this, bufferp, name);
 }
 

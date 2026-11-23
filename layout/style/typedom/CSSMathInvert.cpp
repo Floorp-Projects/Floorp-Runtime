@@ -27,14 +27,22 @@ CSSMathInvert::CSSMathInvert(
 
 // static
 RefPtr<CSSMathInvert> CSSMathInvert::Create(
+    nsCOMPtr<nsISupports> aParent, UniquePtr<StyleNumericType> aNumericType,
+    RefPtr<CSSNumericValue> aValue) {
+  return MakeRefPtr<CSSMathInvert>(std::move(aParent),
+                                   WrapMovingNotNull(std::move(aNumericType)),
+                                   std::move(aValue));
+}
+
+// static
+RefPtr<CSSMathInvert> CSSMathInvert::Create(
     nsCOMPtr<nsISupports> aParent, const StyleMathInvert& aMathInvert) {
   RefPtr<CSSNumericValue> value =
       CSSNumericValue::Create(aParent, *aMathInvert.value);
 
-  return MakeRefPtr<CSSMathInvert>(
-      std::move(aParent),
-      WrapMovingNotNull(MakeUnique<StyleNumericType>(aMathInvert.numeric_type)),
-      std::move(value));
+  return Create(std::move(aParent),
+                std::make_unique<StyleNumericType>(aMathInvert.numeric_type),
+                std::move(value));
 }
 
 NS_IMPL_ISUPPORTS_CYCLE_COLLECTION_INHERITED_0(CSSMathInvert, CSSMathValue)
@@ -57,7 +65,8 @@ already_AddRefed<CSSMathInvert> CSSMathInvert::Constructor(
   // Step 1.
   RefPtr<CSSNumericValue> value = CSSNumericValue::Create(global, aArg);
 
-  auto numericType = MakeUnique<StyleNumericType>(value->GetNumericType());
+  auto numericType =
+      std::make_unique<StyleNumericType>(value->GetNumericType());
   Servo_NumericType_Invert(numericType.get());
 
   // Step 2.
@@ -88,7 +97,8 @@ void CSSMathInvert::ToCssTextWithProperty(const CSSPropertyId& aPropertyId,
 }
 
 StyleMathInvert CSSMathInvert::ToStyleMathInvert() const {
-  auto value = MakeUnique<StyleNumericValue>(mValue->ToStyleNumericValue());
+  auto value =
+      std::make_unique<StyleNumericValue>(mValue->ToStyleNumericValue());
 
   return StyleMathInvert{GetNumericType(),
                          StyleBox<StyleNumericValue>(std::move(value))};

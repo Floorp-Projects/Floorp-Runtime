@@ -73,9 +73,8 @@ skip-if = [
   "os == 'linux' && os_version == '22.04' && arch == 'x86_64' && display == 'wayland' && debug && !fission", # Linux-Wayland-debug may not pass in the non-fission mode
   "os == 'linux' && os_version == '22.04' && arch == 'x86_64' && display == 'wayland' && opt && !xorigin", # Linux-Wayland-opt passes only in the xorigin mode
   "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && asan", # Linux-asan may not pass in the any modes except the verify mode
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && ccov && !xorigin", # Linux-ccov passes only in the xorigin mode
+  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && ccov && headless", # Linux-ccov times out in the headless mode
   "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && debug && headless", # Linux-debug may not pass in the headless mode
-  "os == 'win' && ccov && fission && !xorigin", # Windows-CCov may not pass in the normal mode
   "os == 'win' && opt && fission && !xorigin && !verify", # Windows-opt may not pass in the normal mode
 ]
 
@@ -100,11 +99,6 @@ support-files = ["file_getCoalescedEvents_retained_event_leak.html"]
 
 ["test_getCoalescedEvents_touch.html"]
 scheme = "https"
-skip-if = [
-  "os == 'android'", # Bug 1312791
-  "os == 'win' && os_version == '11.26100' && arch == 'x86_64' && opt", # Bug 1781388
-  "os == 'win' && os_version == '11.26200' && arch == 'x86_64' && opt", # Bug 1781388
-]
 support-files = ["!/gfx/layers/apz/test/mochitest/apz_test_native_event_utils.js"]
 
 ["test_multiple_touches.html"]
@@ -152,11 +146,6 @@ skip-if = [
 ["test_pointerrawupdate_event_count_touch.html"]
 scheme = "https"
 support-files = ["!/gfx/layers/apz/test/mochitest/apz_test_native_event_utils.js"]
-skip-if = [
-  "os == 'android'", # Bug 1312791
-  "os == 'win' && os_version == '11.26100' && arch == 'x86_64' && opt", # Bug 1781388
-  "os == 'win' && os_version == '11.26200' && arch == 'x86_64' && opt", # Bug 1781388
-]
 
 ["test_remove_frame_when_got_pointer_capture.html"]
 

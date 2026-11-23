@@ -7,7 +7,8 @@ use api::units::*;
 use api::{ColorF, LineOrientation, BorderStyle};
 use crate::batch::{AlphaBatchBuilder, AlphaBatchContainer, BatchTextures, TextureSet};
 use crate::batch::{BatchBuilder, INVALID_SEGMENT_INDEX, ClipMaskInstanceList};
-use crate::render_task::{SubTask, RectangleClipSubTask, ImageClipSubTask};
+use crate::render_task::{SubTask, RectangleClipSubTask, ImageClipSubTask, PathClipSubTask};
+use crate::path_tiler::{PathInfo, PathTiler, PathTilerOutput};
 use crate::command_buffer::{CommandBufferList, QuadFlags};
 use crate::pattern::{Pattern, PatternKind, PatternShaderInput};
 use crate::segment::EdgeMask;
@@ -25,7 +26,7 @@ use crate::transform::TransformPalette;
 use crate::quad;
 use crate::prim_store::{PrimitiveInstance, PrimitiveStore, PrimitiveScratchBuffer};
 use crate::renderer::{BlendMode, GpuBufferAddress, GpuBufferBuilder};
-use crate::render_backend::DataStores;
+use crate::render_backend::{DataStores, DlStores};
 use crate::render_task::{RenderTaskKind, RenderTaskAddress};
 use crate::render_task::{RenderTask, ScalingTask, SVGFEFilterTask};
 use crate::render_task_graph::{RenderTaskGraph, RenderTaskId};
@@ -54,6 +55,7 @@ pub struct RenderTargetContext<'a, 'rc> {
     pub batch_lookback_count: usize,
     pub spatial_tree: &'a SpatialTree,
     pub data_stores: &'a DataStores,
+    pub dl_stores: &'a DlStores,
     pub scratch: &'a PrimitiveScratchBuffer,
     pub screen_device_rect: DeviceRect,
     pub tile_caches: &'a FastHashMap<SliceId, Box<TileCacheInstance>>,
@@ -157,7 +159,6 @@ pub struct RenderTarget {
     pub svg_nodes: FrameVec<(BatchTextures, FrameVec<SVGFEFilterInstance>)>,
     pub blits: FrameVec<BlitJob>,
     alpha_tasks: FrameVec<RenderTaskId>,
-    pub resolve_ops: FrameVec<ResolveOp>,
 
     pub prim_instances: [FastHashMap<TextureSet, FrameVec<PrimitiveInstanceData>>; NUM_PATTERNS],
     pub prim_instances_with_scissor: FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSet, FrameVec<PrimitiveInstanceData>>>,
@@ -221,7 +222,6 @@ impl RenderTarget {
             blits: memory.new_vec(),
             alpha_tasks: memory.new_vec(),
             used_rect,
-            resolve_ops: memory.new_vec(),
             clear_color: Some(ColorF::TRANSPARENT),
             prim_instances: std::array::from_fn(|_| FastHashMap::default()),
             prim_instances_with_scissor: FastHashMap::default(),
@@ -257,7 +257,13 @@ impl RenderTarget {
                 RenderTaskKind::Picture(ref pic_task) => {
                     let target_rect = task.get_target_rect();
 
-                    let scissor_rect = if pic_task.can_merge {
+                    let content_rect = DeviceIntRect::from_origin_and_size(
+                        target_rect.min,
+                        pic_task.content_size,
+                    );
+                    let scissor_rect = if pic_task.capture_clear_color.is_some() {
+                        Some(content_rect)
+                    } else if pic_task.can_merge {
                         None
                     } else {
                         Some(target_rect)
@@ -266,7 +272,25 @@ impl RenderTarget {
                     if !pic_task.can_use_shared_surface {
                         self.clear_color = pic_task.clear_color;
                     }
-                    if let Some(clear_color) = pic_task.clear_color {
+                    if let Some(content_clear_color) = pic_task.capture_clear_color {
+                        // The renderer may skip a clear whose color matches the
+                        // target's, so the content and padding clears must not
+                        // overlap.
+                        self.clears.push((content_rect, content_clear_color));
+                        let right = DeviceIntRect::new(
+                            DeviceIntPoint::new(content_rect.max.x, target_rect.min.y),
+                            target_rect.max,
+                        );
+                        let bottom = DeviceIntRect::new(
+                            DeviceIntPoint::new(target_rect.min.x, content_rect.max.y),
+                            DeviceIntPoint::new(content_rect.max.x, target_rect.max.y),
+                        );
+                        for rect in [right, bottom] {
+                            if !rect.is_empty() {
+                                self.clears.push((rect, ColorF::TRANSPARENT));
+                            }
+                        }
+                    } else if let Some(clear_color) = pic_task.clear_color {
                         self.clears.push((target_rect, clear_color));
                     } else if self.cached {
                         self.clears.push((target_rect, ColorF::TRANSPARENT));
@@ -338,6 +362,7 @@ impl RenderTarget {
         gpu_buffer_builder: &mut GpuBufferBuilder,
         render_tasks: &RenderTaskGraph,
         transforms: &mut TransformPalette,
+        path_tiler: &mut PathTiler,
     ) {
         tracy_rs::profile_scope!("add_task");
         let task = &render_tasks[task_id];
@@ -418,10 +443,7 @@ impl RenderTarget {
                     &ctx.frame_memory,
                 );
             }
-            RenderTaskKind::Picture(ref pic_task) => {
-                if let Some(ref resolve_op) = pic_task.resolve_op {
-                    self.resolve_ops.push(resolve_op.clone());
-                }
+            RenderTaskKind::Picture(..) => {
                 self.alpha_tasks.push(task_id);
             }
             RenderTaskKind::SVGFENode(ref task_info) => {
@@ -572,8 +594,7 @@ impl RenderTarget {
                 }
             }
             RenderTaskKind::Image(..) |
-            RenderTaskKind::Cached(..) |
-            RenderTaskKind::TileComposite(..) => {
+            RenderTaskKind::Cached(..) => {
                 panic!("Should not be added to color target!");
             }
             RenderTaskKind::Readback(..) => {}
@@ -607,6 +628,16 @@ impl RenderTarget {
                         &mut self.clip_masks
                     );
                 }
+                SubTask::PathClip(clip_task) => {
+                    add_path_clip_task_to_batch(
+                        clip_task,
+                        &target_rect,
+                        task_address,
+                        gpu_buffer_builder,
+                        path_tiler,
+                        &mut self.clip_masks
+                    );
+                }
             }
         }
     }
@@ -620,29 +651,9 @@ impl RenderTarget {
 
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, PartialEq, Clone)]
-pub struct ResolveOp {
-    pub src_task_ids: Vec<RenderTaskId>,
-    pub dest_task_id: RenderTaskId,
-    /// Maps a rect from the dest (resolve target) surface's raster space into
-    /// the src (parent) surface's raster space. Identity unless the resolve
-    /// target established a different raster root than the parent it reads back
-    /// from (e.g. a backdrop-filter promoted to a root-snapping raster root
-    /// inside a scrolled/transformed subtree). Used by `handle_resolve` to read
-    /// back the region the backdrop actually covers rather than one offset by
-    /// the difference between the two raster roots.
-    pub dest_to_src_raster: ScaleOffset,
-}
-
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
 pub enum PictureCacheTargetKind {
     Draw {
         alpha_batch_container: AlphaBatchContainer,
-    },
-    Blit {
-        task_id: RenderTaskId,
-        sub_rect_offset: DeviceIntVector2D,
     },
 }
 
@@ -965,6 +976,39 @@ fn add_rect_clip_task_to_batch(
                 }
             }
         }
+    );
+}
+
+fn add_path_clip_task_to_batch(
+    task: &PathClipSubTask,
+    target_rect: &DeviceIntRect,
+    masked_task_address: RenderTaskAddress,
+    gpu_buffers: &mut GpuBufferBuilder,
+    tiler: &mut PathTiler,
+    results: &mut ClipMaskInstanceList,
+) {
+    let path_info = PathInfo {
+        render_task_address: masked_task_address.0 as u32,
+        fill_rule: task.fill_rule,
+        // The tiles cover the outside of the path, which dest-out removes.
+        inverted: true,
+        opacity: 1.0,
+    };
+    let mut writer = gpu_buffers.i32.write_blocks(1);
+    writer.push_one(path_info.encode());
+    let path_address = writer.finish();
+
+    tiler.begin_target(DeviceIntRect::from_size(target_rect.size()));
+    tiler.fill_path(
+        &task.path,
+        &task.transform,
+        task.fill_rule,
+        path_info.inverted,
+        path_address.as_u32(),
+        &mut PathTilerOutput {
+            edges: &mut gpu_buffers.edges,
+            tiles: &mut results.path_tiles,
+        },
     );
 }
 

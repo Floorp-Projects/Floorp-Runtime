@@ -1149,6 +1149,9 @@ class LBlock {
   Label label_;
   // If true, this block will be generated out of line.
   bool isOutOfLine_;
+  // If true, this block will be generated with an indirect jump
+  // landing pad.
+  bool isIndirectJumpTarget_ = false;
 
  public:
   explicit LBlock(MBasicBlock* block);
@@ -1163,6 +1166,8 @@ class LBlock {
   const LPhi* getPhi(size_t index) const { return &phis_[index]; }
   MBasicBlock* mir() const { return block_; }
   bool isOutOfLine() const { return isOutOfLine_; }
+  bool isIndirectJumpTarget() const { return isIndirectJumpTarget_; }
+  void setIsIndirectJumpTarget() { isIndirectJumpTarget_ = true; }
   LInstructionIterator begin() { return instructions_.begin(); }
   LInstructionIterator begin(LInstruction* at) {
     return instructions_.begin(at);
@@ -1208,6 +1213,10 @@ class LBlock {
   // Test whether this basic block is empty except for a simple goto, and
   // which is not forming a loop. No code will be emitted for such blocks.
   bool isTrivial() { return begin()->isGoto() && !mir()->isLoopHeader(); }
+
+  // Follow trivial blocks, which are skipped during code generation, to the
+  // first block that will actually be emitted.
+  LBlock* skipTrivialBlocks();
 
   // Test whether this basic block is a sequence of MoveGroups followed by a
   // simple goto, and is not a loop header.  If so return the target of the
@@ -1781,7 +1790,7 @@ class LSafepoint : public TempObject {
 #endif
   LiveGeneralRegisterSet gcRegs() const { return gcRegs_; }
   [[nodiscard]] bool addGcSlot(bool stack, uint32_t slot) {
-    bool result = gcSlots_.append(SlotEntry(stack, slot));
+    bool result = gcSlots_.emplaceBack(stack, slot);
     if (result) {
       assertInvariants();
     }
@@ -1794,7 +1803,7 @@ class LSafepoint : public TempObject {
     return slotsOrElementsRegs_;
   }
   [[nodiscard]] bool addSlotsOrElementsSlot(bool stack, uint32_t slot) {
-    bool result = slotsOrElementsSlots_.append(SlotEntry(stack, slot));
+    bool result = slotsOrElementsSlots_.emplaceBack(stack, slot);
     if (result) {
       assertInvariants();
     }
@@ -1815,7 +1824,7 @@ class LSafepoint : public TempObject {
     return wasmStructDataRegs_;
   }
   [[nodiscard]] bool addWasmStructDataSlot(bool stack, uint32_t slot) {
-    bool result = wasmStructDataSlots_.append(SlotEntry(stack, slot));
+    bool result = wasmStructDataSlots_.emplaceBack(stack, slot);
     if (result) {
       assertInvariants();
     }
@@ -1836,7 +1845,7 @@ class LSafepoint : public TempObject {
     return wasmArrayDataRegs_;
   }
   [[nodiscard]] bool addWasmArrayDataSlot(bool stack, uint32_t slot) {
-    bool result = wasmArrayDataSlots_.append(SlotEntry(stack, slot));
+    bool result = wasmArrayDataSlots_.emplaceBack(stack, slot);
     if (result) {
       assertInvariants();
     }
@@ -1893,7 +1902,7 @@ class LSafepoint : public TempObject {
   LiveGeneralRegisterSet wasmAnyRefRegs() const { return wasmAnyRefRegs_; }
 
   [[nodiscard]] bool addWasmAnyRefSlot(bool stack, uint32_t slot) {
-    bool result = wasmAnyRefSlots_.append(SlotEntry(stack, slot));
+    bool result = wasmAnyRefSlots_.emplaceBack(stack, slot);
     if (result) {
       assertInvariants();
     }
@@ -1961,7 +1970,7 @@ class LSafepoint : public TempObject {
 
 #elif JS_PUNBOX64
   [[nodiscard]] bool addValueSlot(bool stack, uint32_t slot) {
-    bool result = valueSlots_.append(SlotEntry(stack, slot));
+    bool result = valueSlots_.emplaceBack(stack, slot);
     if (result) {
       assertInvariants();
     }
@@ -2270,6 +2279,12 @@ class LIRGraph {
   void dump();
 #endif
 };
+
+// We don't emit code for trivial blocks, so if a trivial block is an indirect
+// jump target, propagate the annotation to the final non-trivial block that
+// will actually be emitted and jumped to.
+[[nodiscard]] bool PropagateIndirectJumpTargets(MIRGenerator* mir,
+                                                LIRGraph& graph);
 
 LAllocation::LAllocation(AnyRegister reg) {
   if (reg.isFloat()) {

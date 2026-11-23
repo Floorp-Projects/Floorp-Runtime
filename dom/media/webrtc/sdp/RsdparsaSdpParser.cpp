@@ -4,6 +4,8 @@
 
 #include "sdp/RsdparsaSdpParser.h"
 
+#include <memory>
+
 #include "mozilla/UniquePtr.h"
 #include "nsError.h"
 #include "nsString.h"
@@ -23,8 +25,7 @@ const std::string& RsdparsaSdpParser::ParserName() {
 
 UniquePtr<SdpParser::Results> RsdparsaSdpParser::Parse(
     const std::string& aText) {
-  UniquePtr<SdpParser::InternalResults> results(
-      new SdpParser::InternalResults(Name()));
+  auto results = std::make_unique<SdpParser::InternalResults>(Name());
   const ffi::SdpSession* result = nullptr;
   const ffi::SdpParserError* err = nullptr;
   ffi::StringView sdpTextView{reinterpret_cast<const uint8_t*>(aText.data()),
@@ -55,7 +56,8 @@ UniquePtr<SdpParser::Results> RsdparsaSdpParser::Parse(
                    rustOrigin.session_id, rustOrigin.session_version,
                    address.first, address.second);
 
-  results->SetSdp(MakeUnique<RsdparsaSdp>(std::move(uniqueResult), origin));
+  results->SetSdp(
+      std::make_unique<RsdparsaSdp>(std::move(uniqueResult), origin));
   return results;
 }
 

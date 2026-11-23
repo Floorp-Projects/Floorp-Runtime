@@ -35,12 +35,19 @@ void VideoBridgeChild::StartupForGPUProcess() {
 /* static */
 void VideoBridgeChild::Open(Endpoint<PVideoBridgeChild>&& aEndpoint) {
   StaticMutexAutoLock lock(sVideoBridgeLock);
-  MOZ_ASSERT(!sVideoBridge || !sVideoBridge->CanSend());
+  // The old bridge may still be able to send: when the compositor process
+  // goes away, the new endpoint can arrive before the old bridge's channel
+  // error has been processed.
+  RefPtr<VideoBridgeChild> oldBridge = sVideoBridge.get();
   sVideoBridge = new VideoBridgeChild();
 
   if (!aEndpoint.Bind(sVideoBridge)) {
     // We can't recover from this.
     MOZ_CRASH("Failed to bind VideoBridgeChild to endpoint");
+  }
+
+  if (oldBridge) {
+    oldBridge->mReplacedHolder.ResolveIfExists(true, __func__);
   }
 }
 
@@ -48,6 +55,7 @@ void VideoBridgeChild::Open(Endpoint<PVideoBridgeChild>&& aEndpoint) {
 void VideoBridgeChild::Shutdown() {
   StaticMutexAutoLock lock(sVideoBridgeLock);
   if (sVideoBridge) {
+    sVideoBridge->mReplacedHolder.RejectIfExists(NS_ERROR_ABORT, __func__);
     sVideoBridge->Close();
     sVideoBridge = nullptr;
   }
@@ -63,6 +71,30 @@ RefPtr<VideoBridgeChild> VideoBridgeChild::GetSingleton() {
   return sVideoBridge;
 }
 
+/* static */
+RefPtr<GenericNonExclusivePromise> VideoBridgeChild::WaitUntilReady() {
+  RefPtr<GenericNonExclusivePromise> replaced;
+  {
+    StaticMutexAutoLock lock(sVideoBridgeLock);
+    if (!sVideoBridge || sVideoBridge->CanSend()) {
+      return GenericNonExclusivePromise::CreateAndResolve(true, __func__);
+    }
+    replaced = sVideoBridge->mReplacedHolder.Ensure(__func__);
+  }
+
+  // Our replacement may also have been lost by the time we run, so check again.
+  return replaced->Then(
+      GetCurrentSerialEventTarget(), __func__,
+      [](const GenericNonExclusivePromise::ResolveOrRejectValue& aValue)
+          -> RefPtr<GenericNonExclusivePromise> {
+        if (aValue.IsReject()) {
+          return GenericNonExclusivePromise::CreateAndReject(
+              aValue.RejectValue(), __func__);
+        }
+        return WaitUntilReady();
+      });
+}
+
 bool VideoBridgeChild::AllocUnsafeShmem(size_t aSize, ipc::Shmem* aShmem) {
   if (!mThread->IsOnCurrentThread()) {
     return DispatchAllocShmemInternal(aSize, aShmem, true);  // true: unsafe
@@ -76,7 +108,7 @@ bool VideoBridgeChild::AllocUnsafeShmem(size_t aSize, ipc::Shmem* aShmem) {
 }
 
 bool VideoBridgeChild::AllocShmem(size_t aSize, ipc::Shmem* aShmem) {
-  MOZ_ASSERT(CanSend());
+  MOZ_RELEASE_ASSERT(CanSend());
   return PVideoBridgeChild::AllocShmem(aSize, aShmem);
 }
 
@@ -153,7 +185,7 @@ already_AddRefed<PTextureChild> VideoBridgeChild::CreateTexture(
     LayersBackend aLayersBackend, TextureFlags aFlags,
     const dom::ContentParentId& aContentId, uint64_t aSerial,
     wr::MaybeExternalImageId& aExternalImageId) {
-  MOZ_ASSERT(CanSend());
+  MOZ_RELEASE_ASSERT(CanSend());
   RefPtr actor = TextureClient::CreateIPDLActor();
   if (!SendPTextureConstructor(actor, aSharedData, std::move(aReadLock),
                                aLayersBackend, aFlags, aContentId, aSerial)) {

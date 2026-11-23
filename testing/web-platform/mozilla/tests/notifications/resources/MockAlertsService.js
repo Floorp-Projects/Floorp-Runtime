@@ -119,11 +119,14 @@ function mockServicesChromeScript() {
     mockAlertsService
   );
 
-  function clickNotifications(doClose) {
+  function clickNotifications({ doClose, appState }) {
     // Until we need to close a specific notification, just click them all.
     for (let [name, notification] of Object.entries(activeNotifications)) {
       let { callbacks } = notification;
-      callbacks.onAlertClick();
+      callbacks.onAlertClick(
+        null,
+        Ci.nsIAlertCallbacks[appState] ?? Ci.nsIAlertCallbacks.UNKNOWN
+      );
       if (doClose) {
         mockAlertsService.closeAlert(name);
       }
@@ -234,18 +237,18 @@ const MockAlertsService = {
         this._chromeScript = null;
       });
   },
-  async clickNotifications() {
+  async clickNotifications(appState) {
     // Most implementations of the nsIAlertsService automatically close upon click.
     await this._chromeScript.sendQuery(
       "mock-alert-service:click-notifications",
-      true
+      { doClose: true, appState }
     );
   },
-  async clickNotificationsWithoutClose() {
+  async clickNotificationsWithoutClose(appState) {
     // The implementation on macOS does not automatically close the notification.
     await this._chromeScript.sendQuery(
       "mock-alert-service:click-notifications",
-      false
+      { doClose: false, appState }
     );
   },
   async closeNotifications() {
@@ -282,10 +285,18 @@ const MockAlertsService = {
     );
   },
   async getIconImage(id) {
-    return await this._chromeScript.sendQuery(
+    const pngData = await this._chromeScript.sendQuery(
       "mock-alert-service:get-icon-image",
       id
     );
+    if (!pngData) {
+      return null;
+    }
+    const imageDecoder = new ImageDecoder({ type: "image/png", data: pngData });
+    const {image} = await imageDecoder.decode();
+    const rgba = new Uint8Array(image.allocationSize());
+    image.copyTo(rgba, {format: "RGBA"});
+    return rgba;
   },
   async setHistory(ids) {
     return await this._chromeScript.sendQuery(

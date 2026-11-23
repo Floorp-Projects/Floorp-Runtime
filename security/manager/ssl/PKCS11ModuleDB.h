@@ -36,6 +36,7 @@ class PKCS11ModuleDB : public nsIPKCS11ModuleDB {
   NS_DECL_NSIPKCS11MODULEDB
 
   static already_AddRefed<PKCS11ModuleDB> GetSingleton();
+  static bool UtilityProcessEnabled();
 
   static nsresult DoDeleteModule(const nsCString& moduleName);
   static nsresult DoAddModule(const nsCString& moduleName,
@@ -76,7 +77,7 @@ class PKCS11ModuleDB : public nsIPKCS11ModuleDB {
                                                const nsCString& oldPassword,
                                                const nsCString& newPassword);
 
-  typedef MozPromise<nsTArray<IPCClientCertObject>, nsresult, true>
+  typedef MozPromise<nsTArray<CryptokiObject>, nsresult, true>
       FindObjectsPromise;
   RefPtr<FindObjectsPromise> FindObjects(SearchingFor searchingFor);
 
@@ -109,7 +110,6 @@ class PKCS11ModuleDB : public nsIPKCS11ModuleDB {
 #endif  // NIGHTLY_BUILD && !MOZ_NO_SMART_CARDS
 };
 
-const nsLiteralCString kIPCClientCertsModuleName("IPC Client Cert Module");
 const nsLiteralCString kNSSInternalModuleName("NSS Internal PKCS #11 Module");
 const nsLiteralCString kOSClientCertsModuleName("OS Client Cert Module");
 const nsLiteralCString kRemoteCertsModuleName("Remote Certs Module");

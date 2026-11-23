@@ -88,6 +88,8 @@ BaselineCompilerHandler::BaselineCompilerHandler(MacroAssembler& masm,
       icEntryIndex_(0),
       baseWarmUpThreshold_(snapshot->baseWarmUpThreshold()),
       compileDebugInstrumentation_(snapshot->compileDebugInstrumentation()),
+      compileDebugModeOSRResumeTargets_(
+          snapshot->compileDebugModeOSRResumeTargets()),
       ionCompileable_(snapshot->isIonCompileable()) {
 }
 
@@ -187,7 +189,54 @@ bool BaselineCompilerHandler::recordCallRetAddr(RetAddrEntry::Kind kind,
     return false;
   }
 
+  if (CanTriggerBaselineDebugModeOSR(kind)) {
+    MOZ_ASSERT_IF(lastDebugModeOSRPointOffset_ && !masm_.oom(),
+                  retOffset - *lastDebugModeOSRPointOffset_ >=
+                      Assembler::PatchWrite_NearCallSize());
+    lastDebugModeOSRPointOffset_ = mozilla::Some(retOffset);
+  }
+
   return true;
+}
+
+template <>
+void BaselineCompilerCodeGen::ensureDebugModeOSRPointSpace() {
+  const mozilla::Maybe<uint32_t>& lastOffset =
+      handler.lastDebugModeOSRPointOffset();
+  if (!lastOffset) {
+    return;
+  }
+
+  // Ensure that the previous DebugModeOSR point has sufficient space before
+  // emitting the next eligible call or finishing code generation.
+  if (masm.currentOffset() - *lastOffset <
+      Assembler::PatchWrite_NearCallSize()) {
+    int32_t paddingSize = Assembler::PatchWrite_NearCallSize();
+    paddingSize -= masm.currentOffset() - *lastOffset;
+#if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
+    masm.nop(paddingSize);
+#else
+    for (int32_t i = 0; i < paddingSize; i += Assembler::NopSize()) {
+      masm.nop();
+    }
+#endif
+  }
+
+  MOZ_ASSERT_IF(!masm.oom(), masm.currentOffset() - *lastOffset >=
+                                 Assembler::PatchWrite_NearCallSize());
+}
+
+template <>
+void BaselineInterpreterCodeGen::ensureDebugModeOSRPointSpace() {}
+
+template <typename Handler>
+void BaselineCodeGen<Handler>::emitDebugModeOSRResumeTarget(
+    RetAddrEntry::Kind kind, uint32_t returnOffset) {
+  if (handler.shouldEmitDebugModeOSRResumeTarget(kind)) {
+    mozilla::DebugOnly<uint32_t> targetOffset =
+        masm.indirectTarget(TargetKind::Jump).offset();
+    MOZ_ASSERT_IF(!masm.oom(), targetOffset == returnOffset);
+  }
 }
 
 bool BaselineInterpreterHandler::recordCallRetAddr(RetAddrEntry::Kind kind,
@@ -312,6 +361,13 @@ bool BaselineCompiler::compileImpl() {
     return false;
   }
 
+  // Ensure that the DebugModeOSR point space doesn't overflow out of the
+  // BaselineScript's code.
+  ensureDebugModeOSRPointSpace();
+
+  perfSpewer_.recordOffset(masm, "DebugModeOSREpilogue");
+  emitDebugModeOSREpilogue();
+
   perfSpewer_.recordOffset(masm, "OOLPostBarrierSlot");
   emitOutOfLinePostBarrierSlot();
 
@@ -349,8 +405,9 @@ bool BaselineCompiler::finishCompile(JSContext* cx) {
         cx, warmUpCheckPrologueOffset_.offset(),
         profilerEnterFrameToggleOffset_.offset(),
         profilerExitFrameToggleOffset_.offset(),
-        handler.retAddrEntries().length(), handler.osrEntries().length(),
-        debugTrapEntries_.length(), script->resumeOffsets().size()));
+        debugModeOSREpilogueOffset_.offset(), handler.retAddrEntries().length(),
+        handler.osrEntries().length(), debugTrapEntries_.length(),
+        script->resumeOffsets().size()));
     if (!baselineScript) {
       return false;
     }
@@ -762,15 +819,14 @@ bool BaselineCompilerCodeGen::emitNextIC() {
   size_t firstStubOffset = ICScript::offsetOfFirstStub(entryIndex);
   masm.loadPtr(Address(ICStubReg, firstStubOffset), ICStubReg);
 
+  RetAddrEntry::Kind kind = RetAddrEntry::Kind::IC;
+  ensureDebugModeOSRPointSpace();
+
   CodeOffset returnOffset;
   EmitCallIC(masm, &returnOffset);
+  emitDebugModeOSRResumeTarget(kind, returnOffset.offset());
 
-  RetAddrEntry::Kind kind = RetAddrEntry::Kind::IC;
-  if (!handler.retAddrEntries().emplaceBack(pcOffset, kind, returnOffset)) {
-    return false;
-  }
-
-  return true;
+  return handler.recordCallRetAddr(kind, returnOffset.offset());
 }
 
 template <>
@@ -879,8 +935,14 @@ bool BaselineCodeGen<Handler>::callVMInternal(VMFunctionId id,
 #endif
     masm.push(FrameDescriptor(FrameType::BaselineJS));
   }
+
+  if (CanTriggerBaselineDebugModeOSR(kind)) {
+    ensureDebugModeOSRPointSpace();
+  }
+
   // Perform the call.
   uint32_t callOffset = masm.callJit(code);
+  emitDebugModeOSRResumeTarget(kind, callOffset);
 
   // Pop arguments from framePushed.
   masm.implicitPop(argSize);
@@ -1625,7 +1687,7 @@ bool BaselineCompilerCodeGen::emitWarmUpCounterIncrement() {
   jsbytecode* pc = handler.pc();
   if (JSOp(*pc) == JSOp::LoopHead) {
     uint32_t pcOffset = script->pcToOffset(pc);
-    uint32_t nativeOffset = masm.currentOffset();
+    uint32_t nativeOffset = masm.indirectTarget(TargetKind::Jump).offset();
     if (!handler.osrEntries().emplaceBack(pcOffset, nativeOffset)) {
       return false;
     }
@@ -1996,6 +2058,8 @@ bool BaselineCompiler::emitDebugTrap() {
   bool enabled = DebugAPI::stepModeEnabled(script) ||
                  DebugAPI::hasBreakpointsAt(script, handler.pc());
 
+  ensureDebugModeOSRPointSpace();
+
   // Emit patchable call to debug trap handler.
   JitCode* handlerCode =
       runtime->jitRuntime()->debugTrapHandler(DebugTrapHandlerKind::Compiler);
@@ -2009,6 +2073,16 @@ bool BaselineCompiler::emitDebugTrap() {
   // Add a RetAddrEntry for the return offset -> pc mapping.
   return handler.recordCallRetAddr(RetAddrEntry::Kind::DebugTrap,
                                    masm.currentOffset());
+}
+
+void BaselineCompiler::emitDebugModeOSREpilogue() {
+  AutoCreatedBy acb(masm, "BaselineCompiler::emitDebugModeOSREpilogue");
+
+  debugModeOSREpilogueOffset_ = CodeOffset(masm.currentOffset());
+#ifdef JS_USE_LINK_REGISTER
+  masm.pushReturnAddress();
+#endif
+  masm.jump(runtime->jitRuntime()->getBaselineDebugModeOSRHandler());
 }
 
 template <typename Handler>
@@ -2491,13 +2565,7 @@ bool BaselineCodeGen<Handler>::emit_Coalesce() {
   masm.loadValue(frame.addressOfStackValue(-1), R0);
 
   Label undefinedOrNull;
-
-  {
-    ScratchTagScope tag(masm, R0);
-    masm.splitTagForTest(R0, tag);
-    masm.branchTestUndefined(Assembler::Equal, tag, &undefinedOrNull);
-    masm.branchTestNull(Assembler::Equal, tag, &undefinedOrNull);
-  }
+  masm.branchTestNullOrUndefined(Assembler::Equal, R0, &undefinedOrNull);
   emitJump();
 
   masm.bind(&undefinedOrNull);
@@ -5761,16 +5829,9 @@ bool BaselineCodeGen<Handler>::emit_CheckObjCoercible() {
   frame.syncStack(0);
   masm.loadValue(frame.addressOfStackValue(-1), R0);
 
-  Label fail, done;
+  Label done;
+  masm.branchTestNullOrUndefined(Assembler::NotEqual, R0, &done);
 
-  {
-    ScratchTagScope tag(masm, R0);
-    masm.splitTagForTest(R0, tag);
-    masm.branchTestUndefined(Assembler::Equal, tag, &fail);
-    masm.branchTestNull(Assembler::NotEqual, tag, &done);
-  }
-
-  masm.bind(&fail);
   prepareVMCall();
 
   pushArg(R0);
@@ -6019,10 +6080,8 @@ bool BaselineCodeGen<Handler>::emit_IsNullOrUndefined() {
   frame.syncStack(0);
 
   Label isNullOrUndefined, done;
-  masm.branchTestNull(Assembler::Equal, frame.addressOfStackValue(-1),
-                      &isNullOrUndefined);
-  masm.branchTestUndefined(Assembler::Equal, frame.addressOfStackValue(-1),
-                           &isNullOrUndefined);
+  masm.loadValue(frame.addressOfStackValue(-1), R0);
+  masm.branchTestNullOrUndefined(Assembler::Equal, R0, &isNullOrUndefined);
   masm.moveValue(BooleanValue(false), R0);
   masm.jump(&done);
 
@@ -6709,9 +6768,12 @@ bool BaselineCodeGen<Handler>::emit_Resume() {
   masm.storeValue(Int32Value(AbstractGeneratorObject::RESUME_INDEX_RUNNING),
                   resumeIndexSlot);
 
+  ensureDebugModeOSRPointSpace();
+
   // Call the callee's JIT code. Its prologue sees the descriptor bit and
   // dispatches to the resume point.
   uint32_t callOffset = masm.callJit(code);
+  emitDebugModeOSRResumeTarget(RetAddrEntry::Kind::IC, callOffset);
 
   // Record the return address so the return offset -> pc mapping works.
   if (!handler.recordCallRetAddr(RetAddrEntry::Kind::IC, callOffset)) {
@@ -6971,6 +7033,7 @@ template <typename Handler>
 bool BaselineCodeGen<Handler>::emitPrologue() {
   AutoCreatedBy acb(masm, "BaselineCodeGen<Handler>::emitPrologue");
 
+  masm.indirectTarget(TargetKind::Call);
 #ifdef JS_USE_LINK_REGISTER
   // Push link register from generateEnterJIT()'s BLR.
   masm.pushRegs(LinkRegister, FramePointer);
@@ -7041,7 +7104,7 @@ bool BaselineCodeGen<Handler>::emitPrologue() {
     return false;
   }
 
-  warmUpCheckPrologueOffset_ = CodeOffset(masm.currentOffset());
+  warmUpCheckPrologueOffset_ = masm.indirectTarget(TargetKind::Jump);
 
   return true;
 }
@@ -7117,7 +7180,7 @@ bool BaselineCompiler::emitBody() {
     if (info->hasResumeOffset) {
       frame.assertSyncedStack();
       uint32_t pcOffset = script->pcToOffset(handler.pc());
-      uint32_t nativeOffset = masm.currentOffset();
+      uint32_t nativeOffset = masm.indirectTarget(TargetKind::Jump).offset();
       if (!resumeOffsetEntries_.emplaceBack(pcOffset, nativeOffset)) {
         return false;
       }
@@ -7171,7 +7234,7 @@ bool BaselineInterpreterGenerator::emitICBailoutStub() {
 
   Label icReturn;
   icReturn.bind(handler.takeICReturnOffset());
-  uint32_t offset = masm.currentOffset();
+  uint32_t offset = masm.indirectTarget(TargetKind::Jump).offset();
   // The bailoutTail jumps here when performing bailout stack
   // reconstruction. The Baseline frame has been rebuilt.
   // Only the return address remains to be pushed.
@@ -7270,23 +7333,23 @@ bool BaselineInterpreterGenerator::emitInterpreterLoop() {
 
   // Emit code for each bytecode op.
   Label opLabels[JSOP_LIMIT];
-#define EMIT_OP(OP, ...)                                           \
-  {                                                                \
-    AutoCreatedBy acb(masm, "op=" #OP);                            \
-    perfSpewer_.recordOffset(masm, JSOp::OP);                      \
-    masm.bind(&opLabels[uint8_t(JSOp::OP)]);                       \
-    handler.setCurrentOp(JSOp::OP);                                \
-    if (!this->emit_##OP()) {                                      \
-      return false;                                                \
-    }                                                              \
-    if (!opEpilogue(JSOp::OP, JSOpLength_##OP)) {                  \
-      return false;                                                \
-    }                                                              \
-    if (BytecodeOpHasIC(JSOp::OP) && IsIonInlinableOp(JSOp::OP) && \
-        !this->emitICBailoutStub()) {                              \
-      return false;                                                \
-    }                                                              \
-    handler.resetCurrentOp();                                      \
+#define EMIT_OP(OP, ...)                                                     \
+  {                                                                          \
+    AutoCreatedBy acb(masm, "op=" #OP);                                      \
+    perfSpewer_.recordOffset(masm, JSOp::OP);                                \
+    masm.bindIndirectTarget(&opLabels[uint8_t(JSOp::OP)], TargetKind::Jump); \
+    handler.setCurrentOp(JSOp::OP);                                          \
+    if (!this->emit_##OP()) {                                                \
+      return false;                                                          \
+    }                                                                        \
+    if (!opEpilogue(JSOp::OP, JSOpLength_##OP)) {                            \
+      return false;                                                          \
+    }                                                                        \
+    if (BytecodeOpHasIC(JSOp::OP) && IsIonInlinableOp(JSOp::OP) &&           \
+        !this->emitICBailoutStub()) {                                        \
+      return false;                                                          \
+    }                                                                        \
+    handler.resetCurrentOp();                                                \
   }
   FOR_EACH_OPCODE(EMIT_OP)
 #undef EMIT_OP
@@ -7294,24 +7357,25 @@ bool BaselineInterpreterGenerator::emitInterpreterLoop() {
   // External entry point to start interpreting bytecode ops. This is used for
   // things like exception handling and OSR. DebugModeOSR patches JIT frames to
   // return here from the DebugTrapHandler.
+  interpretOpOffset_ = masm.indirectTarget(TargetKind::Jump).offset();
   masm.bind(handler.interpretOpLabel());
-  interpretOpOffset_ = masm.currentOffset();
   restoreInterpreterPCReg();
   masm.jump(handler.interpretOpWithPCRegLabel());
 
   // Second external entry point: this skips the debug trap for the first op
   // and is used by OSR.
-  interpretOpNoDebugTrapOffset_ = masm.currentOffset();
+  interpretOpNoDebugTrapOffset_ =
+      masm.indirectTarget(TargetKind::Jump).offset();
   restoreInterpreterPCReg();
   masm.jump(&interpretOpAfterDebugTrap);
 
   // External entry point for Ion prologue bailouts.
-  bailoutPrologueOffset_ = CodeOffset(masm.currentOffset());
+  bailoutPrologueOffset_ = masm.indirectTarget(TargetKind::Jump);
   restoreInterpreterPCReg();
   masm.jump(&bailoutPrologue_);
 
   // External entry point for Ion resume prologue bailouts.
-  bailoutResumePrologueOffset_ = CodeOffset(masm.currentOffset());
+  bailoutResumePrologueOffset_ = masm.indirectTarget(TargetKind::Jump);
   restoreInterpreterPCReg();
   masm.moveToStackPtr(FramePointer);
   masm.subFromStackPtr(Imm32(BaselineFrame::Size()));
@@ -7509,6 +7573,8 @@ JitCode* JitRuntime::generateDebugTrapHandler(JSContext* cx,
   TempAllocator temp(&cx->tempLifoAlloc());
   StackMacroAssembler masm(cx, temp);
   AutoCreatedBy acb(masm, "JitRuntime::generateDebugTrapHandler");
+
+  masm.indirectTarget(TargetKind::Call);
 
   AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
   MOZ_ASSERT(!regs.has(FramePointer));

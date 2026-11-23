@@ -99,6 +99,15 @@ skip-if = [
 
 ["browser_bfcache_page_restored_telemetry.js"]
 
+["browser_bfcache_pageswap_target_entry.js"]
+skip-if = ["!fission"]
+
+["browser_bfcache_parent_initiated_load.js"]
+skip-if = ["!fission"]
+
+["browser_bfcache_previous_entry.js"]
+skip-if = ["!fission"]
+
 ["browser_browsingContext-01.js"]
 https_first_disabled = true
 
@@ -108,6 +117,8 @@ https_first_disabled = true
 ["browser_browsingContext-embedder.js"]
 
 ["browser_browsingContext-getAllBrowsingContextsInSubtree.js"]
+
+["browser_browsingContext-getCurrentTopByBrowserId.js"]
 
 ["browser_browsingContext-getWindowByName.js"]
 
@@ -166,15 +177,11 @@ skip-if = [
 
 ["browser_bug422543.js"]
 https_first_disabled = true
-skip-if = [
-  "asan", # Bug 1933429
-]
 
 ["browser_bug441169.js"]
 
 ["browser_bug503832.js"]
 skip-if = [
-  "os == 'win' && os_version == '11.26100' && arch == 'x86_64' && debug && msix && verify-standalone",
   "os == 'win' && os_version == '11.26200' && arch == 'x86_64' && debug && msix && verify-standalone",
 ]
 
@@ -265,14 +272,8 @@ skip-if = [
 ["browser_bug2002654.js"]
 
 ["browser_bug2004165.js"]
-skip-if = [
-  "debug", # bug 2005202
-]
 
 ["browser_bug2007897.js"]
-skip-if = [
-  "debug", # bug 2005202
-]
 
 ["browser_bug2011921.js"]
 

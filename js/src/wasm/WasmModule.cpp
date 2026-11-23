@@ -148,6 +148,15 @@ class Module::CompleteTier2GeneratorTaskImpl
   }
 };
 
+Module::Module(const ModuleMetadata& moduleMeta, const Code& code,
+               bool loggingDeserialized)
+    : moduleMeta_(&moduleMeta),
+      code_(&code),
+      loggingDeserialized_(loggingDeserialized),
+      testingTier2Active_(false) {
+  initGCMallocBytesExcludingCode();
+}
+
 Module::~Module() {
   // Note: Modules can be destroyed on any thread.
   MOZ_ASSERT(!completeTier2Listener_);
@@ -875,6 +884,10 @@ bool Module::instantiate(JSContext* cx, ImportValues& imports,
                          HandleObject instanceProto,
                          MutableHandle<WasmInstanceObject*> instance) const {
   MOZ_RELEASE_ASSERT(cx->wasm().haveSignalHandlers);
+
+  if (!GlobalObject::ensureConstructor(cx, cx->global(), JSProto_WebAssembly)) {
+    return false;
+  }
 
   if (!instantiateFunctions(cx, imports.funcs)) {
     return false;

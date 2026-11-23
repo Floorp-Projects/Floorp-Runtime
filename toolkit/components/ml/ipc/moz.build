@@ -7,6 +7,10 @@
 with Files("**"):
     BUG_COMPONENT = ("Core", "Machine Learning")
 
+EXPORTS.mozilla.dom += [
+    "HWInference.h",
+]
+
 EXPORTS.mozilla.hwinference += [
     "HWInferenceChild.h",
     "HWInferenceLog.h",
@@ -17,6 +21,7 @@ EXPORTS.mozilla.hwinference += [
 ]
 
 UNIFIED_SOURCES += [
+    "HWInference.cpp",
     "HWInferenceChild.cpp",
     "HWInferenceParent.cpp",
     "HWInferenceProcess.cpp",
@@ -24,12 +29,18 @@ UNIFIED_SOURCES += [
 ]
 
 IPDL_SOURCES = [
+    "HWInferenceDeviceTypes.ipdlh",
+]
+
+PREPROCESSED_IPDL_SOURCES = [
     "PHWInference.ipdl",
 ]
 
 LOCAL_INCLUDES += [
     "/dom/ipc",
     "/ipc/glue",
+    "/third_party/llama.cpp/ggml/include",
+    "/third_party/llama.cpp/include",
 ]
 
 include("/ipc/chromium/chromium-config.mozbuild")

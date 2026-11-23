@@ -138,6 +138,9 @@ Result<ResultConnection, QMResult> GetStorageConnection(
                     OpenDatabaseWithFileURL, dbFileUrl, ""_ns,
                     mozIStorageService::CONNECTION_DEFAULT)));
 
+  QM_TRY(QM_TO_RESULT(
+      connection->ExecuteSimpleSQL("PRAGMA foreign_keys = ON;"_ns)));
+
   ResultConnection result(connection);
 
   if (aMaybeCipherKey) {
@@ -672,6 +675,7 @@ RefPtr<BoolPromise> FileSystemDataManager::BeginOpen() {
 
             auto* const quotaClient = static_cast<FileSystemQuotaClient*>(
                 self->mQuotaManager->GetClient(quota::Client::FILESYSTEM));
+
             self->mCipherKeyManager =
                 quotaClient->GetOrCreateCipherKeyManager(self->mOriginMetadata);
 
@@ -691,8 +695,11 @@ RefPtr<BoolPromise> FileSystemDataManager::BeginOpen() {
 
             Maybe<FileSystemCipherKey> maybeCipherKey;
             if (self->mCipherKeyManager) {
-              maybeCipherKey =
-                  Some(self->mCipherKeyManager->Ensure(kDatabaseCipherKeyId));
+              QM_TRY_UNWRAP(
+                  FileSystemCipherKey cipherKey,
+                  self->mCipherKeyManager->Ensure(kDatabaseCipherKeyId),
+                  CreateAndRejectBoolPromise);
+              maybeCipherKey = Some(std::move(cipherKey));
             }
 
             QM_TRY_UNWRAP(
@@ -729,20 +736,27 @@ RefPtr<BoolPromise> FileSystemDataManager::BeginOpen() {
             switch (self->mVersion) {
               case 1: {
                 self->mDatabaseManager =
-                    MakeUnique<FileSystemDatabaseManagerVersion001>(
+                    std::make_unique<FileSystemDatabaseManagerVersion001>(
                         self, std::move(connection), std::move(fmPtr), rootId);
                 break;
               }
 
               case 2: {
                 self->mDatabaseManager =
-                    MakeUnique<FileSystemDatabaseManagerVersion002>(
+                    std::make_unique<FileSystemDatabaseManagerVersion002>(
                         self, std::move(connection), std::move(fmPtr), rootId);
                 break;
               }
 
               default:
                 break;
+            }
+
+            // No actor exists yet, so files which are not main files were
+            // left behind by a crash and nothing can reference them.
+            if (self->mDatabaseManager) {
+              QM_WARNONLY_TRY(QM_TO_RESULT(
+                  self->mDatabaseManager->RemoveFileIdsWithoutMainFile()));
             }
 
             return BoolPromise::CreateAndResolve(true, __func__);

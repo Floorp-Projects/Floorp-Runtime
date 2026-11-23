@@ -57,6 +57,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   setDefaultPermission: "resource://gre/modules/PoliciesHelpers.sys.mjs",
   runOncePerModification: "resource://gre/modules/PoliciesHelpers.sys.mjs",
   uninstallListedAddons: "resource://gre/modules/PoliciesHelpers.sys.mjs",
+  SitePolicyUtils: "resource://gre/modules/SitePolicyUtils.sys.mjs",
 });
 
 const PREF_LOGLEVEL = "browser.policies.loglevel";
@@ -220,7 +221,11 @@ export var Policies = {
     onBeforeAddons(manager, param) {
       Services.obs.addObserver(function (subject) {
         const channel = subject.QueryInterface(Ci.nsIHttpChannel);
-        if (channel.URI.host.endsWith(".google.com")) {
+        if (
+          lazy.SitePolicyUtils.stripTrailingDots(channel.URI.host).endsWith(
+            ".google.com"
+          )
+        ) {
           channel.setRequestHeader("X-GoogApps-Allowed-Domains", param, true);
         }
       }, "http-on-modify-request");
@@ -965,22 +970,31 @@ export var Policies = {
         }
       }
 
-      if (param.Block) {
-        const hosts = param.Block.map(url => url.hostname)
-          .sort()
-          .join("\n");
-        lazy.runOncePerModification(
-          "clearCookiesForBlockedHosts",
-          hosts,
-          () => {
-            for (const blocked of param.Block) {
-              Services.cookies.removeCookiesWithOriginAttributes(
-                "{}",
-                blocked.hostname
+      lazy.clearRunOnceModification("clearCookiesForBlockedHosts");
+      for (const { hostname } of param.Block ?? []) {
+        try {
+          for (const cookie of Services.cookies.getCookiesWithOriginAttributes(
+            "{}",
+            hostname
+          )) {
+            if (
+              cookie.rawHost == hostname ||
+              cookie.rawHost.endsWith(`.${hostname}`)
+            ) {
+              Services.cookies.remove(
+                cookie.host,
+                cookie.name,
+                cookie.path,
+                cookie.originAttributes
               );
             }
           }
-        );
+        } catch (ex) {
+          lazy.reportFailure(
+            "Cookies",
+            `Unable to clear cookies for blocked host - ${hostname}`
+          );
+        }
       }
 
       if (param.ExpireAtSessionEnd != undefined) {
@@ -1325,6 +1339,8 @@ export var Policies = {
     },
   },
 
+  DisableMacOSUserPolicies: {},
+
   DisableMasterPasswordCreation: {
     onBeforeUIStartup(manager, param) {
       if (param) {
@@ -1509,7 +1525,7 @@ export var Policies = {
         // This policy is meant to change the default behavior, not to force it.
         // If this policy was already applied and the user chose to re-hide the
         // menu bar, do not show it again.
-        lazy.runOncePerModification("displayMenuBar", value, () => {
+        lazy.runOncePerModification("displayMenuBar", String(value), () => {
           Services.xulStore.setValue(
             BROWSER_DOCUMENT_URL,
             "toolbar-menubar",
@@ -1776,7 +1792,7 @@ export var Policies = {
                     continue;
                   }
                 }
-                lazy.installAddonFromURL(uri.spec, null, null, "Extensions");
+                lazy.installAddonFromURL(uri.spec, {}, "Extensions");
               }
             }
           );
@@ -1869,8 +1885,10 @@ export var Policies = {
             if (extensionSettings[extensionID].install_url) {
               lazy.installAddonFromURL(
                 extensionSettings[extensionID].install_url,
-                extensionID,
-                existingAddon,
+                {
+                  id: extensionID,
+                  existingAddon,
+                },
                 "ExtensionSettings"
               );
             } else if (!existingAddon) {

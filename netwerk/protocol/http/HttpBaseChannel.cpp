@@ -6,6 +6,7 @@
 #include "mozilla/net/HttpBaseChannel.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "HttpBaseChannel.h"
@@ -769,7 +770,7 @@ NS_IMETHODIMP
 HttpBaseChannel::SetContentDispositionFilename(
     const nsAString& aContentDispositionFilename) {
   mContentDispositionFilename =
-      MakeUnique<nsString>(aContentDispositionFilename);
+      std::make_unique<nsString>(aContentDispositionFilename);
 
   // For safety reasons ensure the filename doesn't contain null characters and
   // replace them with underscores. We may later pass the extension to system
@@ -989,6 +990,19 @@ static nsresult NormalizeUploadStream(nsIInputStream* aUploadStream,
   *aReplacementStream = nullptr;
   *aReadyPromise = nullptr;
 
+  // If the stream is cloneable, seekable and non-async, we can allow it.  It
+  // must be cloneable, as nsHttpTransaction reads a clone of it rather than the
+  // channel's own stream, and seekable, so that the channel can rewind it for a
+  // 307/308 redirect or an auth retry.  Async input streams can cause issues,
+  // as various consumers of input streams expect the payload to be synchronous
+  // and `Available()` to be the length of the stream, which is not true for
+  // asynchronous streams.
+  nsCOMPtr<nsIAsyncInputStream> async = do_QueryInterface(aUploadStream);
+  nsCOMPtr<nsISeekableStream> seekable = do_QueryInterface(aUploadStream);
+  if (NS_InputStreamIsCloneable(aUploadStream) && seekable && !async) {
+    return NS_OK;
+  }
+
   // Unwrap RemoteLazyInputStream and normalize the contents as we're in the
   // parent process.
   if (nsCOMPtr<mozIRemoteLazyInputStream> lazyStream =
@@ -1049,12 +1063,16 @@ static nsresult NormalizeUploadStream(nsIInputStream* aUploadStream,
       nsresult rv = NormalizeUploadStream(data, getter_AddRefs(replacement),
                                           aReadyPromise);
       NS_ENSURE_SUCCESS(rv, rv);
-      if (replacement) {
-        // This buffer size should be kept in sync with HTMLFormSubmission.
-        rv = NS_NewBufferedInputStream(aReplacementStream, replacement.forget(),
-                                       8192);
-        NS_ENSURE_SUCCESS(rv, rv);
+      // The wrapped stream is usable as-is, so this one only refuses to clone
+      // because it has been read from, and rebuilding it would lose the data
+      // it has buffered.
+      if (!replacement) {
+        return NS_ERROR_INVALID_ARG;
       }
+      // This buffer size should be kept in sync with HTMLFormSubmission.
+      rv = NS_NewBufferedInputStream(aReplacementStream, replacement.forget(),
+                                     8192);
+      NS_ENSURE_SUCCESS(rv, rv);
       return NS_OK;
     }
   }
@@ -1088,20 +1106,24 @@ static nsresult NormalizeUploadStream(nsIInputStream* aUploadStream,
       }
     }
 
-    // If any of the inner streams needed to be replaced, replace the entire
-    // nsIMultiplexInputStream.
-    if (replace) {
-      nsresult rv;
-      nsCOMPtr<nsIMultiplexInputStream> replacement =
-          do_CreateInstance("@mozilla.org/io/multiplex-input-stream;1", &rv);
-      NS_ENSURE_SUCCESS(rv, rv);
-      for (auto& stream : streams) {
-        rv = replacement->AppendStream(stream);
-        NS_ENSURE_SUCCESS(rv, rv);
-      }
-
-      MOZ_ALWAYS_SUCCEEDS(CallQueryInterface(replacement, aReplacementStream));
+    // Every inner stream is usable as-is, so the multiplex stream only refuses
+    // to clone because it has been read from.
+    if (!replace) {
+      return NS_ERROR_INVALID_ARG;
     }
+
+    // An inner stream needed to be replaced, so replace the entire
+    // nsIMultiplexInputStream.
+    nsresult rv;
+    nsCOMPtr<nsIMultiplexInputStream> replacement =
+        do_CreateInstance("@mozilla.org/io/multiplex-input-stream;1", &rv);
+    NS_ENSURE_SUCCESS(rv, rv);
+    for (auto& stream : streams) {
+      rv = replacement->AppendStream(stream);
+      NS_ENSURE_SUCCESS(rv, rv);
+    }
+
+    MOZ_ALWAYS_SUCCEEDS(CallQueryInterface(replacement, aReplacementStream));
 
     // Wait for all inner promises to settle before resolving the final promise.
     if (!promises.IsEmpty()) {
@@ -1123,16 +1145,6 @@ static nsresult NormalizeUploadStream(nsIInputStream* aUploadStream,
                      });
       ready.forget(aReadyPromise);
     }
-    return NS_OK;
-  }
-
-  // If the stream is cloneable, seekable and non-async, we can allow it.  Async
-  // input streams can cause issues, as various consumers of input streams
-  // expect the payload to be synchronous and `Available()` to be the length of
-  // the stream, which is not true for asynchronous streams.
-  nsCOMPtr<nsIAsyncInputStream> async = do_QueryInterface(aUploadStream);
-  nsCOMPtr<nsISeekableStream> seekable = do_QueryInterface(aUploadStream);
-  if (NS_InputStreamIsCloneable(aUploadStream) && seekable && !async) {
     return NS_OK;
   }
 
@@ -1287,6 +1299,15 @@ nsresult HttpBaseChannel::InternalSetUploadStream(
   // StorageStream) because it's consumed incrementally. Skip normalization
   // entirely and use the pipe as-is.
   if (LoadUploadStreamIsStreaming()) {
+    // A seekable streaming body, such as a Blob's stream, can be rewound here
+    // for a redirect or auth retry, so nsHttpTransaction must be able to read
+    // a clone of it.
+    nsCOMPtr<nsISeekableStream> seekable = do_QueryInterface(aUploadStream);
+    if (XRE_IsParentProcess() && seekable &&
+        !NS_InputStreamIsCloneable(aUploadStream)) {
+      return NS_ERROR_INVALID_ARG;
+    }
+
     mUploadStream = aUploadStream;
     // mReqContentLength stays 0: the length genuinely is not known yet.
     // nsHttpTransaction::Init consults RequestBodyIsStreaming() so that it
@@ -2394,7 +2415,7 @@ HttpBaseChannel::RedirectTo(nsIURI* targetURI) {
   // We may want to rewrite origin allowance, hence we need an
   // artificial response head.
   if (!mResponseHead) {
-    mResponseHead.reset(new nsHttpResponseHead());
+    mResponseHead = std::make_unique<nsHttpResponseHead>();
   }
   return NS_OK;
 }
@@ -3339,6 +3360,14 @@ void WarnWrongMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
     return;
   }
 
+  // Worklets check the MIME type against the module type themselves, and
+  // report any mismatch as an error.
+  nsContentPolicyType internalType = aLoadInfo->InternalContentPolicyType();
+  if (internalType == nsIContentPolicy::TYPE_INTERNAL_AUDIOWORKLET ||
+      internalType == nsIContentPolicy::TYPE_INTERNAL_PAINTWORKLET) {
+    return;
+  }
+
   bool succeeded;
   MOZ_ALWAYS_SUCCEEDS(aChannel->GetRequestSucceeded(&succeeded));
   if (!succeeded) {
@@ -3390,13 +3419,22 @@ bool HttpBaseChannel::ShouldFilterOpaqueResponse(
     OpaqueResponseFilterFetch aFilterType) const {
   MOZ_ASSERT(ShouldBlockOpaqueResponse());
 
-  if (!mLoadInfo || ConfiguredFilterFetchResponseBehaviour() != aFilterType) {
+  if (!mLoadInfo) {
+    return false;
+  }
+
+  auto contentPolicy = mLoadInfo->InternalContentPolicyType();
+  if (contentPolicy == nsIContentPolicy::TYPE_PING) {
+    return true;
+  }
+
+  if (ConfiguredFilterFetchResponseBehaviour() != aFilterType) {
     return false;
   }
 
   // We should filter a response in the parent if it is opaque and is the result
   // of a fetch() function from the Fetch specification.
-  return mLoadInfo->InternalContentPolicyType() == nsIContentPolicy::TYPE_FETCH;
+  return contentPolicy == nsIContentPolicy::TYPE_FETCH;
 }
 
 bool HttpBaseChannel::ShouldBlockOpaqueResponse() const {
@@ -3569,12 +3607,11 @@ HttpBaseChannel::PerformOpaqueResponseSafelistCheckBeforeSniff() {
     return OpaqueResponse::Allow;
   }
 
-  // Regardless of if ORB is enabled or not, we check if we should filter the
-  // response in the parent. This way data won't reach a content process that
-  // will create a filtered `Response` object. This is enabled when
-  // 'browser.opaqueResponseBlocking.filterFetchResponse' is
-  // `OpaqueResponseFilterFetch::All`.
-  // See https://fetch.spec.whatwg.org/#concept-filtered-response-opaque
+  // Filter opaque ping responses in the parent regardless of prefs, and opaque
+  // fetch responses when 'browser.opaqueResponseBlocking.filterFetchResponse'
+  // is `OpaqueResponseFilterFetch::All`, so their bodies don't reach content
+  // processes. See
+  // https://fetch.spec.whatwg.org/#concept-filtered-response-opaque
   if (ShouldFilterOpaqueResponse(OpaqueResponseFilterFetch::All)) {
     mListener = new OpaqueResponseFilter(mListener);
 
@@ -4165,13 +4202,6 @@ HttpBaseChannel::GetEffectiveTRRMode(nsIRequest::TRRMode* aEffectiveTRRMode) {
 NS_IMETHODIMP
 HttpBaseChannel::GetTrrSkipReason(nsITRRSkipReason::value* aTrrSkipReason) {
   *aTrrSkipReason = mTRRSkipReason;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-HttpBaseChannel::GetIsLoadedBySocketProcess(bool* aResult) {
-  NS_ENSURE_ARG_POINTER(aResult);
-  *aResult = LoadLoadedBySocketProcess();
   return NS_OK;
 }
 
@@ -5322,6 +5352,14 @@ nsresult HttpBaseChannel::SetupReplacementChannel(nsIURI* newURI,
 
   newChannel->SetLoadGroup(mLoadGroup);
   newChannel->SetNotificationCallbacks(mCallbacks);
+
+  // Console reports that could not be flushed yet, because the document being
+  // loaded does not exist, must follow the load to the redirected channel.
+  nsCOMPtr<nsIConsoleReportCollector> reporter = do_QueryInterface(newChannel);
+  if (reporter) {
+    FlushConsoleReports(reporter);
+  }
+
   // TODO: create tests for cross-origin redirect in bug 1662896.
   if (sameOriginWithOriginalUri) {
     newChannel->SetContentDisposition(mContentDispositionHint);
@@ -6166,6 +6204,14 @@ IMPL_TIMING_ATTR(TransactionPending)
 
 #undef IMPL_TIMING_ATTR
 
+void HttpBaseChannel::MaybeReportTimingDataForRedirect(
+    nsISupports* aNewChannel) {
+  nsCOMPtr<nsITimedChannel> newTimedChannel = do_QueryInterface(aNewChannel);
+  if (!newTimedChannel) {
+    MaybeReportTimingData();
+  }
+}
+
 void HttpBaseChannel::MaybeReportTimingData() {
   // There is no point in continuing, since the performance object in the parent
   // isn't the same as the one in the child which will be reporting resource
@@ -6748,13 +6794,27 @@ void HttpBaseChannel::MaybeFlushConsoleReports() {
 void HttpBaseChannel::DoDiagnosticAssertWhenOnStopNotCalledOnDestroy() {}
 
 bool HttpBaseChannel::Http3Allowed() const {
+  // Direct or MASQUE proxy is always h3-eligible. An HTTPS CONNECT proxy is too
+  // when the outer-proxy Happy Eyeballs feature is on (h3 discovered via the
+  // proxy host's HTTPS RR).
+  nsProxyInfo* proxyInfo = static_cast<nsProxyInfo*>(mProxyInfo.get());
   bool allowedProxyInfo =
-      mProxyInfo ? (static_cast<nsProxyInfo*>(mProxyInfo.get())->IsDirect() ||
-                    static_cast<nsProxyInfo*>(mProxyInfo.get())->IsHttp3Proxy())
+      mProxyInfo ? (proxyInfo->IsDirect() || proxyInfo->IsHttp3Proxy() ||
+                    (proxyInfo->IsHTTPS() &&
+                     StaticPrefs::network_http_happy_eyeballs_proxy_enabled()))
                  : true;
-  // TODO: When mUpgradeProtocolCallback is not null, we should allow HTTP/3 for
-  // connect-udp.
-  return !mUpgradeProtocolCallback && allowedProxyInfo &&
+  // An upgrade (WebSocket / WebTransport) normally forbids HTTP/3, because
+  // extended CONNECT can't be issued before the peer's SETTINGS are known. A
+  // MASQUE proxy is the exception: its outer hop *is* HTTP/3 (CONNECT-UDP) and
+  // the upgrade rides the inner tunnel, so forbidding h3 here leaves nothing
+  // but a TCP attempt against a QUIC-only port, which can never connect. Only
+  // Happy Eyeballs dispatches the upgrade onto that tunnel, so the exception is
+  // tied to the same pref.
+  bool upgradeAllowsHttp3 =
+      !mUpgradeProtocolCallback ||
+      (mProxyInfo && proxyInfo->IsHttp3Proxy() &&
+       StaticPrefs::network_http_happy_eyeballs_proxy_enabled());
+  return upgradeAllowsHttp3 && allowedProxyInfo &&
          !(mCaps & NS_HTTP_BE_CONSERVATIVE) && !LoadBeConservative() &&
          LoadAllowHttp3();
 }
@@ -6765,7 +6825,7 @@ HttpBaseChannel::MaybeCloneResponseHeadForCachedResource() {
     return nullptr;
   }
 
-  return MakeUnique<nsHttpResponseHead>(*mResponseHead);
+  return std::make_unique<nsHttpResponseHead>(*mResponseHead);
 }
 
 void HttpBaseChannel::SetDummyChannelForCachedResource(
@@ -6774,9 +6834,9 @@ void HttpBaseChannel::SetDummyChannelForCachedResource(
   MOZ_ASSERT(!mResponseHead,
              "SetDummyChannelForCachedResource should only be called once");
   if (aMaybeResponseHead) {
-    mResponseHead = MakeUnique<nsHttpResponseHead>(*aMaybeResponseHead);
+    mResponseHead = std::make_unique<nsHttpResponseHead>(*aMaybeResponseHead);
   } else {
-    mResponseHead = MakeUnique<nsHttpResponseHead>();
+    mResponseHead = std::make_unique<nsHttpResponseHead>();
   }
 }
 

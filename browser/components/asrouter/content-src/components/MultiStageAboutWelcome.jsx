@@ -145,8 +145,11 @@ export const MultiStageAboutWelcome = props => {
   const [transition, setTransition] = useState(props.transitions ? "in" : "");
   useEffect(() => {
     if (transition === "in") {
+      // Don't clobber an "out" transition started in the meantime.
       requestAnimationFrame(() =>
-        requestAnimationFrame(() => setTransition(""))
+        requestAnimationFrame(() =>
+          setTransition(prev => (prev === "in" ? "" : prev))
+        )
       );
     }
   }, [transition]);
@@ -422,6 +425,7 @@ export const MultiStageAboutWelcome = props => {
               content={currentScreen.content}
               navigate={handleTransition}
               autoAdvance={currentScreen.auto_advance}
+              autoDismiss={currentScreen.auto_dismiss}
               advanceOnExperimentLoad={currentScreen.advance_on_experiment_load}
               messageId={`${props.message_id}_${order}_${currentScreen.id}`}
               UTMTerm={props.utm_term}
@@ -1089,6 +1093,7 @@ export class WelcomeScreen extends React.PureComponent {
         isSingleScreen={this.props.isSingleScreen}
         startsWithCorner={this.props.startsWithCorner}
         autoAdvance={this.props.autoAdvance}
+        autoDismiss={this.props.autoDismiss}
         advanceOnExperimentLoad={this.props.advanceOnExperimentLoad}
         navigate={this.props.navigate}
         forceHideStepsIndicator={this.props.forceHideStepsIndicator}

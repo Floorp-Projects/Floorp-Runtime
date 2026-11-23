@@ -18,6 +18,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.mozilla.fenix.customannotations.SmokeTest
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.helpers.TestHelper.appContext
 import org.mozilla.fenix.ui.efficiency.helpers.BaseTest
@@ -72,6 +73,7 @@ class GoogleLensSearchTest : BaseTest() {
     // Kept as a single test for now (opt-out sheet, then gallery upload) to stay 1:1 with the one manual case, rather
     // than
     // split per the "one test, one assertion" rule.
+    @SmokeTest
     @Test
     fun verifyGoogleLensFunctionalityTest() {
         // Lens button is shown for Google + normal mode, and tapping it raises the first-run opt-out sheet.
@@ -96,10 +98,9 @@ class GoogleLensSearchTest : BaseTest() {
             .respondWith(Instrumentation.ActivityResult(RESULT_OK, Intent().apply { data = galleryImageUri }))
         googleLens.mozClick(GoogleLensSelectors.GALLERY_BUTTON)
 
-        // Deterministic boundary: the picker was launched and the selection was accepted, so the upload loading screen
-        // replaced the camera. The uploaded-image Lens result opens in a tab only after a live upload to Google, so it
-        // stays a manual step.
+        // Deterministic boundary: the gallery button launched the photo picker and the seeded selection was accepted.
+        // Everything past this (upload loading screen, uploaded-image result tab) depends on a live upload to Google,
+        // whose response tears down the loading screen or raises the data-disclaimer page, so those stay manual steps.
         intended(hasAction(MediaStore.ACTION_PICK_IMAGES))
-        googleLens.mozVerify(GoogleLensSelectors.UPLOAD_LOADING_STATUS)
     }
 }

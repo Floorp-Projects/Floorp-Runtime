@@ -26,6 +26,7 @@
 #include "mozilla/dom/ContentProcessManager.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/dom/LoadedOriginSet.h"
 #include "mozilla/dom/ServiceWorkerUtils.h"
 #include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/ipc/BackgroundUtils.h"
@@ -113,8 +114,7 @@ HttpChannelParent::HttpChannelParent(dom::BrowserParent* iframeEmbedding,
       mCacheNeedFlowControlInitialized(false),
       mNeedFlowControl(true),
       mSuspendedForFlowControl(false),
-      mAfterOnStartRequestBegun(false),
-      mDataSentToChildProcess(false) {
+      mAfterOnStartRequestBegun(false) {
   LOG(("Creating HttpChannelParent [this=%p]\n", this));
 
   // Ensure gHttpHandler is initialized: we need the atom table up and running.
@@ -173,10 +173,9 @@ bool HttpChannelParent::Init(const HttpChannelCreationArgs& aArgs) {
           a.launchServiceWorkerStart(), a.launchServiceWorkerEnd(),
           a.dispatchFetchEventStart(), a.dispatchFetchEventEnd(),
           a.handleFetchEventStart(), a.handleFetchEventEnd(),
-          a.forceMainDocumentChannel(), a.navigationStartTimeStamp(),
-          a.earlyHintPreloaderId(), a.classicScriptHintCharset(),
-          a.documentCharacterSet(), a.isUserAgentHeaderModified(),
-          a.initiatorType());
+          a.navigationStartTimeStamp(), a.earlyHintPreloaderId(),
+          a.classicScriptHintCharset(), a.documentCharacterSet(),
+          a.isUserAgentHeaderModified(), a.initiatorType());
     }
     case HttpChannelCreationArgs::THttpChannelConnectArgs: {
       const HttpChannelConnectArgs& cArgs = aArgs.get_HttpChannelConnectArgs();
@@ -445,7 +444,6 @@ bool HttpChannelParent::DoAsyncOpen(
     const TimeStamp& aDispatchFetchEventEnd,
     const TimeStamp& aHandleFetchEventStart,
     const TimeStamp& aHandleFetchEventEnd,
-    const bool& aForceMainDocumentChannel,
     const TimeStamp& aNavigationStartTimeStamp,
     const uint64_t& aEarlyHintPreloaderId,
     const nsAString& aClassicScriptHintCharset,
@@ -453,7 +451,23 @@ bool HttpChannelParent::DoAsyncOpen(
     const bool& aIsUserAgentHeaderModified, const nsString& aInitiatorType) {
   MOZ_ASSERT(aURI, "aURI should not be NULL");
 
-  if (aEarlyHintPreloaderId) {
+  dom::PContentParent* pcp = Manager()->Manager();
+  const dom::RemoteType& remoteType =
+      static_cast<dom::ContentParent*>(pcp)->GetRemoteType();
+
+  nsCOMPtr<nsILoadInfo> loadInfo;
+  nsresult rv = mozilla::ipc::LoadInfoArgsToLoadInfo(aLoadInfoArgs, remoteType,
+                                                     getter_AddRefs(loadInfo));
+  if (NS_FAILED(rv)) {
+    return SendFailedAsyncOpen(rv);
+  }
+
+  // If the early hint preload is gone or was made for a different request,
+  // ignore it and load the resource normally.
+  RefPtr<EarlyHintRegistrar> registrar =
+      aEarlyHintPreloaderId ? EarlyHintRegistrar::GetOrCreate() : nullptr;
+  if (registrar &&
+      registrar->MatchesRequest(aEarlyHintPreloaderId, aURI, loadInfo)) {
     // Wait for HttpBackgrounChannel to continue the async open procedure.
     mEarlyHintPreloaderId = aEarlyHintPreloaderId;
     RefPtr<HttpChannelParent> self = this;
@@ -490,17 +504,22 @@ bool HttpChannelParent::DoAsyncOpen(
                   MarkerThreadId::MainThread(), ChannelMarker,
                   aURI->GetSpecOrDefault(), aChannelId);
 
-  nsresult rv;
-
-  dom::PContentParent* pcp = Manager()->Manager();
-  const dom::RemoteType& remoteType =
-      static_cast<dom::ContentParent*>(pcp)->GetRemoteType();
-
-  nsCOMPtr<nsILoadInfo> loadInfo;
-  rv = mozilla::ipc::LoadInfoArgsToLoadInfo(aLoadInfoArgs, remoteType,
-                                            getter_AddRefs(loadInfo));
-  if (NS_FAILED(rv)) {
-    return SendFailedAsyncOpen(rv);
+  // Document, subdocument and object/embed loads go through DocumentChannel,
+  // never PHttpChannel. Reject content-process attempts to open such a channel,
+  // including any carrying navigation- or object-load flags, to prevent forged
+  // navigation attacks. System-principal loads are exempt.
+  nsIPrincipal* loadingPrincipal = loadInfo->GetLoadingPrincipal();
+  bool isSystemPrincipal =
+      loadingPrincipal && loadingPrincipal->IsSystemPrincipal();
+  ExtContentPolicy extType = loadInfo->GetExternalContentPolicyType();
+  if (!isSystemPrincipal &&
+      (extType == ExtContentPolicy::TYPE_DOCUMENT ||
+       extType == ExtContentPolicy::TYPE_SUBDOCUMENT ||
+       extType == ExtContentPolicy::TYPE_OBJECT ||
+       (aLoadFlags & (nsIChannel::LOAD_DOCUMENT_URI |
+                      nsIRequest::LOAD_DOCUMENT_NEEDS_COOKIE |
+                      nsIRequest::LOAD_HTML_OBJECT_DATA)))) {
+    return SendFailedAsyncOpen(NS_ERROR_CONTENT_BLOCKED);
   }
 
   nsCOMPtr<nsIChannel> channel;
@@ -558,10 +577,6 @@ bool HttpChannelParent::DoAsyncOpen(
 
   if (aLoadFlags != nsIRequest::LOAD_NORMAL) {
     httpChannel->SetLoadFlags(aLoadFlags);
-  }
-
-  if (aForceMainDocumentChannel) {
-    httpChannel->SetIsMainDocumentChannel(true);
   }
 
   for (uint32_t i = 0; i < requestHeaders.Length(); i++) {
@@ -1236,9 +1251,6 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
     httpChannelImpl->GetCacheTokenFetchCount(&args.cacheFetchCount());
     httpChannelImpl->GetCacheTokenExpirationTime(&args.cacheExpirationTime());
     httpChannelImpl->GetProtocolVersion(args.protocolVersion());
-
-    mDataSentToChildProcess = httpChannelImpl->DataSentToChildProcess();
-    args.dataFromSocketProcess() = mDataSentToChildProcess;
   }
 
   // Propagate whether or not conversion should occur from the parent-side
@@ -1428,14 +1440,6 @@ HttpChannelParent::OnStopRequest(nsIRequest* aRequest, nsresult aStatusCode) {
   // is ready to send OnStopRequest.
   MOZ_ASSERT(mIPCClosed || mBgParent);
 
-  if (mDataSentToChildProcess) {
-    if (mIPCClosed || !mBgParent ||
-        !mBgParent->OnConsoleReport(consoleReports)) {
-      return NS_ERROR_UNEXPECTED;
-    }
-    return NS_OK;
-  }
-
   // If we're handling a multi-part stream, then send this directly
   // over PHttpChannel to make synchronization easier.
   if (mIPCClosed || !mBgParent ||
@@ -1529,11 +1533,6 @@ HttpChannelParent::OnDataAvailable(nsIRequest* aRequest,
        this, aRequest, aOffset, aCount));
   MOZ_ASSERT(NS_IsMainThread());
 
-  if (mDataSentToChildProcess) {
-    uint32_t n;
-    return aInputStream->ReadSegments(NS_DiscardSegment, nullptr, aCount, &n);
-  }
-
   nsresult channelStatus = NS_OK;
   mChannel->GetStatus(&channelStatus);
 
@@ -1613,14 +1612,12 @@ bool HttpChannelParent::NeedFlowControl() {
   // a. pref-out
   // b. the resource is from cache or partial cache
   // c. the resource is small
-  // d. data will be sent from socket process to child process directly
   // Note that we served the cached resource first for partical cache, which is
   // ignored here since we only take the first ODA into consideration.
   if (gHttpHandler->SendWindowSize() == 0 || !httpChannelImpl ||
       httpChannelImpl->IsReadingFromCache() ||
       NS_FAILED(httpChannelImpl->GetContentLength(&contentLength)) ||
-      contentLength < gHttpHandler->SendWindowSize() ||
-      mDataSentToChildProcess) {
+      contentLength < gHttpHandler->SendWindowSize()) {
     mNeedFlowControl = false;
   }
   mCacheNeedFlowControlInitialized = true;
@@ -2019,12 +2016,12 @@ void HttpChannelParent::UpdateAltDataBindingOrigin(HttpBaseChannel* aChannel) {
     if (Manager() && Manager()->Manager()) {
       cp = static_cast<ContentParent*>(Manager()->Manager());
     }
+    // Require the exact origin to have been loaded by this process.
     if (!cp ||
-        !cp->ValidatePrincipal(
-            principal, {ValidatePrincipalOptions::AllowSystemIfLoaded})) {
+        !cp->LoadedOrigins()->Has(principal, LoadedOriginSet::Level::Full)) {
       LOG(
           ("HttpChannelParent::UpdateAltDataBindingOrigin [this=%p] principal "
-           "not valid for the content process",
+           "not loaded by the content process",
            this));
       return;
     }
@@ -2033,13 +2030,21 @@ void HttpChannelParent::UpdateAltDataBindingOrigin(HttpBaseChannel* aChannel) {
   principal->GetOrigin(mAltDataBindingOrigin);
 }
 
-// Records, atomically with the alt-data write, the origin of the principal
-// that produced the alt-data.
-static void RecordAltDataPrincipal(nsICacheEntry* aCacheEntry,
-                                   const nsACString& aOrigin) {
+// Records, atomically with the alt-data write, the remote type of the process
+// and the origin of the principal that produced the alt-data.  The remote type
+// comes from the IPC actor, so the content process cannot choose it.
+static void RecordAltDataBinding(nsICacheEntry* aCacheEntry,
+                                 const nsACString& aOrigin,
+                                 PNeckoParent* aNeckoParent) {
   if (!aCacheEntry) {
     return;
   }
+  aCacheEntry->SetMetaDataElement(
+      "alt-data-from-child",
+      static_cast<ContentParent*>(aNeckoParent->Manager())
+          ->GetRemoteType()
+          .Stringify()
+          .get());
   if (aOrigin.IsEmpty()) {
     // Fail closed: without a known principal, clear any binding so that reads
     // reject this alt-data.
@@ -2065,8 +2070,7 @@ CacheEntryWriteHandleParent::OpenAlternativeOutputStream(
   nsresult rv =
       mCacheEntry->OpenAlternativeOutputStream(type, predictedSize, _retval);
   if (NS_SUCCEEDED(rv)) {
-    mCacheEntry->SetMetaDataElement("alt-data-from-child", "1");
-    RecordAltDataPrincipal(mCacheEntry, mBindingOrigin);
+    RecordAltDataBinding(mCacheEntry, mBindingOrigin, Manager());
   }
   return rv;
 }
@@ -2086,8 +2090,7 @@ nsresult HttpChannelParent::OpenAlternativeOutputStream(
   nsresult rv =
       mCacheEntry->OpenAlternativeOutputStream(type, predictedSize, _retval);
   if (NS_SUCCEEDED(rv)) {
-    mCacheEntry->SetMetaDataElement("alt-data-from-child", "1");
-    RecordAltDataPrincipal(mCacheEntry, mAltDataBindingOrigin);
+    RecordAltDataBinding(mCacheEntry, mAltDataBindingOrigin, Manager());
   }
   return rv;
 }

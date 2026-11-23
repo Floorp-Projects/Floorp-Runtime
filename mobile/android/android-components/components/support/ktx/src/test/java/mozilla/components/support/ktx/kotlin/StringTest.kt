@@ -86,6 +86,8 @@ class StringTest {
         assertEquals(expectedUrl, "http://mozilla.org".toNormalizedUrl())
         assertEquals(expectedUrl, "  http://mozilla.org  ".toNormalizedUrl())
         assertEquals(expectedUrl, "mozilla.org".toNormalizedUrl())
+        assertEquals("https://mozilla.org/a%20b", "https://mozilla.org/a b".toNormalizedUrl())
+        assertEquals("http://mozilla.org/a%20b", "mozilla.org/a b".toNormalizedUrl())
     }
 
     @Test
@@ -566,6 +568,12 @@ class StringTest {
     }
 
     @Test
+    fun `should losslessly decode the path of a url it cannot shorten`() {
+        "http://badport:65536/%D1%82%D0%B5%D1%81%D1%82%20file" shortenedShouldBecome "http://badport:65536/тест%20file"
+        "http://$PUNYCODE.com/%D1%82%D0%B5%D1%81%D1%82" shortenedShouldBecome "$IDN.com"
+    }
+
+    @Test
     fun `should convert host to idn when calling shortURL`() {
         "http://$PUNYCODE.blah.com" shortenedShouldBecome "$IDN.blah.com"
     }
@@ -778,6 +786,15 @@ class StringTest {
         assertFalse("http://example.com?a&b".urlContainsQueryParameters("c"))
         assertFalse("http://example.com?a=b".urlContainsQueryParameters("a"))
         assertFalse("http://example.com?a=b&c=d&e=f#g=h".urlContainsQueryParameters("g=h"))
+    }
+
+    @Test
+    fun `GIVEN a camel case string WHEN converting it to snake case THEN its words are lowercased and joined by underscores`() {
+        assertEquals("enrolled_and_entitled", "EnrolledAndEntitled".toSnakeCase())
+        assertEquals("user_action", "userAction".toSnakeCase())
+        assertEquals("ready", "Ready".toSnakeCase())
+        assertEquals("a_b_test", "ABTest".toSnakeCase())
+        assertEquals("", "".toSnakeCase())
     }
 
     private infix fun String.shortenedShouldBecome(expect: String) {

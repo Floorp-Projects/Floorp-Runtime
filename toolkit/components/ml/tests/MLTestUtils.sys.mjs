@@ -407,15 +407,40 @@ export class MockLLMEngine {
   }
 
   /**
+   * Fail a pending request with the given error, as the engine would when the
+   * service rejects the call. This is only available from tests.
+   *
+   * @param {number} requestId
+   * @param {any} error
+   */
+  reject(requestId, error) {
+    if (!Cu.isInAutomation) {
+      throw new Error(
+        "The MockLLMEngine#reject method must only be used in automation."
+      );
+    }
+
+    const runRequest = this.#runRequests.get(requestId);
+    this.#runRequests.delete(requestId);
+    if (!runRequest) {
+      throw new Error("Could not find a request with that id");
+    }
+    runRequest.reject(error);
+  }
+
+  /**
    * Run the inference request with a MockedResponse. If the mocked response is a string
    * then the it is transformed into a structured response. If the mocked response is
    * an array of strings the response is concatenated. The array of strings gets turned
    * into a chunks only in the runWithGenerator method.
    *
    * @param {EngineRequests[FeatureID]} request
+   * @param {object} [options]
+   * @param {AbortSignal} [options.signal]
    * @returns {Promise<EngineResponses["chat"]>}
    */
-  async run(request) {
+  async run(request, { signal } = {}) {
+    signal?.throwIfAborted();
     const requestId = this.#nextRequestId++;
 
     /**
@@ -426,8 +451,18 @@ export class MockLLMEngine {
      */
     const { promise, resolve, reject } = Promise.withResolvers();
     this.#runRequests.set(requestId, { request, resolve, reject });
+    const onAbort = () => {
+      this.#runRequests.delete(requestId);
+      reject(signal.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     this.#notifyRunRequestWaiters();
-    const response = await promise;
+    let response;
+    try {
+      response = await promise;
+    } finally {
+      signal?.removeEventListener("abort", onAbort);
+    }
 
     if (typeof response === "string") {
       return { finalOutput: response, ...EXTRA_RESPONSE_ARGS };

@@ -273,6 +273,116 @@ add_task(async function test_run_single_url_monitor() {
   }
 });
 
+/**
+ * Run a monitor against a page that swaps a placeholder for the price
+ * lateContentMs after load, and return the serialized model request.
+ *
+ * @param {MockEngineManager} mockEngineManager
+ * @param {number} lateContentMs
+ * @returns {Promise<{ request: string, snapshot: object }>}
+ */
+async function runMonitorAgainstLatePage(mockEngineManager, lateContentMs) {
+  const { url, server } = serveHTML(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Product Page</title>
+      </head>
+      <body>
+        <div id="price">Getting prices</div>
+        <script>
+          setTimeout(() => {
+            document.getElementById("price").textContent =
+              "The price is $299";
+          }, ${lateContentMs});
+        </script>
+      </body>
+    </html>
+  `);
+
+  try {
+    await resetMonitorAgentForTesting();
+    const monitor = await createMonitorWatching(
+      [url],
+      "Check if the product price is below $300."
+    );
+
+    // The baseline snapshot is captured in the background at creation and
+    // goes through the same wait as the run.
+    const snapshot = await TestUtils.waitForCondition(
+      async () => (await MonitorAgent.listMonitors()).at(-1).initialSnapshot,
+      "Waiting for the initial snapshot capture",
+      200,
+      100
+    );
+
+    const runPromise = MonitorAgent.runNow(monitor.id);
+    const { request, respond } = await mockEngineManager.captureRequest({
+      purpose: PURPOSES.MONITOR,
+    });
+    respond(
+      JSON.stringify({
+        explanation: "The product was below $300, so the condition was met.",
+        conditionMet: true,
+      })
+    );
+    await runPromise;
+
+    const savedMonitor = (await MonitorAgent.listMonitors()).at(-1);
+    Assert.equal(
+      savedMonitor.history[0].status,
+      "success",
+      "The run completed"
+    );
+    return { request: JSON.stringify(request.args), snapshot };
+  } finally {
+    await new Promise(resolve => server.stop(resolve));
+    await resetMonitorAgentForTesting();
+  }
+}
+
+/** The page's timer starts before the settle wait, so equal delays are safe. */
+add_task(async function test_run_monitor_waits_for_late_content() {
+  const SETTLE_DELAY_MS = 50;
+  const NEVER_MS = 60 * 60 * 1000;
+  const mockEngineManager = new MockEngineManager();
+  try {
+    // head.js sets the delay to 0.
+    const early = await runMonitorAgainstLatePage(mockEngineManager, NEVER_MS);
+    Assert.ok(
+      early.request.includes("Getting prices"),
+      "Without the wait the model request has the pre-render placeholder"
+    );
+    Assert.ok(
+      !early.request.includes("The price is $299"),
+      "Without the wait the model request lacks the late content"
+    );
+
+    setPageSettleDelayForTesting(SETTLE_DELAY_MS);
+    const settled = await runMonitorAgainstLatePage(
+      mockEngineManager,
+      SETTLE_DELAY_MS
+    );
+    Assert.stringContains(
+      settled.snapshot.pageContent,
+      "The price is $299",
+      "The initial snapshot includes the content rendered after load"
+    );
+    Assert.ok(
+      settled.request.includes("The price is $299"),
+      "With the wait the model request includes the content rendered after load"
+    );
+    Assert.ok(
+      !settled.request.includes("Getting prices"),
+      "With the wait the model request lacks the pre-render placeholder"
+    );
+  } finally {
+    mockEngineManager.cleanupMocks();
+    setPageSettleDelayForTesting(0);
+  }
+});
+
 add_task(async function test_run_multiple_urls_monitor() {
   // create mock LLM endpoint
   const mockEngineManager = new MockEngineManager();
@@ -804,14 +914,72 @@ add_task(function test_categorizeError() {
   const withStatus = (msg, status) => Object.assign(new Error(msg), { status });
   Assert.equal(
     categorizeError(withStatus("MLPA request failed", 429)),
-    "rate_limit",
-    "429 status is categorized as rate limit regardless of message"
+    "model_error",
+    "A 429 without a subcode is categorized as a model error"
   );
   Assert.equal(
     categorizeError(new Error("Request failed: 429 status code")),
-    "rate_limit",
-    "A 429 encoded in the message text is categorized as rate limit"
+    "model_error",
+    "A 429 encoded in the message without a subcode is a model error"
   );
+  const mlpaErrors = [
+    [429, 1, "budget_exceeded"],
+    [429, 2, "rate_limit"],
+    [413, 3, "request_too_large"],
+    [403, 4, "max_users_reached"],
+    [429, 5, "upstream_rate_limit"],
+    [429, 6, "fastly_rate_limit"],
+    [406, 7, "request_blocked"],
+    [400, 8, "invalid_model"],
+    [400, 9, "invalid_request"],
+    [429, 10, "global_budget_exceeded"],
+    [500, 10, "global_budget_exceeded"],
+    [429, 11, "guest_budget_exceeded"],
+    [403, 12, "max_guests_reached"],
+    [429, 99, "model_error"],
+    [429, "1", "model_error"],
+  ];
+  for (const [httpStatus, code, expected] of mlpaErrors) {
+    for (const status of [httpStatus, undefined]) {
+      Assert.equal(
+        categorizeError(
+          Object.assign(withStatus(`${httpStatus} status code`, status), {
+            error: code,
+          })
+        ),
+        expected,
+        `HTTP ${httpStatus} with subcode ${JSON.stringify(code)} is categorized as ${expected} with status ${status}`
+      );
+    }
+  }
+  for (const [status, code, expected] of [
+    [400, undefined, "invalid_request"],
+    [400, 8, "invalid_model"],
+    [400, 9, "invalid_request"],
+    [406, undefined, "request_blocked"],
+    [406, 7, "request_blocked"],
+    [413, undefined, "request_too_large"],
+    [413, 3, "request_too_large"],
+    [401, 1, "auth_error"],
+    [403, 1, "auth_error"],
+    [408, 2, "timeout"],
+    [429, 3, "model_error"],
+    [429, 8, "model_error"],
+    [500, 2, "model_error"],
+    [503, 4, "model_error"],
+    [503, 12, "model_error"],
+    [200, 1, "unknown_error"],
+  ]) {
+    Assert.equal(
+      categorizeError(
+        Object.assign(withStatus("MLPA request failed", status), {
+          error: code,
+        })
+      ),
+      expected,
+      `HTTP ${status} with subcode ${code} is categorized as ${expected}`
+    );
+  }
   Assert.equal(
     categorizeError(withStatus("MLPA request failed", 401)),
     "auth_error",
@@ -863,7 +1031,18 @@ add_task(function test_categorizeError() {
   const validCodes = [
     "network_error",
     "timeout",
+    "budget_exceeded",
     "rate_limit",
+    "request_too_large",
+    "max_users_reached",
+    "upstream_rate_limit",
+    "fastly_rate_limit",
+    "request_blocked",
+    "invalid_model",
+    "invalid_request",
+    "global_budget_exceeded",
+    "guest_budget_exceeded",
+    "max_guests_reached",
     "auth_error",
     "content_extraction_error",
     "interrupted",
@@ -2638,3 +2817,142 @@ add_task(async function test_scheduled_run_expires_but_manual_run_checks() {
     await resetMonitorAgentForTesting();
   }
 });
+
+add_task(async function test_monitors_do_not_run_when_blocked_by_ai_controls() {
+  await resetMonitorAgentForTesting();
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.ai.control.smartWindow", "blocked"]],
+  });
+
+  try {
+    Assert.ok(MonitorAgent.isBlocked, "The monitor agent reports blocked");
+
+    await Assert.rejects(
+      createMonitorWatching(["https://example.com/"], "Check for a change."),
+      /blocked by AI Controls/,
+      "Creating a monitor is refused while blocked"
+    );
+    Assert.equal(
+      (await MonitorAgent.listMonitors()).length,
+      0,
+      "No monitor was stored"
+    );
+
+    const monitor = new Monitor({
+      monitorPrompt: "Check for a change.",
+      watchUrls: ["https://example.com/"],
+      schedule: new IntervalSchedule(1),
+      lastRunTime: daysAgo(1),
+    });
+    await monitor.run();
+    await monitor.run({ manual: true });
+    Assert.equal(monitor.history.length, 0, "A blocked monitor does not run");
+    monitor.dispose();
+
+    await Assert.rejects(
+      MonitorAgent.runNow(monitor.id),
+      /blocked by AI Controls/,
+      "Check now is refused while blocked"
+    );
+    await Assert.rejects(
+      MonitorAgent.updateMonitor(monitor.id, { title: "Edited" }),
+      /blocked by AI Controls/,
+      "Editing a monitor is refused while blocked"
+    );
+    await Assert.rejects(
+      monitor.captureInitialSnapshot(),
+      /blocked by AI Controls/,
+      "Snapshots are not captured while blocked"
+    );
+  } finally {
+    await SpecialPowers.popPrefEnv();
+    await resetMonitorAgentForTesting();
+  }
+});
+
+add_task(async function test_blocking_suspends_and_unblocking_resumes() {
+  await resetMonitorAgentForTesting();
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.ai.control.smartWindow", "default"]],
+  });
+  const disposeSpy = sinon.spy(Monitor.prototype, "dispose");
+  const scheduleSpy = sinon.spy(Monitor.prototype, "scheduleNextRun");
+
+  try {
+    Assert.ok(!MonitorAgent.isBlocked, "The monitor agent starts unblocked");
+    await MonitorAgent.init();
+    const { id } = await createMonitorWatching(
+      ["https://example.com/"],
+      "Check for a change."
+    );
+
+    disposeSpy.resetHistory();
+    await SpecialPowers.pushPrefEnv({
+      set: [["browser.ai.control.smartWindow", "blocked"]],
+    });
+    await TestUtils.waitForCondition(
+      () => disposeSpy.called,
+      "Blocking disposes the running monitors"
+    );
+    Assert.ok(
+      disposeSpy.calledWith(MONITOR_ERROR_CODES.CANCELED),
+      "Monitors are canceled when blocked"
+    );
+    Assert.ok(
+      await findMonitor(id),
+      "Blocking keeps the monitor so it can resume later"
+    );
+
+    scheduleSpy.resetHistory();
+    await SpecialPowers.popPrefEnv();
+    await TestUtils.waitForCondition(
+      () => scheduleSpy.called,
+      "Unblocking reschedules the monitors"
+    );
+  } finally {
+    disposeSpy.restore();
+    scheduleSpy.restore();
+    await SpecialPowers.popPrefEnv();
+    await resetMonitorAgentForTesting();
+  }
+});
+
+add_task(
+  async function test_blocking_during_init_load_keeps_monitors_stopped() {
+    await resetMonitorAgentForTesting();
+    await SpecialPowers.pushPrefEnv({
+      set: [["browser.ai.control.smartWindow", "default"]],
+    });
+    await storeBackdatedMonitor({
+      id: "blocked-during-load",
+      activeSinceDays: 1,
+    });
+
+    const originalListMonitors = MonitorStore.listMonitors;
+    const listStub = sinon
+      .stub(MonitorStore, "listMonitors")
+      .callsFake(async (...args) => {
+        const monitors = await originalListMonitors.apply(MonitorStore, args);
+        Services.prefs.setStringPref(
+          "browser.ai.control.smartWindow",
+          "blocked"
+        );
+        return monitors;
+      });
+    const scheduleSpy = sinon.spy(Monitor.prototype, "scheduleNextRun");
+
+    try {
+      await MonitorAgent.init();
+      Assert.ok(MonitorAgent.isBlocked, "Smart Window was blocked during load");
+      Assert.ok(
+        scheduleSpy.notCalled,
+        "No monitor is scheduled when blocked during load"
+      );
+    } finally {
+      listStub.restore();
+      scheduleSpy.restore();
+      await SpecialPowers.popPrefEnv();
+      await resetMonitorAgentForTesting();
+    }
+  }
+);

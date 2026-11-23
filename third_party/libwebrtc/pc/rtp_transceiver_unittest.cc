@@ -174,7 +174,6 @@ class RtpTransceiverTest : public testing::Test {
   static PeerConnectionFactoryDependencies MakeDependencies() {
     PeerConnectionFactoryDependencies d;
     d.network_thread = Thread::Current();
-    d.worker_thread = Thread::Current();
     d.signaling_thread = Thread::Current();
     EnableFakeMedia(d, std::make_unique<FakeMediaEngine>());
     return d;
@@ -1351,6 +1350,46 @@ TEST_F(RtpTransceiverUnifiedPlanTest, ApplySframeEnabledFalseSetsState) {
 
   transceiver->ApplySframeEnabled(false);
   EXPECT_THAT(transceiver->SframeEnabled(), Optional(false));
+}
+
+TEST_F(RtpTransceiverUnifiedPlanTest,
+       ApplySframeEnabledTrueEnablesSframeOnChannel) {
+  scoped_refptr<RtpTransceiver> transceiver = CreateTransceiver(
+      MockSender(MediaType::AUDIO), MockReceiver(MediaType::AUDIO));
+  const std::string content_name = "audio";
+  transceiver->set_mid(content_name);
+
+  auto mock_channel = std::make_unique<NiceMock<MockChannelInterface>>();
+  ON_CALL(*mock_channel, media_type).WillByDefault(Return(MediaType::AUDIO));
+  ON_CALL(*mock_channel, mid).WillByDefault(ReturnRef(content_name));
+  ON_CALL(*mock_channel, SetRtpTransport).WillByDefault(Return(true));
+
+  EXPECT_CALL(*mock_channel, EnableSframe);
+  transceiver->SetChannelForTest(std::move(mock_channel));
+
+  transceiver->ApplySframeEnabled(true);
+
+  transceiver->ClearChannel();
+}
+
+TEST_F(RtpTransceiverUnifiedPlanTest,
+       ApplySframeEnabledFalseDoesNotEnableSframeOnChannel) {
+  scoped_refptr<RtpTransceiver> transceiver = CreateTransceiver(
+      MockSender(MediaType::AUDIO), MockReceiver(MediaType::AUDIO));
+  const std::string content_name = "audio";
+  transceiver->set_mid(content_name);
+
+  auto mock_channel = std::make_unique<NiceMock<MockChannelInterface>>();
+  ON_CALL(*mock_channel, media_type).WillByDefault(Return(MediaType::AUDIO));
+  ON_CALL(*mock_channel, mid).WillByDefault(ReturnRef(content_name));
+  ON_CALL(*mock_channel, SetRtpTransport).WillByDefault(Return(true));
+
+  EXPECT_CALL(*mock_channel, EnableSframe).Times(0);
+  transceiver->SetChannelForTest(std::move(mock_channel));
+
+  transceiver->ApplySframeEnabled(false);
+
+  transceiver->ClearChannel();
 }
 
 }  // namespace

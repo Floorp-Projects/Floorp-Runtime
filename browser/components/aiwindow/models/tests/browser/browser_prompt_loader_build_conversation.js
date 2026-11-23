@@ -25,6 +25,8 @@ const {
   getRemoteClient,
   checkMajorVersion,
   FEATURE_MAJOR_VERSIONS,
+  _setRemoteClientForTesting,
+  _clearRemoteClientForTesting,
 } = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs"
 );
@@ -64,7 +66,11 @@ add_setup(async function read_real_config_records() {
     record =>
       !record.kind &&
       record.feature === MODEL_FEATURES.TITLE_GENERATION &&
-      record.is_default
+      record.is_default &&
+      checkMajorVersion(
+        record.version,
+        FEATURE_MAJOR_VERSIONS[MODEL_FEATURES.TITLE_GENERATION]
+      )
   );
 
   const memoriesFeature = MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM;
@@ -111,6 +117,45 @@ add_task(async function test_buildConversation_uses_chat_params() {
     Assert.equal(conversation.engine.model, expectedParams.model);
   } finally {
     await SpecialPowers.popPrefEnv();
+  }
+});
+
+add_task(async function test_buildConversation_sends_inference_model() {
+  const inferenceModel = "qwen3-235b-a22b-instruct-2507-maas";
+  _setRemoteClientForTesting({
+    get: async () => [
+      {
+        id: "chat--params--auto--v1",
+        kind: "params",
+        feature: MODEL_FEATURES.CHAT,
+        model: "auto",
+        inference_model: inferenceModel,
+        model_choice_id: "4",
+        version: `${FEATURE_MAJOR_VERSIONS[MODEL_FEATURES.CHAT]}.0`,
+        parameters: { temperature: 0.5 },
+      },
+    ],
+  });
+  const createEngineSpy = sinon.spy(openAIEngine, "_createEngine");
+  await SpecialPowers.pushPrefEnv({
+    set: [[PREF_MODEL_CHOICE, "4"]],
+    clear: [[PREF_MODEL], [PREF_ENDPOINT], [PREF_CUSTOM_ENDPOINT]],
+  });
+
+  try {
+    const conversation = await buildConversation(MODEL_FEATURES.CHAT);
+
+    Assert.equal(conversation.engine.model, inferenceModel);
+    Assert.equal(
+      createEngineSpy.lastCall.args[0].modelId,
+      inferenceModel,
+      "The endpoint gets inference_model, not the record's model"
+    );
+    Assert.deepEqual(conversation.parameters, { temperature: 0.5 });
+  } finally {
+    await SpecialPowers.popPrefEnv();
+    createEngineSpy.restore();
+    _clearRemoteClientForTesting();
   }
 });
 

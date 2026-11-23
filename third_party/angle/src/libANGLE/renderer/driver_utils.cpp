@@ -13,11 +13,13 @@
 
 #include "common/android_util.h"
 #include "common/platform.h"
-#include "common/system_utils.h"
+#include "common/string_utils.h"
 #include "gpu_info_util/SystemInfo.h"
 
 #if defined(ANGLE_PLATFORM_LINUX)
 #    include <sys/utsname.h>
+
+#    include "common/linux/window_system.h"
 #endif
 
 namespace rx
@@ -297,6 +299,82 @@ int GetAndroidSDKVersion()
 
     return std::atoi(androidSdkLevel.c_str());
 }
+
+namespace
+{
+// Accepts the same values as android::base::GetBoolProperty().
+std::optional<bool> GetBoolProperty(const char *name)
+{
+    std::string value;
+    if (!angle::android::GetSystemProperty(name, &value))
+    {
+        return std::nullopt;
+    }
+    if (value == "1" || value == "y" || value == "yes" || value == "on" || value == "true")
+    {
+        return true;
+    }
+    if (value == "0" || value == "n" || value == "no" || value == "off" || value == "false")
+    {
+        return false;
+    }
+    return std::nullopt;
+}
+
+std::optional<int64_t> GetInt64Property(const char *name)
+{
+    std::string valueString;
+    int64_t value = 0;
+    if (angle::android::GetSystemProperty(name, &valueString) &&
+        angle::StringToInt64(valueString, &value))
+    {
+        return value;
+    }
+    return std::nullopt;
+}
+}  // anonymous namespace
+
+AndroidBlobCacheProperties GetAndroidBlobCacheProperties()
+{
+    AndroidBlobCacheProperties properties;
+    properties.multifileEnabled      = GetBoolProperty("ro.egl.blobcache.multifile");
+    properties.debugMultifileEnabled = GetBoolProperty("debug.egl.blobcache.multifile");
+    properties.multifileLimit        = GetInt64Property("ro.egl.blobcache.multifile_limit");
+    properties.debugMultifileLimit   = GetInt64Property("debug.egl.blobcache.multifile_limit");
+    return properties;
+}
+
+bool IsSamsungXclipse()
+{
+#if defined(ANGLE_PLATFORM_ANDROID)
+    std::string socManufacturer;
+    if (!angle::android::GetSystemProperty("ro.soc.manufacturer", &socManufacturer))
+    {
+        return false;
+    }
+
+    angle::ToLower(&socManufacturer);
+    if (socManufacturer != "samsung")
+    {
+        return false;
+    }
+
+    std::string hardwareEgl;
+    if (!angle::android::GetSystemProperty("ro.hardware.egl", &hardwareEgl))
+    {
+        return true;
+    }
+
+    angle::ToLower(&hardwareEgl);
+    if (hardwareEgl == "samsung")
+    {
+        return true;
+    }
+#endif
+
+    return false;
+}
+
 #if !defined(ANGLE_PLATFORM_MACOS)
 OSVersion GetMacOSVersion()
 {
@@ -359,33 +437,17 @@ OSVersion GetLinuxOSVersion()
     return OSVersion(0, 0, 0);
 }
 
-// There are multiple environment variables that may or may not be set during Wayland
-// sessions, including WAYLAND_DISPLAY, XDG_SESSION_TYPE, and DESKTOP_SESSION
-bool IsWayland()
+bool IsXWayland()
 {
-    static bool checked   = false;
-    static bool isWayland = false;
-    if (!checked)
-    {
-        if (IsLinux())
-        {
-            if (!angle::GetEnvironmentVar("WAYLAND_DISPLAY").empty())
-            {
-                isWayland = true;
-            }
-            else if (angle::GetEnvironmentVar("XDG_SESSION_TYPE") == "wayland")
-            {
-                isWayland = true;
-            }
-            else if (angle::GetEnvironmentVar("DESKTOP_SESSION").find("wayland") !=
-                     std::string::npos)
-            {
-                isWayland = true;
-            }
-        }
-        checked = true;
-    }
-    return isWayland;
+#if defined(ANGLE_PLATFORM_LINUX)
+    // Detects the Wayland session rather than the connection, so callers must be
+    // on an X11 code path for this to mean XWayland. Cached: the session type is
+    // fixed for the life of the process.
+    static const bool isWaylandSession = angle::IsWaylandSession();
+    return isWaylandSession;
+#else
+    return false;
+#endif
 }
 
 }  // namespace rx

@@ -25,7 +25,7 @@ from collections import defaultdict
 
 from slugid import nice as slugid
 from taskgraph.graph import Graph
-from taskgraph.morph import register_morph
+from taskgraph.morph import amend_taskgraph, register_morph
 from taskgraph.task import Task
 from taskgraph.taskgraph import TaskGraph
 
@@ -34,21 +34,6 @@ from .util.workertypes import get_worker_type
 here = os.path.abspath(os.path.dirname(__file__))
 logger = logging.getLogger(__name__)
 MAX_ROUTES = 64
-
-
-def amend_taskgraph(taskgraph, label_to_taskid, to_add):
-    """Add the given tasks to the taskgraph, returning a new taskgraph"""
-    new_tasks = taskgraph.tasks.copy()
-    new_edges = set(taskgraph.graph.edges)
-    for task in to_add:
-        new_tasks[task.task_id] = task
-        assert task.label not in label_to_taskid
-        label_to_taskid[task.label] = task.task_id
-        for depname, dep in task.dependencies.items():
-            new_edges.add((task.task_id, dep, depname))
-
-    taskgraph = TaskGraph(new_tasks, Graph(set(new_tasks), new_edges))
-    return taskgraph, label_to_taskid
 
 
 def derive_misc_task(
@@ -65,9 +50,16 @@ def derive_misc_task(
     image."""
     label = f"{purpose}-{target_task.label}"
 
-    # this is why all docker image tasks are included in the target task graph: we
-    # need to find them in label_to_taskid, even if nothing else required them
-    image_taskid = label_to_taskid["docker-image-" + image]
+    # docker-image is in enable_always_target by default but that can be turned off
+    image_taskid = label_to_taskid.get("docker-image-" + image)
+    if image_taskid is None:
+        if not parameters["enable_always_target"]:
+            logger.warning(
+                f"{image} docker image not in the task graph, "
+                f"skipping {purpose} for {target_task.description}"
+            )
+            return
+        raise RuntimeError(f"{image} docker image missing from the task graph")
 
     provisioner_id, worker_type = get_worker_type(
         graph_config,
@@ -160,6 +152,8 @@ def make_index_task(
         graph_config,
         dependencies,
     )
+    if task is None:
+        return
 
     # we need to "summarize" the scopes, otherwise a particularly
     # namespace-heavy index task might have more scopes than can fit in a
@@ -216,19 +210,19 @@ def add_index_tasks(taskgraph, label_to_taskid, parameters, graph_config):
         task.task["routes"] = [
             r for r in task.task["routes"] if not r.startswith("index.")
         ]
-        added.append(
-            make_index_task(
-                task,
-                taskgraph,
-                label_to_taskid,
-                parameters,
-                graph_config,
-                index_paths=index_paths,
-                index_rank=task.task.get("extra", {}).get("index", {}).get("rank", 0),
-                purpose="index-task",
-                dependencies={"parent": task.task_id},
-            )
+        index_task = make_index_task(
+            task,
+            taskgraph,
+            label_to_taskid,
+            parameters,
+            graph_config,
+            index_paths=index_paths,
+            index_rank=task.task.get("extra", {}).get("index", {}).get("rank", 0),
+            purpose="index-task",
+            dependencies={"parent": task.task_id},
         )
+        if index_task is not None:
+            added.append(index_task)
 
     if added:
         taskgraph, label_to_taskid = amend_taskgraph(taskgraph, label_to_taskid, added)
@@ -253,19 +247,19 @@ def add_eager_cache_index_tasks(taskgraph, label_to_taskid, parameters, graph_co
         if "eager_indexes" not in task.attributes:
             continue
         eager_indexes = task.attributes["eager_indexes"]
-        added.append(
-            make_index_task(
-                task,
-                taskgraph,
-                label_to_taskid,
-                parameters,
-                graph_config,
-                index_paths=eager_indexes,
-                index_rank=0,  # Be sure complete tasks get priority
-                purpose="eager-index",
-                dependencies={},
-            )
+        eager_index_task = make_index_task(
+            task,
+            taskgraph,
+            label_to_taskid,
+            parameters,
+            graph_config,
+            index_paths=eager_indexes,
+            index_rank=0,  # Be sure complete tasks get priority
+            purpose="eager-index",
+            dependencies={},
         )
+        if eager_index_task is not None:
+            added.append(eager_index_task)
 
     if added:
         taskgraph, label_to_taskid = amend_taskgraph(taskgraph, label_to_taskid, added)

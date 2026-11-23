@@ -11,12 +11,14 @@
 #include "MediaTrackGraph.h"
 #include "VRManagerChild.h"
 #include "WindowRenderer.h"
+#include "js/Wrapper.h"
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/Base64.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/EventDispatcher.h"
+#include "mozilla/MappedDeclarationsBuilder.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
@@ -37,6 +39,7 @@
 #include "mozilla/dom/OffscreenCanvas.h"
 #include "mozilla/dom/OffscreenCanvasDisplayHelper.h"
 #include "mozilla/dom/VideoStreamTrack.h"
+#include "mozilla/gfx/PrintTargetSkPDF.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/layers/CanvasRenderer.h"
 #include "mozilla/layers/WebRenderCanvasRenderer.h"
@@ -46,6 +49,7 @@
 #include "nsContentUtils.h"
 #include "nsDOMJSUtils.h"
 #include "nsDisplayList.h"
+#include "nsIOutputStream.h"
 #include "nsITimer.h"
 #include "nsJSUtils.h"
 #include "nsLayoutUtils.h"
@@ -589,27 +593,20 @@ HTMLCanvasElement::CreateContext(CanvasContextType aContextType) {
   return ret.forget();
 }
 
-nsresult HTMLCanvasElement::UpdateContext(
-    JSContext* aCx, JS::Handle<JS::Value> aNewContextOptions,
-    ErrorResult& aRvForDictionaryInit) {
-  nsresult rv = CanvasRenderingContextHelper::UpdateContext(
-      aCx, aNewContextOptions, aRvForDictionaryInit);
-
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
-
+void HTMLCanvasElement::AfterUpdateContext() {
   // If we have a mRequestedFrameRefreshObserver that wasn't fully registered,
   // retry that now.
   if (mRequestedFrameRefreshObserver.get() &&
       !mRequestedFrameRefreshObserver->IsRegisteredAndWatching()) {
     mRequestedFrameRefreshObserver->Register();
   }
-
-  return NS_OK;
 }
 
 CSSIntSize HTMLCanvasElement::GetWidthHeight() {
+  if (mOffscreenDisplay) {
+    return mOffscreenDisplay->GetPlaceholderSize();
+  }
+
   CSSIntSize size = kFallbackIntrinsicSizeInPixels;
   const nsAttrValue* value;
 
@@ -655,8 +652,7 @@ void HTMLCanvasElement::AfterMaybeChangeAttr(int32_t aNamespaceID,
   if (mCurrentContext && aNamespaceID == kNameSpaceID_None &&
       (aName == nsGkAtoms::width || aName == nsGkAtoms::height ||
        aName == nsGkAtoms::moz_opaque)) {
-    ErrorResult dummy;
-    UpdateContext(nullptr, JS::NullHandleValue, dummy);
+    UpdateContext();
   }
 }
 
@@ -766,7 +762,10 @@ nsChangeHint HTMLCanvasElement::GetAttributeChangeHint(
   nsChangeHint retval =
       nsGenericHTMLElement::GetAttributeChangeHint(aAttribute, aModType);
   if (aAttribute == nsGkAtoms::width || aAttribute == nsGkAtoms::height) {
-    retval |= NS_STYLE_HINT_REFLOW;
+    // With OffscreenCanvas, use the placeholder size, not the attributes.
+    if (!mOffscreenDisplay) {
+      retval |= NS_STYLE_HINT_REFLOW;
+    }
   } else if (aAttribute == nsGkAtoms::moz_opaque) {
     retval |= NS_STYLE_HINT_VISUAL;
   }
@@ -775,7 +774,16 @@ nsChangeHint HTMLCanvasElement::GetAttributeChangeHint(
 
 void HTMLCanvasElement::MapAttributesIntoRule(
     MappedDeclarationsBuilder& aBuilder) {
-  MapAspectRatioInto(aBuilder);
+  const auto* canvas = FromNode(aBuilder.Element());
+  MOZ_ASSERT(canvas, "mapping the attributes of a different element?");
+  // Unlike <img>, <canvas> maps width and height only to the aspect ratio,
+  // not to CSS sizes.
+  if (canvas->mOffscreenDisplay) {
+    const CSSIntSize size = canvas->mOffscreenDisplay->GetPlaceholderSize();
+    aBuilder.SetAspectRatio(size.width, size.height);
+  } else {
+    MapAspectRatioInto(aBuilder);
+  }
   MapCommonAttributesInto(aBuilder);
 }
 
@@ -842,6 +850,108 @@ PrintCallback* HTMLCanvasElement::GetMozPrintCallback() const {
     return mOriginalCanvas->GetMozPrintCallback();
   }
   return mPrintCallback;
+}
+
+/* static */
+void HTMLCanvasElement::PrintToPDF(
+    const GlobalObject& aGlobal,
+    const Sequence<OwningNonNull<HTMLCanvasElement>>& aCanvases,
+    nsIOutputStream* aStream, ErrorResult& aRv) {
+  MOZ_ASSERT(aStream);
+  if (aCanvases.IsEmpty()) {
+    aRv.ThrowRangeError("A PDF needs at least one page."_ns);
+    return;
+  }
+
+  RefPtr<gfx::PrintTargetSkPDF> target =
+      gfx::PrintTargetSkPDF::CreateOrNull(aStream);
+  if (!target) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return;
+  }
+  // Omit the document title and structure tree.
+  nsresult rv = target->BeginPrinting(u""_ns, u""_ns, 0, 0, 0);
+  if (NS_FAILED(rv)) {
+    aRv.Throw(rv);
+    return;
+  }
+
+  for (const OwningNonNull<HTMLCanvasElement>& entry : aCanvases) {
+    RefPtr<HTMLCanvasElement> canvas = entry;
+    canvas->PrintPageToPDF(*target, aRv);
+    if (aRv.Failed()) {
+      target->AbortPrinting();
+      return;
+    }
+  }
+
+  aRv = target->EndPrinting();
+  target->Finish();
+}
+
+void HTMLCanvasElement::PrintPageToPDF(gfx::PrintTarget& aTarget,
+                                       ErrorResult& aRv) {
+  // Replacing the bitmap must not affect display or an existing print job.
+  if (IsInComposedDoc() || mPrintState) {
+    aRv.ThrowInvalidStateError("The canvas must not be in a document."_ns);
+    return;
+  }
+  RefPtr<PrintCallback> callback = GetMozPrintCallback();
+  if (!callback) {
+    aRv.ThrowInvalidStateError("The canvas has no mozPrintCallback."_ns);
+    return;
+  }
+  // PDF output bypasses canvas readback taint checks, so require chrome code.
+  JSObject* callable = callback->CallbackOrNull();
+  if (!callable ||
+      !nsContentUtils::ObjectPrincipal(js::UncheckedUnwrap(callable))
+           ->IsSystemPrincipal()) {
+    aRv.ThrowSecurityError("The mozPrintCallback must be chrome code."_ns);
+    return;
+  }
+  // One CSS pixel maps to one PDF point.
+  const gfx::IntSize pageSize = GetWidthHeight().ToUnknownSize();
+  if (!mCurrentContext) {
+    nsCOMPtr<nsISupports> ignored;
+    nsresult rv = GetContext(u"2d"_ns, getter_AddRefs(ignored));
+    if (NS_FAILED(rv)) {
+      aRv.Throw(rv);
+      return;
+    }
+  }
+  if (GetCurrentContextType() != CanvasContextType::Canvas2D) {
+    aRv.ThrowInvalidStateError("The canvas has no 2D context."_ns);
+    return;
+  }
+  nsCOMPtr<nsICanvasRenderingContextInternal> context = mCurrentContext;
+
+  nsresult rv = aTarget.BeginPage(pageSize);
+  if (NS_FAILED(rv)) {
+    aRv.Throw(rv);
+    return;
+  }
+  RefPtr<gfx::DrawTarget> pageTarget = aTarget.MakeDrawTarget(pageSize);
+  if (!pageTarget) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return;
+  }
+  rv = context->InitializeWithDrawTarget(nullptr, WrapNotNull(pageTarget));
+  if (NS_FAILED(rv)) {
+    aRv.Throw(rv);
+    return;
+  }
+
+  RefPtr<HTMLCanvasPrintState> state =
+      new HTMLCanvasPrintState(this, context, nullptr);
+  callback->Call(*state, aRv, "HTMLCanvasElement.printToPDF",
+                 CallbackObject::eRethrowExceptions);
+  // Detach the PDF draw target before closing the page.
+  context->ResetBitmap();
+  if (aRv.Failed()) {
+    return;
+  }
+
+  aRv = aTarget.EndPage();
 }
 
 static uint32_t sCaptureSourceId = 0;
@@ -1198,15 +1308,24 @@ nsresult HTMLCanvasElement::GetContext(const nsAString& aContextId,
 already_AddRefed<nsISupports> HTMLCanvasElement::GetContext(
     JSContext* aCx, const nsAString& aContextId,
     JS::Handle<JS::Value> aContextOptions, ErrorResult& aRv) {
+  CanvasContextType contextType;
+  if (!CanvasUtils::GetCanvasContextType(aContextId, &contextType)) {
+    return nullptr;
+  }
+  CanvasRenderingContextOptions options;
+  if (!options.Init(aCx, contextType, aContextOptions, aRv)) {
+    return nullptr;
+  }
   if (mOffscreenCanvas) {
     aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
     return nullptr;
   }
-
   mMaybeModified = true;  // For FirstContentfulPaint
-  return CanvasRenderingContextHelper::GetOrCreateContext(
-      aCx, aContextId,
-      aContextOptions.isObject() ? aContextOptions : JS::NullHandleValue, aRv);
+  if (!CanvasRenderingContextHelper::GetOrCreateContext(contextType, options,
+                                                        aRv)) {
+    return nullptr;
+  }
+  return do_AddRef(mCurrentContext);
 }
 
 CSSIntSize HTMLCanvasElement::GetSize() { return GetWidthHeight(); }
@@ -1314,15 +1433,38 @@ void HTMLCanvasElement::NodeInfoChanged(Document* aOldDoc) {
   NotifyOwnerDocumentActivityChanged();
 }
 
-void HTMLCanvasElement::InvalidateCanvasPlaceholder(uint32_t aWidth,
-                                                    uint32_t aHeight) {
+void HTMLCanvasElement::InvalidateCanvasPlaceholder(bool aHasSizeChanged) {
+  const CSSIntSize size = mOffscreenDisplay->GetPlaceholderSize();
+
+  // Mirror the size of the OffscreenCanvas bitmap into the content attributes,
+  // so that content reading canvas.width and canvas.height sees it.
   ErrorResult rv;
-  SetUnsignedIntAttr(nsGkAtoms::width, aWidth, kFallbackIntrinsicWidthInPixels,
-                     rv);
+  SetUnsignedIntAttr(nsGkAtoms::width, size.width,
+                     kFallbackIntrinsicWidthInPixels, rv);
   MOZ_ASSERT(!rv.Failed());
-  SetUnsignedIntAttr(nsGkAtoms::height, aHeight,
+  SetUnsignedIntAttr(nsGkAtoms::height, size.height,
                      kFallbackIntrinsicHeightInPixels, rv);
   MOZ_ASSERT(!rv.Failed());
+
+  if (!aHasSizeChanged) {
+    return;
+  }
+
+  // Our mapped aspect ratio comes from the placeholder size as well, so the
+  // declaration block has to be rebuilt whether or not the writes above
+  // changed an attribute.
+  if (!IsPendingMappedAttributeEvaluation() &&
+      mAttrs.MarkAsPendingPresAttributeEvaluation()) {
+    if (Document* doc = GetComposedDoc()) {
+      doc->ScheduleForPresAttrEvaluation(this);
+    }
+  }
+
+  if (nsIFrame* frame = GetPrimaryFrame()) {
+    frame->PresShell()->FrameNeedsReflow(
+        frame, IntrinsicDirty::FrameAndAncestors, NS_FRAME_HAS_DIRTY_CHILDREN,
+        ReflowRootHandling::PositionOrSizeChange);
+  }
 }
 
 static bool InvalidateCanvasData(nsIFrame* aFrame, uint32_t aKey) {

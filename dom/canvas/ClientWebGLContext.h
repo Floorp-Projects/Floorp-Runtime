@@ -769,6 +769,8 @@ class ClientWebGLContext final : public nsICanvasRenderingContextInternal,
  public:
   explicit ClientWebGLContext(bool webgl2);
 
+  nsresult Initialize() override;
+
  private:
   virtual ~ClientWebGLContext();
 
@@ -778,9 +780,14 @@ class ClientWebGLContext final : public nsICanvasRenderingContextInternal,
   mutable GLenum mNextError = 0;
   mutable webgl::LossStatus mLossStatus = webgl::LossStatus::Ready;
   mutable bool mAwaitingRestore = false;
+  // True if the context was lost because the CanvasManagerChild was destroyed,
+  // and we are waiting for it to be recreated to restore it.
+  mutable bool mRemoteCanvasLost = false;
   mutable webgl::ObjectId mLastId = 0;
   // Buffer to accumulate JS warnings until it is safe to flush them.
   mutable std::vector<std::string>* mDeferJsWarnings = nullptr;
+  // Description of a deferred context creation error.
+  mutable std::string mDeferContextCreationError;
 
  public:
   webgl::ObjectId NextId() const { return mLastId += 1; }
@@ -820,6 +827,8 @@ class ClientWebGLContext final : public nsICanvasRenderingContextInternal,
   void EmulateLoseContext() const;
   void OnContextLoss(webgl::ContextLossReason) const;
   void RestoreContext(webgl::LossStatus requiredStatus) const;
+  void OnRemoteCanvasLost() override;
+  void OnRemoteCanvasRestored() override;
 
  private:
   MOZ_CAN_RUN_SCRIPT bool DispatchEvent(const nsAString&) const;
@@ -986,11 +995,12 @@ class ClientWebGLContext final : public nsICanvasRenderingContextInternal,
   const WebGLContextOptions& GetContextOptions() const {
     return mInitialOptions.ref();
   }
-  NS_IMETHOD
-  SetContextOptions(JSContext* cx, JS::Handle<JS::Value> options,
-                    ErrorResult& aRvForDictionaryInit) override;
+  NS_IMETHOD SetContextOptions(
+      const dom::CanvasRenderingContextOptions& aOptions) override;
   NS_IMETHOD
   SetDimensions(int32_t width, int32_t height) override;
+  NS_IMETHOD MaybeThrowContextCreationError() override;
+
   bool UpdateWebRenderCanvasData(
       nsDisplayListBuilder* aBuilder,
       layers::WebRenderCanvasData* aCanvasData) override;

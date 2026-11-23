@@ -49,6 +49,7 @@ import org.mozilla.fenix.GleanMetrics.TopSites
 import org.mozilla.fenix.R
 import org.mozilla.fenix.autofill.address.RegionAddressFeatureGate
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
+import org.mozilla.fenix.components.lens.CameraMode
 import org.mozilla.fenix.components.settings.counterPreference
 import org.mozilla.fenix.components.settings.featureFlagBooleanPreference
 import org.mozilla.fenix.components.settings.lazyFeatureFlagBooleanPreference
@@ -61,6 +62,7 @@ import org.mozilla.fenix.ext.WIDE_SCREEN_WIDTH_DP
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
 import org.mozilla.fenix.home.pocket.ContentRecommendationsFeatureHelper
+import org.mozilla.fenix.home.topsites.FenixDefaultTopSitesProvider
 import org.mozilla.fenix.home.topsites.TopSitesConfigConstants.TOP_SITES_MAX_COUNT
 import org.mozilla.fenix.nimbus.DefaultBrowserPrompt
 import org.mozilla.fenix.nimbus.FxNimbus
@@ -74,11 +76,9 @@ import org.mozilla.fenix.settings.sitepermissions.AUTOPLAY_BLOCK_ALL
 import org.mozilla.fenix.settings.sitepermissions.AUTOPLAY_BLOCK_AUDIBLE
 import org.mozilla.fenix.tabstray.DefaultTabManagementFeatureHelper
 import org.mozilla.fenix.termsofuse.TOU_VERSION
-import org.mozilla.fenix.utils.Settings.Companion.LONGFOX_PEEK_ANIMATION_MAX_SHOWS
 import org.mozilla.fenix.wallpapers.Wallpaper
 
 private const val AUTOPLAY_USER_SETTING = "AUTOPLAY_USER_SETTING"
-private const val MAX_ANIMATION_FOREGROUND = 5
 
 /**
  * A simple wrapper for SharedPreferences that makes reading preference a little bit easier.
@@ -321,22 +321,6 @@ class Settings(
 
     private val homescreenSections: Map<HomeScreenSection, Boolean>
         get() = FxNimbus.features.homescreen.value().sectionsEnabled
-
-    /** Indicates if the recent tabs homepage section settings should be visible */
-    val showHomepageRecentTabsSectionToggle: Boolean
-        get() = !enableHomepageSearchBar
-
-    /** Indicates if the bookmarks homepage section settings should be visible */
-    val showHomepageBookmarksSectionToggle: Boolean
-        get() = !enableHomepageSearchBar
-
-    /** Indicates if the recently visited homepage section settings should be visible */
-    val showHomepageRecentlyVisitedSectionToggle: Boolean
-        get() = !enableHomepageSearchBar
-
-    /** Indicates whether or not the homepage should use edge to edge background */
-    val enableHomepageEdgeToEdgeBackgroundFeature: Boolean
-        get() = FxNimbus.features.homescreenEdgeToEdgeBackground.value().enabled
 
     var numberOfAppLaunches by
         intPreference(
@@ -584,12 +568,7 @@ class Settings(
     var currentWallpaperName by
         stringPreference(
             appContext.getPreferenceKey(R.string.pref_key_current_wallpaper),
-            default =
-                if (enableHomepageEdgeToEdgeBackgroundFeature) {
-                    Wallpaper.EdgeToEdge.name
-                } else {
-                    Wallpaper.Default.name
-                },
+            default = Wallpaper.EdgeToEdge.name,
         )
 
     /**
@@ -1797,9 +1776,24 @@ class Settings(
             default = true,
         )
 
-    var defaultTopSitesAdded by
+    /**
+     * Whether default pinned top sites that are included in the application on the first run of the application have
+     * been added.
+     */
+    var defaultPinnedTopSitesAdded by
         booleanPreference(
             appContext.getPreferenceKey(R.string.default_top_sites_added),
+            default = false,
+        )
+
+    /**
+     * Whether the default top sites that the user had already removed have been migrated over to the homescreen
+     * blocklist. This applies to existing users that had their default top sites added to the user-pinned sites storage
+     * before they were served as backfills from [FenixDefaultTopSitesProvider].
+     */
+    var removedDefaultPinnedTopSitesMigrated by
+        booleanPreference(
+            appContext.getPreferenceKey(R.string.pref_key_removed_default_pinned_top_sites_migrated),
             default = false,
         )
 
@@ -1985,11 +1979,13 @@ class Settings(
         )
 
     /**
-     * Whether this device supports the application's own autofill and password management. Both are disabled on Android
-     * Automotive OS for now until we meet specific Google requirements around protecting passwords and credit card
-     * information in cars.
+     * Whether this device supports the application's own autofill, password management, and password and credit card
+     * sync. Always true except on Android Automotive OS, where the `automotive-sensitive-data` Nimbus feature must be
+     * enabled.
      */
-    val isAutofillSupported: Boolean by lazy { !appContext.isAndroidAutomotiveAvailable() }
+    val isAutofillSupported: Boolean by lazy {
+        !appContext.isAndroidAutomotiveAvailable() || FxNimbus.features.automotiveSensitiveData.value().enabled
+    }
 
     var shouldPromptToSaveLogins by
         booleanPreference(
@@ -2027,6 +2023,20 @@ class Settings(
         booleanPreference(
             appContext.getPreferenceKey(R.string.pref_key_search_widget_installed_2),
             default = false,
+        )
+
+    /** The IDs of the search widgets on the home screen at the last check, used to detect newly added widgets. */
+    var searchWidgetIds by
+        stringSetPreference(
+            appContext.getPreferenceKey(R.string.pref_key_search_widget_ids),
+            default = setOf(),
+        )
+
+    /** The app version code that last published the generated search bar widget previews. */
+    var searchBarWidgetPreviewsVersion by
+        intPreference(
+            appContext.getPreferenceKey(R.string.pref_key_search_bar_widget_previews_version),
+            default = 0,
         )
 
     /** Indicates if the "pocket_recommendations" database has been deleted. */
@@ -2105,6 +2115,19 @@ class Settings(
                     true -> appContext.getString(R.string.pref_key_open_links_in_apps_ask)
                     false -> appContext.getString(R.string.pref_key_open_links_in_apps_never)
                 },
+        )
+
+    var openLinksInYoutube by
+        stringPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_open_links_in_youtube),
+            default = appContext.getString(R.string.pref_key_open_links_in_youtube_never),
+        )
+
+    /** Whether the in-development open links in YouTube app preference is revealed via secret settings. */
+    var openLinksInYoutubeFeatureEnabled by
+        booleanPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_open_links_in_youtube_feature_enabled),
+            default = false,
         )
 
     var overrideFxAServer by
@@ -2455,6 +2478,16 @@ class Settings(
             default = { FxNimbus.features.continuousOnboarding.value().enabled },
         )
 
+    /**
+     * Whether the Sync sign-in card can be shown during initial onboarding for users whose Firefox install is
+     * attributed to a pairing campaign link.
+     */
+    var isPairingSignInPromptEnabled by
+        booleanPreference(
+            appContext.getPreferenceKey(R.string.pref_key_is_pairing_sign_in_prompt_enabled),
+            default = { FxNimbus.features.pairingSigninPrompt.value().enabled },
+        )
+
     /** The completion timestamp of the second day of continuous onboarding. */
     var secondDayOnboardingCompletedTimestamp by
         longPreference(
@@ -2512,6 +2545,16 @@ class Settings(
         booleanPreference(
             key = appContext.getPreferenceKey(R.string.pref_key_use_remote_search_configuration),
             default = { FxNimbus.features.remoteSearchConfiguration.value().enabled },
+        )
+
+    /**
+     * Indicates whether to read search configuration from the `search-config-v3` Remote Settings collection instead of
+     * `search-config-v2`.
+     */
+    var useSearchConfigV3 by
+        booleanPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_use_search_config_v3),
+            default = { FxNimbus.features.searchConfigV3.value().enabled },
         )
 
     /** Get the current mode for how https-only is enabled. */
@@ -2617,19 +2660,19 @@ class Settings(
             default = { FxNimbus.features.homepageAsNewTab.value().enabled },
         )
 
-    /** Whether the universal edge-to-edge wallpapers treatment is enabled. */
-    var enableUniversalEdgeToEdgeWallpapers by
-        booleanPreference(
-            key = appContext.getPreferenceKey(R.string.pref_key_enable_universal_edge_to_edge_wallpapers),
-            default = { FxNimbus.features.universalEdgeToEdgeWallpapers.value().enabled },
-        )
-
     /** Indicates if the Homepage Search Bar is enabled. */
     var enableHomepageSearchBar by
         booleanPreference(
             key = appContext.getPreferenceKey(R.string.pref_key_enable_homepage_searchbar2),
             default = false,
         )
+
+    /**
+     * Indicates if the homepage search bar should replace the address bar. The homepage search bar is only laid out in
+     * the middle of the homepage while the address bar is at the top.
+     */
+    val isHomepageMiddleSearchEnabled: Boolean
+        get() = enableHomepageSearchBar && toolbarPosition == ToolbarPosition.TOP
 
     /** Indicates if the Mozilla Ads Client for Sponsored Stories is enabled. */
     var enableAdsClientForStories by
@@ -2645,6 +2688,10 @@ class Settings(
             default = { FxNimbus.features.showMoreShortcuts.value().enabled },
         )
 
+    /** Indicates if the regional default shortcuts are enabled. */
+    val enableRegionalDefaultShortcuts: Boolean
+        get() = FxNimbus.features.regionalDefaultShortcuts.value().enabled
+
     /** Indicates if the Homepage Weather Widget is enabled. */
     var enableHomepageWeatherWidget by
         booleanPreference(
@@ -2657,6 +2704,20 @@ class Settings(
         booleanPreference(
             key = appContext.getPreferenceKey(R.string.pref_key_show_homepage_weather_widget),
             default = true,
+        )
+
+    /** Indicates if the Homepage Wrexham Widget is enabled. */
+    var enableHomepageWrexhamWidget by
+        booleanPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_enable_homepage_wrexham_widget),
+            default = { FxNimbus.features.homepageWrexhamWidget.value().enabled },
+        )
+
+    /** Indicates if the Homepage Wrexham Widget should be visible on the homepage. */
+    var showHomepageWrexhamWidget by
+        booleanPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_show_homepage_wrexham_widget),
+            default = false,
         )
 
     /** Adjust Activated User sent */
@@ -2905,6 +2966,17 @@ class Settings(
             default = false,
         )
 
+    /**
+     * The reset time of the most recent VPN allowance cycle for which the data limit notice was shown, or `null` if
+     * none has been shown yet. The notice occurs at most one time per cycle.
+     */
+    var ipProtectionLastDataLimitNoticeCycleResetTime: String?
+        get() = preferences.getString(lastDataLimitNoticeCycleResetTimeKey, null)
+        set(value) = preferences.edit { putString(lastDataLimitNoticeCycleResetTimeKey, value) }
+
+    private val lastDataLimitNoticeCycleResetTimeKey =
+        appContext.getPreferenceKey(R.string.pref_key_ip_protection_last_data_limit_notice_cycle_reset_time)
+
     /** Indicates if the IPProtection onboarding bottom sheet feature variable is enabled via Nimbus. */
     val shouldShowIPProtectionOnboardingBottomSheet: Boolean
         get() = FxNimbus.features.ipProtection.value().showOnboardingBottomSheet
@@ -2951,13 +3023,6 @@ class Settings(
     var shakeToSummarizeToolbarCfrShown by
         booleanPreference(
             key = appContext.getPreferenceKey(R.string.pref_key_summarize_toolbar_cfr_shown),
-            default = false,
-        )
-
-    /** Indicates if a microsurvey should be shown to the user. */
-    var shouldShowMicrosurveyPrompt by
-        booleanPreference(
-            appContext.getPreferenceKey(R.string.pref_key_should_show_microsurvey_prompt),
             default = false,
         )
 
@@ -3236,54 +3301,6 @@ class Settings(
             default = { DefaultTabManagementFeatureHelper.openingAnimationEnabled },
         )
 
-    /** Whether the private mode and stories entry point experiment is enabled. */
-    var privateModeAndStoriesEntryPointEnabled by
-        booleanPreference(
-            key = appContext.getPreferenceKey(R.string.pref_key_private_mode_and_stories_entry_point),
-            default = { FxNimbus.features.privateModeAndStoriesEntryPoint.value().enabled },
-        )
-
-    /**
-     * The number of times the app has been brought to the foreground since the news button animation was last shown.
-     */
-    var newsButtonForegroundCount by
-        intPreference(
-            key = appContext.getPreferenceKey(R.string.pref_key_news_button_foreground_count),
-            default = 0,
-        )
-
-    /** The timestamp in milliseconds when the news button animation was last shown. */
-    var newsButtonAnimationLastShownMillis by
-        longPreference(
-            appContext.getPreferenceKey(R.string.pref_key_news_button_animation_last_shown),
-            default = 0L,
-        )
-
-    /** Increments [newsButtonForegroundCount] up to a maximum of 5. */
-    fun incrementNewsButtonForegroundCount() {
-        if (newsButtonForegroundCount < MAX_ANIMATION_FOREGROUND) {
-            newsButtonForegroundCount++
-        }
-    }
-
-    /**
-     * Returns whether the news button animation should be shown. The animation is shown every 5 foreground visits and
-     * at most once per week.
-     */
-    fun shouldShowNewsButtonAnimation(): Boolean {
-        return (newsButtonForegroundCount % MAX_ANIMATION_FOREGROUND == 0) &&
-            (currentTimeMillis() - newsButtonAnimationLastShownMillis >= ONE_WEEK_MS)
-    }
-
-    /**
-     * Records that the news button animation has been shown by updating the last shown timestamp and resetting
-     * [newsButtonForegroundCount].
-     */
-    fun recordNewsButtonAnimationShown() {
-        newsButtonAnimationLastShownMillis = currentTimeMillis()
-        newsButtonForegroundCount = 0
-    }
-
     /** Whether the Tab Groups feature is enabled. */
     var tabGroupsEnabled by
         booleanPreference(
@@ -3364,6 +3381,22 @@ class Settings(
             default = false,
         )
 
+    private var lensCameraLastModeName by
+        stringPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_lens_camera_last_mode),
+            default = CameraMode.LENS.name,
+        )
+
+    /**
+     * The [CameraMode] the user last selected on the Google Lens camera screen. The camera screen opens in this mode
+     * and the address bar shows the matching icon.
+     */
+    var lensCameraLastMode: CameraMode
+        get() = CameraMode.fromNameOrNull(lensCameraLastModeName) ?: CameraMode.LENS
+        set(value) {
+            lensCameraLastModeName = value.name
+        }
+
     /** Whether the voice search entry point is shown in the display-mode browser toolbar. */
     var showVoiceSearchInDisplayToolbar by
         booleanPreference(
@@ -3378,10 +3411,13 @@ class Settings(
             default = { FxNimbus.features.addressbarFocusMode.value().enabled },
         )
 
-    /** Whether the customizing the browser menu is allowed. */
-    var isMenuCustomizationEnabled by
+    /** Whether customizing the browser menu is allowed. */
+    val isMenuCustomizationEnabled = true
+
+    /** Whether entering the browser menu customization screen is allowed. */
+    var isMenuCustomizationScreenEnabled by
         booleanPreference(
-            key = appContext.getPreferenceKey(R.string.pref_key_enable_menu_customization),
+            key = appContext.getPreferenceKey(R.string.pref_key_enable_menu_customization_screen),
             default = { false },
         )
 
@@ -3484,6 +3520,19 @@ class Settings(
         booleanPreference(
             key = appContext.getPreferenceKey(R.string.pref_key_enable_account_settings_new_ui),
             default = { FxNimbus.features.accountSyncDecoupleM1.value().enabled },
+        )
+
+    /** Whether or not accounts & sync decoupling is enabled */
+    var syncDecouplingEnabled by
+        booleanPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_enable_sync_decoupling),
+            default = { FxNimbus.features.accountSyncDecouple.value().enabled },
+        )
+
+    var isQwacUiEnabled by
+        booleanPreference(
+            key = appContext.getPreferenceKey(R.string.pref_key_enable_qwac_ui),
+            default = false,
         )
 
     private var powerSavingModeAutoPreference by

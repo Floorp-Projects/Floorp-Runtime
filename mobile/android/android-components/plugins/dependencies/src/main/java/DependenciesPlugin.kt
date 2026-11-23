@@ -82,9 +82,8 @@ abstract class DependenciesPlugin : Plugin<Settings> {
     protected abstract val flowProviders: FlowProviders
 
     override fun apply(settings: Settings) {
-        @Suppress("UNCHECKED_CAST")
-        val mozconfig = settings.gradle.extensions.extraProperties["mozconfig"] as Map<String, Any>
-        val substs = mozconfig["substs"] as Map<String, Any>
+        val mozconfig = settings.gradle.extensions.extraProperties["mozconfig"] as Map<*, *>
+        val substs = mozconfig["substs"] as Map<*, *>
         val appservicesInTree = (substs["MOZ_APPSERVICES_IN_TREE"] as? String ?: "0") == "1"
         val onTry = settings.providers.environmentVariable("MOZ_SOURCE_REPO")
             .orNull == "https://hg.mozilla.org/try"
@@ -181,6 +180,8 @@ object ComponentsDependencies {
     val mozilla_appservices_rust_log_forwarder get() = "${getGroupId()}:rust-log-forwarder:${getVersionNumber()}"
     @JvmStatic
     val mozilla_appservices_sync15 get() = "${getGroupId()}:sync15:${getVersionNumber()}"
+    @JvmStatic
+    val mozilla_appservices_tracing get() = "${getGroupId()}:tracing:${getVersionNumber()}"
     @JvmStatic
     val mozilla_appservices_fxrelay get() = "${getGroupId()}:relay:${getVersionNumber()}"
 }

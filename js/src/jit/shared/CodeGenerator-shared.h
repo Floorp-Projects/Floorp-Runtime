@@ -248,19 +248,11 @@ class CodeGeneratorShared : public LElementVisitor {
   void emitTruncateDouble(FloatRegister src, Register dest, MInstruction* mir);
   void emitTruncateFloat32(FloatRegister src, Register dest, MInstruction* mir);
 
-  void emitPreBarrier(Address address);
-  void emitPreBarrier(BaseObjectElementIndex address);
-
   // We don't emit code for trivial blocks, so if we want to branch to the
   // given block, and it's trivial, return the ultimate block we should
   // actually branch directly to.
   MBasicBlock* skipTrivialBlocks(MBasicBlock* block) {
-    while (block->lir()->isTrivial()) {
-      LGoto* ins = block->lir()->rbegin()->toGoto();
-      MOZ_ASSERT(ins->numSuccessors() == 1);
-      block = ins->getSuccessor(0);
-    }
-    return block;
+    return block->lir()->skipTrivialBlocks()->mir();
   }
 
   // Test whether the given block can be reached via fallthrough from the
@@ -412,6 +404,15 @@ class CodeGeneratorShared : public LElementVisitor {
     return deoptLabel_.used() || deoptJumpPending_;
   }
 
+  // Pushes the snapshot offset and jumps to deoptLabel_.
+  void emitBailoutOOL(LSnapshot* snapshot);
+
+// MIPS64, Loong64, and RISC-V64 have no flags register and can't implement
+// this with a condition code.
+#if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64) || \
+    defined(JS_CODEGEN_ARM) || defined(JS_CODEGEN_ARM64)
+  void bailoutIf(Assembler::Condition condition, LSnapshot* snapshot);
+#endif
   void bailoutFrom(Label* label, LSnapshot* snapshot);
   void bailout(LSnapshot* snapshot);
 

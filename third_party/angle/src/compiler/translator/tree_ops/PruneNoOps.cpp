@@ -9,84 +9,18 @@
 
 #include "compiler/translator/Symbol.h"
 #include "compiler/translator/tree_util/IntermTraverse.h"
+#include "compiler/translator/tree_util/ReplaceVariable.h"
 
 namespace sh
 {
 
 namespace
 {
-uint32_t GetSwitchConstantAsUInt(const TConstantUnion *value)
-{
-    TConstantUnion asUInt;
-    if (value->getType() == EbtYuvCscStandardEXT)
-    {
-        asUInt.setUConst(value->getYuvCscStandardEXTConst());
-    }
-    else
-    {
-        bool valid = asUInt.cast(EbtUInt, *value);
-        ASSERT(valid);
-    }
-    return asUInt.getUConst();
-}
-
-bool IsNoOpSwitch(TIntermSwitch *node)
-{
-    if (node == nullptr)
-    {
-        return false;
-    }
-
-    TIntermConstantUnion *expr = node->getInit()->getAsConstantUnion();
-    if (expr == nullptr)
-    {
-        return false;
-    }
-
-    const uint32_t exprValue = GetSwitchConstantAsUInt(expr->getConstantValue());
-
-    // See if any block matches the constant value
-    const TIntermSequence &statements = *node->getStatementList()->getSequence();
-
-    for (TIntermNode *statement : statements)
-    {
-        TIntermCase *caseLabel = statement->getAsCaseNode();
-        if (caseLabel == nullptr)
-        {
-            continue;
-        }
-
-        // Default matches everything, consider it not a no-op.
-        if (!caseLabel->hasCondition())
-        {
-            return false;
-        }
-
-        TIntermConstantUnion *condition = caseLabel->getCondition()->getAsConstantUnion();
-        ASSERT(condition != nullptr);
-
-        // If any case matches the value, it's not a no-op.
-        const uint32_t caseValue = GetSwitchConstantAsUInt(condition->getConstantValue());
-        if (caseValue == exprValue)
-        {
-            return false;
-        }
-    }
-
-    // No case matched the constant value the switch was used on, so the entire switch is a no-op.
-    return true;
-}
-
 bool IsNoOp(TIntermNode *node)
 {
     bool isEmptyDeclaration = node->getAsDeclarationNode() != nullptr &&
                               node->getAsDeclarationNode()->getSequence()->empty();
     if (isEmptyDeclaration)
-    {
-        return true;
-    }
-
-    if (IsNoOpSwitch(node->getAsSwitchNode()))
     {
         return true;
     }
@@ -130,6 +64,7 @@ class PruneNoOpsTraverser : private TIntermTraverser
     bool mIsBranchVisited = false;
 
     TVector<TVector<const TVariable *>> mSwitchPrunedDeclarationsStack;
+    TVector<const TVariable *> mSwitchDeclarationsToRename;
 };
 
 bool PruneNoOpsTraverser::apply(TCompiler *compiler, TIntermBlock *root, TSymbolTable *symbolTable)
@@ -137,7 +72,19 @@ bool PruneNoOpsTraverser::apply(TCompiler *compiler, TIntermBlock *root, TSymbol
     PruneNoOpsTraverser prune(symbolTable);
     root->traverse(&prune);
     ASSERT(prune.mSwitchPrunedDeclarationsStack.empty());
-    return prune.updateTree(compiler, root);
+    if (!prune.updateTree(compiler, root))
+    {
+        return false;
+    }
+
+    VariableReplacementMap replaceMap;
+    for (const TVariable *var : prune.mSwitchDeclarationsToRename)
+    {
+        const TVariable *replacementVariable = new TVariable(
+            symbolTable, kEmptyImmutableString, &var->getType(), SymbolType::AngleInternal);
+        replaceMap[var->uniqueId()] = new TIntermSymbol(replacementVariable);
+    }
+    return ReplaceVariables(compiler, root, replaceMap);
 }
 
 PruneNoOpsTraverser::PruneNoOpsTraverser(TSymbolTable *symbolTable)
@@ -233,6 +180,11 @@ bool PruneNoOpsTraverser::visitSwitch(Visit visit, TIntermSwitch *node)
         replacement.push_back(node);
         mMultiReplacements.emplace_back(getParentNode()->getAsBlock(), node,
                                         std::move(replacement));
+
+        // The names may shadow variables outside the switch, so rename them at the end.
+        mSwitchDeclarationsToRename.insert(mSwitchDeclarationsToRename.end(),
+                                           mSwitchPrunedDeclarationsStack.back().begin(),
+                                           mSwitchPrunedDeclarationsStack.back().end());
     }
 
     mSwitchPrunedDeclarationsStack.pop_back();

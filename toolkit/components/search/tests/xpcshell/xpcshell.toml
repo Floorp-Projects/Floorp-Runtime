@@ -68,8 +68,6 @@ support-files = [
 
 ["test_engine_selector_environment.js"]
 
-["test_engine_selector_remote_override.js"]
-
 ["test_engine_selector_remote_settings.js"]
 tags = "remote-settings searchmain"
 
@@ -90,8 +88,6 @@ tags = "remote-settings searchmain"
 ["test_getSubmission_params_prefNimbus_invalid.js"]
 
 ["test_getSubmission_partnerCode.js"]
-
-["test_hideOneOffButton.js"]
 
 ["test_identifiers.js"]
 
@@ -241,8 +237,6 @@ support-files = [
 ["test_settings_migrate_14.js"]
 
 ["test_settings_migrate_id_format.js"]
-
-["test_settings_migration_hideOneOffs.js"]
 
 ["test_settings_migration_ids.js"]
 support-files = ["settings/v6-ids-upgrade.json"]

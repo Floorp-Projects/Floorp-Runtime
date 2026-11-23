@@ -8,6 +8,7 @@
 #include "GLContext.h"
 #include "GLReadTexImageHelper.h"
 #include "mozilla/gfx/Logging.h"
+#include "mozilla/gfx/gfxVars.h"
 #include "mozilla/webrender/RenderThread.h"
 
 namespace mozilla {
@@ -25,6 +26,7 @@ RenderAndroidSurfaceTextureHost::RenderAndroidSurfaceTextureHost(
       mPrepareStatus(STATUS_NONE),
       mAttachedToGLContext(false),
       mIsRemoteTexture(aIsRemoteTexture) {
+  MOZ_ASSERT(!gfx::gfxVars::ForceAImageReaderAndroid());
   MOZ_COUNT_CTOR_INHERITED(RenderAndroidSurfaceTextureHost, RenderTextureHost);
 
   if (mSurfTex) {
@@ -33,7 +35,7 @@ RenderAndroidSurfaceTextureHost::RenderAndroidSurfaceTextureHost(
 }
 
 RenderAndroidSurfaceTextureHost::~RenderAndroidSurfaceTextureHost() {
-  MOZ_ASSERT(RenderThread::IsInRenderThread());
+  MOZ_RELEASE_ASSERT(RenderThread::IsInRenderThread());
   MOZ_COUNT_DTOR_INHERITED(RenderAndroidSurfaceTextureHost, RenderTextureHost);
   // The SurfaceTexture gets destroyed when its use count reaches zero.
   if (mSurfTex) {
@@ -130,7 +132,7 @@ void RenderAndroidSurfaceTextureHost::PrepareForUse() {
   // than once, it causes hang on puglish side. And UpdateTexImage needs to
   // be called on render thread, since the SurfaceTexture is consumed on render
   // thread.
-  MOZ_ASSERT(RenderThread::IsInRenderThread());
+  MOZ_RELEASE_ASSERT(RenderThread::IsInRenderThread());
   MOZ_ASSERT(mPrepareStatus == STATUS_NONE);
 
   if (mContinuousUpdate || !mSurfTex) {
@@ -149,7 +151,7 @@ void RenderAndroidSurfaceTextureHost::PrepareForUse() {
 }
 
 void RenderAndroidSurfaceTextureHost::NotifyForUse() {
-  MOZ_ASSERT(RenderThread::IsInRenderThread());
+  MOZ_RELEASE_ASSERT(RenderThread::IsInRenderThread());
 
   if (mPrepareStatus == STATUS_NONE) {
     // This happens either for RemoteTextureHost or when we lose a race to call
@@ -174,7 +176,7 @@ void RenderAndroidSurfaceTextureHost::NotifyForUse() {
 }
 
 void RenderAndroidSurfaceTextureHost::NotifyNotUsed() {
-  MOZ_ASSERT(RenderThread::IsInRenderThread());
+  MOZ_RELEASE_ASSERT(RenderThread::IsInRenderThread());
 
   if (!mSurfTex) {
     MOZ_ASSERT(mPrepareStatus == STATUS_NONE);
@@ -304,9 +306,8 @@ gfx::Matrix4x4 RenderAndroidSurfaceTextureHost::GetTextureTransform() const {
 
   // GetTransformMatrix() returns the transform set by the producer side of the
   // SurfaceTexture that must be applied to texture coordinates when
-  // sampling. In some cases we may have set an override value, such as in
-  // AndroidNativeWindowTextureData where we own the producer side, or for
-  // MediaCodec output on devices where where we know the value is incorrect.
+  // sampling. In some cases we may have set an override value, such as for
+  // MediaCodec output on devices where we know the value is incorrect.
   if (mTransformOverride) {
     transform = *mTransformOverride;
   } else if (mSurfTex) {

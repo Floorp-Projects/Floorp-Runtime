@@ -24,9 +24,11 @@ namespace mozilla::dom {
 
 OffscreenCanvasDisplayHelper::OffscreenCanvasDisplayHelper(
     HTMLCanvasElement* aCanvasElement, uint32_t aWidth, uint32_t aHeight)
-    : mMutex("mozilla::dom::OffscreenCanvasDisplayHelper"),
+    : mPlaceholderSize(aWidth, aHeight),
+      mMutex("mozilla::dom::OffscreenCanvasDisplayHelper"),
       mCanvasElement(aCanvasElement),
       mImageProducerID(layers::ImageContainer::AllocateProducerID()) {
+  MOZ_ASSERT(NS_IsMainThread());
   mData.mSize.width = aWidth;
   mData.mSize.height = aHeight;
 }
@@ -120,17 +122,20 @@ RefPtr<layers::ImageContainer> OffscreenCanvasDisplayHelper::GetImageContainer()
 bool OffscreenCanvasDisplayHelper::MayUpdateContext(WorkerPrivate* aWorker,
                                                     ErrorResult& aRv) {
   MutexAutoLock lock(mMutex);
-  // Allow context update on main thread to be more fault tolerant, whereas
-  // update on a worker needs to more strict in case of transfer.
-  if ((mCreatedOnMainThread && aWorker) || mCreatedOnWorker) {
-    aRv.ThrowInvalidStateError(
-        "Cannot update created context to different thread");
-    return false;
-  }
   if (!mOffscreenCanvas) {
-    return true;
-  }
-  if (aWorker) {
+    // There is no offscreen canvas, either because it was not created yet or
+    // it was destroyed.
+    if (mCreatedOnMainThread) {
+      // Allow context update on main thread as long as it stays there.
+      if (!aWorker) {
+        return true;
+      }
+    } else if (!mCreatedOnWorker) {
+      // Updating a worker needs to be more strict in case there any resources
+      // associated with the old worker.
+      return true;
+    }
+  } else if (aWorker) {
     if (mWorkerRef && mWorkerRef->Private() == aWorker) {
       return true;
     }
@@ -430,20 +435,22 @@ void OffscreenCanvasDisplayHelper::MaybeQueueInvalidateElement() {
 void OffscreenCanvasDisplayHelper::InvalidateElement() {
   MOZ_ASSERT(NS_IsMainThread());
 
-  HTMLCanvasElement* canvasElement;
-  gfx::IntSize size;
+  RefPtr<HTMLCanvasElement> canvasElement;
+  CSSIntSize size;
 
   {
     MutexAutoLock lock(mMutex);
     MOZ_ASSERT(mPendingInvalidate);
     mPendingInvalidate = false;
     canvasElement = mCanvasElement;
-    size = mData.mSize;
+    size = CSSIntSize(mData.mSize.width, mData.mSize.height);
   }
 
   if (canvasElement) {
+    const bool hasSizeChanged = size != mPlaceholderSize;
+    mPlaceholderSize = size;
     SVGObserverUtils::InvalidateDirectRenderingObservers(canvasElement);
-    canvasElement->InvalidateCanvasPlaceholder(size.width, size.height);
+    canvasElement->InvalidateCanvasPlaceholder(hasSizeChanged);
     canvasElement->InvalidateCanvasContent(nullptr);
   }
 }

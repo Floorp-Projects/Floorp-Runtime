@@ -19,7 +19,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   EventPromise: "chrome://remote/content/shared/Sync.sys.mjs",
   generateUUID: "chrome://remote/content/shared/UUID.sys.mjs",
   getTimeoutMultiplier: "chrome://remote/content/shared/AppInfo.sys.mjs",
-  getWebDriverSessionById:
+  getWebDriverSessionByInternalSessionId:
     "chrome://remote/content/shared/webdriver/Session.sys.mjs",
   isWebdriverSafeNavigationURL:
     "chrome://remote/content/shared/BrowsingContextUtils.sys.mjs",
@@ -38,8 +38,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "chrome://remote/content/shared/listeners/PromptListener.sys.mjs",
   RemoteAgent: "chrome://remote/content/components/RemoteAgent.sys.mjs",
   SessionDataCategory:
-    "chrome://remote/content/shared/messagehandler/sessiondata/SessionData.sys.mjs",
-  SessionDataMethod:
     "chrome://remote/content/shared/messagehandler/sessiondata/SessionData.sys.mjs",
   setDefaultAndAssertSerializationOptions:
     "chrome://remote/content/webdriver-bidi/RemoteValue.sys.mjs",
@@ -686,13 +684,9 @@ class BrowsingContextModule extends RootBiDiModule {
         lazy.pprint`Expected "referenceContext" to be a string, got ${referenceContextId}`
       );
 
-      referenceContext =
-        lazy.NavigableManager.getBrowsingContextById(referenceContextId);
-      if (!referenceContext) {
-        throw new lazy.error.NoSuchFrameError(
-          `Browsing Context with id ${referenceContextId} not found`
-        );
-      }
+      referenceContext = this._getNavigable(referenceContextId, {
+        skipPrivilegeCheck: true,
+      });
 
       if (referenceContext.parent) {
         throw new lazy.error.InvalidArgumentError(
@@ -701,7 +695,8 @@ class BrowsingContextModule extends RootBiDiModule {
       }
     }
 
-    let userContext = lazy.UserContextManager.defaultUserContextId;
+    let userContext =
+      this._sessionUserContext ?? lazy.UserContextManager.defaultUserContextId;
     if (referenceContext !== null) {
       userContext =
         lazy.UserContextManager.getIdByBrowsingContext(referenceContext);
@@ -713,11 +708,7 @@ class BrowsingContextModule extends RootBiDiModule {
         lazy.pprint`Expected "userContext" to be a string, got ${userContextId}`
       );
 
-      if (!lazy.UserContextManager.hasUserContextId(userContextId)) {
-        throw new lazy.error.NoSuchUserContextError(
-          `User Context with id ${userContextId} was not found`
-        );
-      }
+      this._assertUserContextId(userContextId);
 
       userContext = userContextId;
 
@@ -817,40 +808,18 @@ class BrowsingContextModule extends RootBiDiModule {
     }
 
     const browsingContext = browser.browsingContext;
-    const sessionData =
-      this.messageHandler.sessionData.getSessionDataForContext(
-        "browsingContext",
-        "event",
-        browsingContext
-      );
 
-    const hasEventSubscriptionToContextCreated = sessionData.some(
-      item => item.value === "browsingContext.contextCreated"
-    );
-
-    let waitForContextCreatedEvent = Promise.withResolvers();
-
-    // If a client subscribed to "browsingContext.contextCreated" event,
-    // we have to wait for it to be submitted.
-    if (hasEventSubscriptionToContextCreated) {
-      if (!this.#waitForContextCreatedEvent.has(browsingContext)) {
-        this.#waitForContextCreatedEvent.set(
-          browsingContext,
-          Promise.withResolvers()
-        );
-      }
-      waitForContextCreatedEvent =
-        this.#waitForContextCreatedEvent.get(browsingContext);
-    } else {
-      waitForContextCreatedEvent.resolve();
-    }
+    // Wait until a pending "browsingContext.contextCreated" event is handled,
+    // even if the client is not subscribed for this context. Otherwise a
+    // subscription made right after this command returns could receive this
+    // event in addition to the one emitted by the subscribe steps.
     await Promise.all([
       lazy.waitForInitialNavigationCompleted(browsingContext.webProgress, {
         unloadTimeout: 5000,
       }),
       waitForVisibilityStatePromise,
       blocker.promise,
-      waitForContextCreatedEvent.promise,
+      this.#waitForContextCreatedEvent.get(browsingContext)?.promise,
     ]);
 
     this.#blockedCreateCommands.delete(browser);
@@ -944,6 +913,9 @@ class BrowsingContextModule extends RootBiDiModule {
    *     Tree of browsing context information.
    * @throws {NoSuchFrameError}
    *     If the browsing context cannot be found.
+   * @throws {UnsupportedOperationError}
+   *     If "moz:scope" is "chrome" and system access is not allowed, or the
+   *     session is restricted to a single user context.
    */
   getTree(options = {}) {
     const {
@@ -966,6 +938,12 @@ class BrowsingContextModule extends RootBiDiModule {
         `Expected "moz:scope" to be one of ${contextScopes}, ` +
           lazy.pprint`got ${scope}`
       )(scope);
+
+      if (scope == MozContextScope.CHROME && this._isSessionRestricted) {
+        throw new lazy.error.UnsupportedOperationError(
+          `"moz:scope" "${scope}" is not supported in a session restricted to a single user context`
+        );
+      }
 
       if (scope != MozContextScope.CONTENT) {
         // By default only content browsing contexts are allowed.
@@ -1002,9 +980,9 @@ class BrowsingContextModule extends RootBiDiModule {
         }
         default: {
           // Return all top-level browsing contexts.
-          contexts = lazy.TabManager.getBrowsers().map(
-            browser => browser.browsingContext
-          );
+          contexts = lazy.TabManager.getBrowsers({
+            userContext: this._sessionUserContext,
+          }).map(browser => browser.browsingContext);
         }
       }
     }
@@ -1773,14 +1751,7 @@ class BrowsingContextModule extends RootBiDiModule {
           lazy.pprint`Expected elements of "userContexts" to be a string, got ${userContextId}`
         );
 
-        const internalId =
-          lazy.UserContextManager.getInternalIdById(userContextId);
-
-        if (internalId === null) {
-          throw new lazy.error.NoSuchUserContextError(
-            `User context with id: ${userContextId} doesn't exist`
-          );
-        }
+        const internalId = this._getUserContextInternalId(userContextId);
 
         userContexts.add(internalId);
       }
@@ -1853,7 +1824,7 @@ class BrowsingContextModule extends RootBiDiModule {
       viewport,
     };
 
-    const sessionDataItems = [];
+    const contextDescriptors = [];
     if (userContextIds !== null) {
       for (const userContext of userContexts) {
         // Prepare the list of navigables to update.
@@ -1863,29 +1834,37 @@ class BrowsingContextModule extends RootBiDiModule {
             navigables.add(contentBrowser.browsingContext);
           }
         );
-        sessionDataItems.push({
-          category: lazy.SessionDataCategory.ViewportOverride,
-          moduleName: "_configuration",
-          values: [viewportOverride],
-          contextDescriptor: {
-            type: lazy.ContextDescriptorType.UserContext,
-            id: userContext,
-          },
-          method: lazy.SessionDataMethod.Add,
+        contextDescriptors.push({
+          type: lazy.ContextDescriptorType.UserContext,
+          id: userContext,
         });
       }
     } else {
       for (const navigable of navigables) {
-        sessionDataItems.push({
-          category: lazy.SessionDataCategory.ViewportOverride,
-          moduleName: "_configuration",
-          values: [viewportOverride],
-          contextDescriptor: {
-            type: lazy.ContextDescriptorType.TopBrowsingContext,
-            id: navigable.browserId,
-          },
-          method: lazy.SessionDataMethod.Add,
+        contextDescriptors.push({
+          type: lazy.ContextDescriptorType.TopBrowsingContext,
+          id: navigable.browserId,
         });
+      }
+    }
+
+    const sessionDataItems = [];
+    for (const contextDescriptor of contextDescriptors) {
+      for (const [category, value] of [
+        [lazy.SessionDataCategory.ViewportOverride, viewport],
+        [lazy.SessionDataCategory.DevicePixelRatioOverride, devicePixelRatio],
+      ]) {
+        if (value !== undefined) {
+          sessionDataItems.push(
+            ...this.messageHandler.sessionData.generateSessionDataItemUpdate(
+              "_configuration",
+              category,
+              contextDescriptor,
+              false,
+              value
+            )
+          );
+        }
       }
     }
 
@@ -2500,56 +2479,50 @@ class BrowsingContextModule extends RootBiDiModule {
         return;
       }
 
-      // If `waitForTopBrowsingContextToBeReady` returns `null`,
-      // it means that the browsing context was discarded.
-      // Do not send an event in this case.
-      if (
-        !browsingContext.parent &&
-        (await lazy.waitForTopBrowsingContextToBeReady(browsingContext)) ===
-          null
-      ) {
-        return;
-      }
-
-      const browsingContextInfo = getBrowsingContextInfo(browsingContext, {
-        maxDepth: 0,
-      });
-
-      this.#emitContextEventForBrowsingContext(
-        browsingContext.id,
-        "browsingContext.contextCreated",
-        browsingContextInfo
+      const waitForContextCreatedEvent = Promise.withResolvers();
+      this.#waitForContextCreatedEvent.set(
+        browsingContext,
+        waitForContextCreatedEvent
       );
 
-      // This is an internal event is used by the script module
-      // to ensure that "script.realmCreated" event is emitted
-      // after "browsingContext.contextCreated".
-      this.emitEvent(
-        "browsingContext._contextCreatedEmitted",
-        { browsingContext },
-        browsingContextInfo
-      );
+      try {
+        // If `waitForTopBrowsingContextToBeReady` returns `null`,
+        // it means that the browsing context was discarded.
+        // Do not send an event in this case.
+        if (
+          !browsingContext.parent &&
+          (await lazy.waitForTopBrowsingContextToBeReady(browsingContext)) ===
+            null
+        ) {
+          return;
+        }
 
-      if (!this.#waitForContextCreatedEvent.has(browsingContext)) {
-        this.#waitForContextCreatedEvent.set(
-          browsingContext,
-          Promise.withResolvers()
+        const browsingContextInfo = getBrowsingContextInfo(browsingContext, {
+          maxDepth: 0,
+        });
+
+        this.#emitContextEventForBrowsingContext(
+          browsingContext.id,
+          "browsingContext.contextCreated",
+          browsingContextInfo
         );
-      }
 
-      this.#waitForContextCreatedEvent.get(browsingContext).resolve();
+        // This internal event is used by the script module to ensure that a
+        // "script.realmCreated" event is emitted after
+        // "browsingContext.contextCreated".
+        this.emitEvent(
+          "browsingContext._contextCreatedEmitted",
+          { browsingContext },
+          browsingContextInfo
+        );
+      } finally {
+        waitForContextCreatedEvent.resolve();
+      }
     }
   };
 
   #onContextDiscarded = async (eventName, data = {}) => {
     const { browsingContext, why } = data;
-
-    // In case the newly created browsing context got discarded immediately resolve pending promise.
-    if (this.#waitForContextCreatedEvent.has(browsingContext)) {
-      const waitForContextCreatedEvent =
-        this.#waitForContextCreatedEvent.get(browsingContext);
-      waitForContextCreatedEvent.resolve();
-    }
 
     if (this.#subscribedEvents.has("browsingContext.contextDestroyed")) {
       // Filter out top-level browsing contexts that are destroyed because of a
@@ -2759,8 +2732,8 @@ class BrowsingContextModule extends RootBiDiModule {
       const navigableId =
         lazy.NavigableManager.getIdForBrowsingContext(browsingContext);
 
-      const session = lazy.getWebDriverSessionById(
-        this.messageHandler.sessionId
+      const session = lazy.getWebDriverSessionByInternalSessionId(
+        this.messageHandler.internalSessionId
       );
       const handlerConfig = session.userPromptHandler.getPromptHandler(
         type == "beforeunload" ? "beforeUnload" : type
@@ -3119,6 +3092,24 @@ class BrowsingContextModule extends RootBiDiModule {
 
   static get supportedCommandsFromContent() {
     return ["_onConfigurationComplete"];
+  }
+
+  static get supportedCommandsInRestrictedSession() {
+    return [
+      "activate",
+      "captureScreenshot",
+      "close",
+      "create",
+      "getTree",
+      "handleUserPrompt",
+      "locateNodes",
+      "navigate",
+      "reload",
+      "setViewport",
+      "startScreencast",
+      "stopScreencast",
+      "traverseHistory",
+    ];
   }
 
   static get supportedEvents() {

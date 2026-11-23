@@ -77,6 +77,7 @@ use core::fmt::{Error as FmtError, Write};
 
 use crate::{arena::Handle, back::TaskDispatchLimits, ir, proc::index, valid::ModuleInfo};
 
+mod hoist;
 mod keywords;
 mod mesh_shader;
 mod ray;
@@ -235,6 +236,8 @@ pub enum Error {
     UnsupportedRayTracing,
     #[error("cooperative matrix is not supported prior to MSL 2.3")]
     UnsupportedCooperativeMatrix,
+    #[error("debugPrintf is not supported prior to MSL 3.2")]
+    UnsupportedDebugPrintf,
     #[error("overrides should not be present at this stage")]
     Override,
     #[error("bitcasting to {0:?} is not supported")]
@@ -877,6 +880,7 @@ pub fn supported_capabilities() -> crate::valid::Capabilities {
         // No MEMORY_DECORATION_VOLATILE
         | Caps::MEMORY_DECORATION_COHERENT
         | Caps::LINEAR_INTERPOLATION
+        | Caps::DEBUG_PRINTF
 }
 
 #[test]

@@ -444,12 +444,8 @@ nsSocketTransportService::AttachSocket(PRFileDesc* fd,
       ("nsSocketTransportService::AttachSocket [handler=%p]\n", handler));
 
 #ifdef XP_UNIX
-#  ifdef XP_DARWIN
-  // See the Darwin case in config/external/nspr/pr/moz.build
-  static constexpr PROsfd kFDs = 4096;
-#  else
+  // On Darwin this is the FD_SETSIZE from config/external/nspr/pr/moz.build.
   static constexpr PROsfd kFDs = 65536;
-#  endif
   PROsfd osfd = PR_FileDesc2NativeHandle(fd);
   // If the native fd exceeds what PR_Poll can handle, PR_Poll will treat it as
   // invalid (POLLNVAL) and networking degrades into hard-to-debug failures.
@@ -848,9 +844,6 @@ nsSocketTransportService::Init() {
   UpdatePrefs();
 
   nsCOMPtr<nsIObserverService> obsSvc = services::GetObserverService();
-  // Note that the observr notifications are forwarded from parent process to
-  // socket process. We have to make sure the topics registered below are also
-  // registered in nsIOService::Init().
   if (obsSvc) {
     MOZ_ALWAYS_SUCCEEDS(
         obsSvc->AddObserver(this, "last-pb-context-exited", false));

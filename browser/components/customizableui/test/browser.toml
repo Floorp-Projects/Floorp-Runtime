@@ -10,6 +10,7 @@ prefs = [
   "browser.urlbar.trustPanel.featureGate=false",
   "sidebar.revamp=false",
   "browser.tabs.groups.alternateMenu=true",
+  "browser.toolbars.tab-groups.enabled=true",
 ]
 
 ["browser_1003588_no_specials_in_panel.js"]
@@ -153,18 +154,12 @@ support-files = ["dummy_history_item.html"]
 ["browser_947914_button_zoomOut.js"]
 
 ["browser_947914_button_zoomReset.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && debug && socketprocess_networking", # Bug 1775671
-]
 
 ["browser_947987_removable_default.js"]
 
 ["browser_948985_non_removable_defaultArea.js"]
 
 ["browser_952963_areaType_getter_no_area.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && opt && socketprocess_networking && verify-standalone",
-]
 
 ["browser_956602_remove_special_widget.js"]
 
@@ -204,9 +199,6 @@ tags = "overflowable-toolbar"
 ["browser_985815_propagate_setToolbarVisibility.js"]
 
 ["browser_987177_destroyWidget_xul.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && debug && socketprocess_networking && verify-standalone",
-]
 
 ["browser_987177_xul_wrapper_updating.js"]
 
@@ -223,7 +215,6 @@ skip-if = [
 ["browser_993322_widget_notoolbar.js"]
 skip-if = [
   "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && swgl && verify-standalone",
-  "os == 'win' && os_version == '11.26100' && arch == 'x86' && opt && verify-standalone",
   "os == 'win' && os_version == '11.26200' && arch == 'x86' && opt && verify-standalone",
 ]
 
@@ -271,6 +262,8 @@ support-files = ["file_embedded_document.html"]
 ["browser_currentset_post_reset.js"]
 
 ["browser_customization_context_menus.js"]
+
+["browser_customize_telemetry.js"]
 
 ["browser_customizemode_contextmenu_menubuttonstate.js"]
 
@@ -349,9 +342,6 @@ tags = "fullscreen"
 ["browser_panelUINotifications_novaUpdateBanner.js"]
 
 ["browser_panel_keyboard_navigation.js"]
-skip-if = [
-  "nova", # Bug 2058027
-]
 
 ["browser_panel_locationSpecific.js"]
 

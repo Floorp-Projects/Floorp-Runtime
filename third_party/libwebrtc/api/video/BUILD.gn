@@ -212,39 +212,39 @@ rtc_library("rtp_video_frame_assembler") {
   ]
 }
 
-rtc_library("rtp_video_frame_assembler_unittests") {
-  testonly = true
-  sources = [ "rtp_video_frame_assembler_unittests.cc" ]
-
-  deps = [
-    ":encoded_frame",
-    ":rtp_video_frame_assembler",
-    ":video_frame_type",
-    "..:rtp_header_extension_id",
-    "../../modules/rtp_rtcp",
-    "../../modules/rtp_rtcp:rtp_packetizer_av1_test_helper",
-    "../../modules/rtp_rtcp:rtp_rtcp_format",
-    "../../modules/rtp_rtcp:rtp_video_header",
-    "../../modules/video_coding:codec_globals_headers",
-    "../../test:test_support",
-    "../transport/rtp:dependency_descriptor",
-  ]
-}
-
-if (rtc_use_h265) {
-  rtc_library("rtp_video_frame_h265_assembler_unittests") {
-    testonly = true
-    sources = [ "rtp_video_frame_h265_assembler_unittests.cc" ]
+if (rtc_include_tests) {
+  rtc_cc_test("rtp_video_frame_assembler_unittests") {
+    sources = [ "rtp_video_frame_assembler_unittests.cc" ]
 
     deps = [
       ":encoded_frame",
       ":rtp_video_frame_assembler",
       ":video_frame_type",
+      "..:rtp_header_extension_id",
       "../../modules/rtp_rtcp",
+      "../../modules/rtp_rtcp:rtp_packetizer_av1_test_helper",
       "../../modules/rtp_rtcp:rtp_rtcp_format",
       "../../modules/rtp_rtcp:rtp_video_header",
+      "../../modules/video_coding:codec_globals_headers",
       "../../test:test_support",
+      "../transport/rtp:dependency_descriptor",
     ]
+  }
+
+  if (rtc_use_h265) {
+    rtc_cc_test("rtp_video_frame_h265_assembler_unittests") {
+      sources = [ "rtp_video_frame_h265_assembler_unittests.cc" ]
+
+      deps = [
+        ":encoded_frame",
+        ":rtp_video_frame_assembler",
+        ":video_frame_type",
+        "../../modules/rtp_rtcp",
+        "../../modules/rtp_rtcp:rtp_rtcp_format",
+        "../../modules/rtp_rtcp:rtp_video_header",
+        "../../test:test_support",
+      ]
+    }
   }
 }
 
@@ -369,7 +369,6 @@ rtc_library("builtin_video_bitrate_allocator_factory") {
     "../../modules/video_coding/svc:svc_rate_allocator",
     "../environment",
     "../video_codecs:video_codecs_api",
-    "//third_party/abseil-cpp/absl/base:core_headers",
   ]
 }
 
@@ -390,28 +389,40 @@ rtc_library("frame_buffer") {
   ]
 }
 
-rtc_library("frame_buffer_unittest") {
-  testonly = true
-  sources = [ "frame_buffer_unittest.cc" ]
+if (rtc_include_tests) {
+  rtc_cc_test("frame_buffer_unittest") {
+    sources = [ "frame_buffer_unittest.cc" ]
 
-  deps = [
-    ":frame_buffer",
-    "..:field_trials",
-    "../../test:create_test_field_trials",
-    "../../test:fake_encoded_frame",
-    "../../test:test_support",
-  ]
-}
+    deps = [
+      ":frame_buffer",
+      "..:field_trials",
+      "../../test:create_test_field_trials",
+      "../../test:fake_encoded_frame",
+      "../../test:test_support",
+    ]
+  }
 
-rtc_library("video_frame_metadata_unittest") {
-  testonly = true
-  sources = [ "video_frame_metadata_unittest.cc" ]
+  rtc_cc_test("video_frame_buffer_unittest") {
+    sources = [ "video_frame_buffer_unittest.cc" ]
 
-  deps = [
-    ":video_frame_metadata",
-    "../../modules/video_coding:codec_globals_headers",
-    "../../test:test_support",
-  ]
+    deps = [
+      ":video_frame",
+      "..:make_ref_counted",
+      "..:scoped_refptr",
+      "../../test:frame_utils",
+      "../../test:test_support",
+    ]
+  }
+
+  rtc_cc_test("video_frame_metadata_unittest") {
+    sources = [ "video_frame_metadata_unittest.cc" ]
+
+    deps = [
+      ":video_frame_metadata",
+      "../../modules/video_coding:codec_globals_headers",
+      "../../test:test_support",
+    ]
+  }
 }
 
 rtc_library("video_common") {
@@ -494,8 +505,7 @@ rtc_library("adapted_video_track_source") {
 }
 
 if (rtc_include_tests) {
-  rtc_library("video_common_unittest") {
-    testonly = true
+  rtc_cc_test("video_common_unittest") {
     sources = [ "video_common_unittest.cc" ]
     deps = [
       ":video_common",
@@ -504,8 +514,7 @@ if (rtc_include_tests) {
     ]
   }
 
-  rtc_library("encoded_frame_unittest") {
-    testonly = true
+  rtc_cc_test("encoded_frame_unittest") {
     sources = [ "encoded_frame_unittest.cc" ]
     deps = [
       ":encoded_frame",
@@ -515,8 +524,7 @@ if (rtc_include_tests) {
     ]
   }
 
-  rtc_library("video_adapter_unittest") {
-    testonly = true
+  rtc_cc_test("video_adapter_unittest") {
     sources = [ "video_adapter_unittest.cc" ]
     deps = [
       ":resolution",
@@ -534,8 +542,7 @@ if (rtc_include_tests) {
     ]
   }
 
-  rtc_library("video_broadcaster_unittest") {
-    testonly = true
+  rtc_cc_test("video_broadcaster_unittest") {
     sources = [ "video_broadcaster_unittest.cc" ]
     deps = [
       ":video_broadcaster",
@@ -543,6 +550,7 @@ if (rtc_include_tests) {
       ":video_rtp_headers",
       "..:scoped_refptr",
       "..:video_track_source_constraints",
+      "../../media:fake_video_renderer",
       "../../media:rtc_media_tests_utils",
       "../../rtc_base:checks",
       "../../test:test_support",

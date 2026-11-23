@@ -12,14 +12,25 @@
   --mover-offset: -8px;
 
   --avatar-selection-width: 100%;
+
+  anchor-name: --avatar-selector;
 }
 
 dialog {
+  position: absolute;
+  position-anchor: --avatar-selector;
+  position-area: end end;
+  max-inline-size: none;
+  max-block-size: none;
+  overflow: visible;
   margin: 0;
   padding: 0;
   border: 0;
   background-color: transparent;
-  z-index: 1;
+
+  &::backdrop {
+    background: transparent;
+  }
 }
 
 .button-group {
@@ -62,8 +73,8 @@ dialog {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding-bottom: var(--space-large);
-  border-bottom: var(--card-border);
+  padding-block-end: var(--space-large);
+  border-block-end: var(--card-border);
   font-weight: var(--font-weight-heading);
 
   #back-button {
@@ -95,6 +106,7 @@ dialog {
 
 .custom-avatar-crop-area {
   overflow: scroll;
+  user-select: none;
 }
 
 #custom-image-input {
@@ -176,6 +188,7 @@ dialog {
   height: var(--mover-size);
   z-index: var(--profiles-high-layer);
 
+  /* Positioning the resize handles depends on physical dimensions rather than logical ones */
   &.direction-topLeft {
     cursor: nwse-resize;
     top: var(--mover-offset);

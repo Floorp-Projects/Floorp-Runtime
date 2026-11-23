@@ -115,4 +115,4 @@ jobs:
       expected-build-id: ${{ needs.mac.outputs.expected-build-id }}
       platform: Darwin
       arch: aarch64
-      runner: macos-14
+      runner: macos-15

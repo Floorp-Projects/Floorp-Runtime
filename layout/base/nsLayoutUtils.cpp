@@ -87,6 +87,7 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/DocumentInlines.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/dom/HTMLAreaElement.h"
 #include "mozilla/dom/HTMLBodyElement.h"
 #include "mozilla/dom/HTMLCanvasElement.h"
 #include "mozilla/dom/HTMLImageElement.h"
@@ -1045,6 +1046,15 @@ const nsIFrame* nsLayoutUtils::GetPrimaryFrameFromStyleFrame(
     const nsIFrame* aStyleFrame) {
   return nsLayoutUtils::GetPrimaryFrameFromStyleFrame(
       const_cast<nsIFrame*>(aStyleFrame));
+}
+
+/* static */
+nsIFrame* nsLayoutUtils::GetPrimaryOrAreaImageFrame(
+    const nsIContent* aContent) {
+  if (const auto* area = HTMLAreaElement::FromNode(aContent)) {
+    return area->GetImageFrame();
+  }
+  return aContent->GetPrimaryFrame();
 }
 
 /*static*/
@@ -2629,7 +2639,7 @@ nsresult nsLayoutUtils::GetFramesForArea(RelativeTo aRelativeTo,
   nsDisplayListBuilder builder(frame, nsDisplayListBuilderMode::EventDelivery,
                                false);
   builder.BeginFrame();
-  nsDisplayList list(&builder);
+  nsDisplayList list;
 
   if (aOptions.mBits.contains(FrameForPointOption::IgnorePaintSuppression)) {
     builder.IgnorePaintSuppression();
@@ -2673,7 +2683,6 @@ nsresult nsLayoutUtils::GetFramesForArea(RelativeTo aRelativeTo,
   nsDisplayItem::HitTestState hitTestState;
   list.HitTest(&builder, aRect, &hitTestState, &aOutFrames);
 
-  builder.SetIsDestroying();
   list.DeleteAll(&builder);
   builder.EndFrame();
   return NS_OK;
@@ -2744,10 +2753,20 @@ FrameMetrics nsLayoutUtils::CalculateBasicFrameMetrics(
   } else {
     compBoundsScale = cumulativeResolution * layerToParentLayerScale;
   }
-  metrics.SetCompositionBounds(
-      LayoutDeviceRect::FromAppUnits(nsRect(nsPoint(0, 0), compositionSize),
-                                     presContext->AppUnitsPerDevPixel()) *
-      compBoundsScale);
+  const int32_t auPerDevPixel = presContext->AppUnitsPerDevPixel();
+  ParentLayerRect compositionBounds =
+      LayoutDeviceRect::FromAppUnits(nsRect(nsPoint(), compositionSize),
+                                     auPerDevPixel) *
+      compBoundsScale;
+  // Matches ComputeScrollMetadata. Scrollbars are not subject to resolution
+  // scaling, so LD pixels = layer pixels for them.
+  nsMargin sizes =
+      ScrollbarAreaToExcludeFromCompositionBoundsFor(aScrollContainerFrame);
+  ParentLayerMargin boundMargins =
+      LayoutDeviceMargin::FromAppUnits(sizes, auPerDevPixel) *
+      LayoutDeviceToParentLayerScale(1.0f);
+  compositionBounds.Deflate(boundMargins);
+  metrics.SetCompositionBounds(compositionBounds);
 
   metrics.SetBoundingCompositionSize(
       nsLayoutUtils::CalculateBoundingCompositionSize(aScrollContainerFrame,
@@ -2898,7 +2917,7 @@ static void DumpBeforePaintDisplayList(UniquePtr<std::stringstream>& aStream,
     // Flush stream now to avoid reordering dump output relative to
     // messages dumped by PaintRoot below.
     fprint_stderr(gfxUtils::sDumpPaintFile, *aStream);
-    aStream = MakeUnique<std::stringstream>();
+    aStream = std::make_unique<std::stringstream>();
   }
 }
 
@@ -2928,12 +2947,9 @@ struct TemporaryDisplayListBuilder {
   TemporaryDisplayListBuilder(nsIFrame* aFrame,
                               nsDisplayListBuilderMode aBuilderMode,
                               const bool aBuildCaret)
-      : mBuilder(aFrame, aBuilderMode, aBuildCaret), mList(&mBuilder) {}
+      : mBuilder(aFrame, aBuilderMode, aBuildCaret) {}
 
-  ~TemporaryDisplayListBuilder() {
-    mBuilder.SetIsDestroying();
-    mList.DeleteAll(&mBuilder);
-  }
+  ~TemporaryDisplayListBuilder() { mList.DeleteAll(&mBuilder); }
 
   nsDisplayListBuilder mBuilder;
   nsDisplayList mList;
@@ -3323,7 +3339,7 @@ void nsLayoutUtils::PaintFrame(gfxContext* aRenderingContext, nsIFrame* aFrame,
 
   UniquePtr<std::stringstream> ss;
   if (consoleNeedsDisplayList) {
-    ss = MakeUnique<std::stringstream>();
+    ss = std::make_unique<std::stringstream>();
     *ss << "Display list for " << uri << "\n";
     DumpBeforePaintDisplayList(ss, builder, list, visibleRect);
   }
@@ -8025,7 +8041,8 @@ nsSetAttrRunnable::nsSetAttrRunnable(Element* aElement, nsAtom* aAttrName,
 
 NS_IMETHODIMP
 nsSetAttrRunnable::Run() {
-  return mElement->SetAttr(kNameSpaceID_None, mAttrName, mValue, true);
+  return mElement->SetAttr(kNameSpaceID_None, mAttrName, mValue, true,
+                           IsKnownNewAttr::No);
 }
 
 nsUnsetAttrRunnable::nsUnsetAttrRunnable(Element* aElement, nsAtom* aAttrName)
@@ -8434,8 +8451,7 @@ nsMargin nsLayoutUtils::ScrollbarAreaToExcludeFromCompositionBoundsFor(
 
 /* static */
 nsSize nsLayoutUtils::CalculateCompositionSizeForFrame(
-    nsIFrame* aFrame, bool aSubtractScrollbars,
-    const nsSize* aOverrideScrollPortSize,
+    nsIFrame* aFrame, const nsSize* aOverrideScrollPortSize,
     IncludeDynamicToolbar aIncludeDynamicToolbar) {
   // If we have a scroll container frame, restrict the composition bounds to its
   // scroll port. The scroll port excludes the frame borders and the scroll
@@ -8460,12 +8476,6 @@ nsSize nsLayoutUtils::CalculateCompositionSizeForFrame(
       size = nsSize(compBounds.width * auPerDevPixel,
                     compBounds.height * auPerDevPixel);
     }
-  }
-
-  if (aSubtractScrollbars) {
-    nsMargin margins = ScrollbarAreaToExcludeFromCompositionBoundsFor(aFrame);
-    size.width -= margins.LeftRight();
-    size.height -= margins.TopBottom();
   }
 
   return size;
@@ -8522,20 +8532,6 @@ CSSSize nsLayoutUtils::CalculateBoundingCompositionSize(
         widgetBounds.Size(),
         PixelCastJustification::LayoutDeviceIsScreenForBounds));
   }
-
-  // Adjust composition size for the size of scroll bars.
-  nsIFrame* rootRootScrollContainerFrame =
-      rootPresShell && !isPopupRoot
-          ? rootPresShell->GetRootScrollContainerFrame()
-          : nullptr;
-  nsMargin scrollbarMargins = ScrollbarAreaToExcludeFromCompositionBoundsFor(
-      rootRootScrollContainerFrame);
-  LayoutDeviceMargin margins = LayoutDeviceMargin::FromAppUnits(
-      scrollbarMargins, rootPresContext->AppUnitsPerDevPixel());
-  // Scrollbars are not subject to resolution scaling, so LD pixels = layer
-  // pixels for them.
-  rootCompositionSize.width -= margins.LeftRight();
-  rootCompositionSize.height -= margins.TopBottom();
 
   CSSSize result =
       rootCompositionSize / aMetrics.DisplayportPixelsPerCSSPixel();
@@ -8594,6 +8590,11 @@ nsRect nsLayoutUtils::CalculateExpandedScrollableRect(nsIFrame* aFrame) {
   nsRect scrollableRect = CalculateScrollableRectForFrame(
       aFrame->GetScrollTargetFrame(), aFrame->PresShell()->GetRootFrame());
   nsSize compSize = CalculateCompositionSizeForFrame(aFrame);
+
+  // Match FrameMetrics::GetExpandedScrollableRect().
+  nsMargin scrollbars = ScrollbarAreaToExcludeFromCompositionBoundsFor(aFrame);
+  compSize.width -= scrollbars.LeftRight();
+  compSize.height -= scrollbars.TopBottom();
 
   if (aFrame == aFrame->PresShell()->GetRootScrollContainerFrame()) {
     // the composition size for the root scroll frame does not include the

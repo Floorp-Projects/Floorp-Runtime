@@ -19,6 +19,12 @@
 
 #include <limits>
 
+#include <memory>
+
+#if defined(ANGLE_HAS_ZSTD)
+#    include <zstd.h>
+#endif
+
 #define USE_SYSTEM_ZLIB
 #include "compression_utils_portable.h"
 
@@ -363,6 +369,30 @@ ImageUnit::~ImageUnit() = default;
 
 namespace
 {
+std::ostream &operator<<(std::ostream &os, const PixelStoreStateBase &state)
+{
+    os << "alignment = " << state.alignment << ", rowLength = " << state.rowLength
+       << ", skipRows = " << state.skipRows << ", skipPixels = " << state.skipPixels
+       << ", imageHeight = " << state.imageHeight << ", skipImages = " << state.skipImages;
+    return os;
+}
+}  // namespace
+
+std::ostream &operator<<(std::ostream &os, const PixelUnpackState &unpackState)
+{
+    os << static_cast<const PixelStoreStateBase &>(unpackState);
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const PixelPackState &packState)
+{
+    os << static_cast<const PixelStoreStateBase &>(packState)
+       << ", reverseRowOrder = " << packState.reverseRowOrder;
+    return os;
+}
+
+namespace
+{
 // Conversion functions between indices in the SupportedSampleSet bitfield and actual sample count.
 // The first bit stores the '0' sample count, bits 1 though N store each power-of-two sample count.
 size_t SampleCountToBitfieldIndex(GLuint sampleCount)
@@ -571,13 +601,18 @@ void BlendStateExt::setEquations(const GLenum modeColor, const GLenum modeAlpha)
 {
     const gl::BlendEquationType colorEquation = FromGLenum<BlendEquationType>(modeColor);
     const gl::BlendEquationType alphaEquation = FromGLenum<BlendEquationType>(modeAlpha);
+    setEquations(colorEquation, alphaEquation);
+}
 
-    mEquationColor = expandEquationValue(colorEquation);
-    mEquationAlpha = expandEquationValue(alphaEquation);
+void BlendStateExt::setEquations(const BlendEquationType modeColor,
+                                 const BlendEquationType modeAlpha)
+{
+    mEquationColor = expandEquationValue(modeColor);
+    mEquationAlpha = expandEquationValue(modeAlpha);
 
     // Note that advanced blend equations cannot be independently set for color and alpha, so only
     // the color equation can be checked.
-    if (IsAdvancedBlendEquation(colorEquation))
+    if (IsAdvancedBlendEquation(modeColor))
     {
         mUsesAdvancedBlendEquationMask = mAllEnabledMask;
     }
@@ -591,15 +626,21 @@ void BlendStateExt::setEquationsIndexed(const size_t index,
                                         const GLenum modeColor,
                                         const GLenum modeAlpha)
 {
-    ASSERT(index < mDrawBufferCount);
-
     const gl::BlendEquationType colorEquation = FromGLenum<BlendEquationType>(modeColor);
     const gl::BlendEquationType alphaEquation = FromGLenum<BlendEquationType>(modeAlpha);
+    setEquationsIndexed(index, colorEquation, alphaEquation);
+}
 
-    EquationStorage::SetValueIndexed(index, colorEquation, &mEquationColor);
-    EquationStorage::SetValueIndexed(index, alphaEquation, &mEquationAlpha);
+void BlendStateExt::setEquationsIndexed(const size_t index,
+                                        const BlendEquationType modeColor,
+                                        const BlendEquationType modeAlpha)
+{
+    ASSERT(index < mDrawBufferCount);
 
-    mUsesAdvancedBlendEquationMask.set(index, IsAdvancedBlendEquation(colorEquation));
+    EquationStorage::SetValueIndexed(index, modeColor, &mEquationColor);
+    EquationStorage::SetValueIndexed(index, modeAlpha, &mEquationAlpha);
+
+    mUsesAdvancedBlendEquationMask.set(index, IsAdvancedBlendEquation(modeColor));
 }
 
 void BlendStateExt::setEquationsIndexed(const size_t index,
@@ -671,11 +712,18 @@ void BlendStateExt::setFactors(const GLenum srcColor,
                                const GLenum srcAlpha,
                                const GLenum dstAlpha)
 {
-    const gl::BlendFactorType srcColorFactor = FromGLenum<BlendFactorType>(srcColor);
-    const gl::BlendFactorType dstColorFactor = FromGLenum<BlendFactorType>(dstColor);
-    const gl::BlendFactorType srcAlphaFactor = FromGLenum<BlendFactorType>(srcAlpha);
-    const gl::BlendFactorType dstAlphaFactor = FromGLenum<BlendFactorType>(dstAlpha);
+    const BlendFactorType srcColorFactor = FromGLenum<BlendFactorType>(srcColor);
+    const BlendFactorType dstColorFactor = FromGLenum<BlendFactorType>(dstColor);
+    const BlendFactorType srcAlphaFactor = FromGLenum<BlendFactorType>(srcAlpha);
+    const BlendFactorType dstAlphaFactor = FromGLenum<BlendFactorType>(dstAlpha);
+    setFactors(srcColorFactor, dstColorFactor, srcAlphaFactor, dstAlphaFactor);
+}
 
+void BlendStateExt::setFactors(const BlendFactorType srcColorFactor,
+                               const BlendFactorType dstColorFactor,
+                               const BlendFactorType srcAlphaFactor,
+                               const BlendFactorType dstAlphaFactor)
+{
     mSrcColor = expandFactorValue(srcColorFactor);
     mDstColor = expandFactorValue(dstColorFactor);
     mSrcAlpha = expandFactorValue(srcAlphaFactor);
@@ -693,10 +741,10 @@ void BlendStateExt::setFactors(const GLenum srcColor,
 }
 
 void BlendStateExt::setFactorsIndexed(const size_t index,
-                                      const gl::BlendFactorType srcColorFactor,
-                                      const gl::BlendFactorType dstColorFactor,
-                                      const gl::BlendFactorType srcAlphaFactor,
-                                      const gl::BlendFactorType dstAlphaFactor)
+                                      const BlendFactorType srcColorFactor,
+                                      const BlendFactorType dstColorFactor,
+                                      const BlendFactorType srcAlphaFactor,
+                                      const BlendFactorType dstAlphaFactor)
 {
     ASSERT(index < mDrawBufferCount);
 
@@ -761,6 +809,26 @@ DrawBufferMask BlendStateExt::compareFactors(const FactorStorage::Type srcColor,
            FactorStorage::GetDiffMask(mDstColor, dstColor) |
            FactorStorage::GetDiffMask(mSrcAlpha, srcAlpha) |
            FactorStorage::GetDiffMask(mDstAlpha, dstAlpha);
+}
+
+bool BlendStateExt::operator==(const BlendStateExt &other) const
+{
+    // draw buffer counts being equal implies that the all enable masks are equal.
+    ASSERT((mDrawBufferCount == other.mDrawBufferCount) ==
+           (mAllColorMask == other.mAllColorMask && mAllEnabledMask == other.mAllEnabledMask));
+
+    auto tieBlendState = [](const BlendStateExt &b) {
+        return std::tie(b.mParameterMask, b.mSrcColor, b.mDstColor, b.mSrcAlpha, b.mDstAlpha,
+                        b.mEquationColor, b.mEquationAlpha, b.mColorMask, b.mEnabledMask,
+                        b.mUsesAdvancedBlendEquationMask, b.mUsesExtendedBlendFactorMask,
+                        b.mDrawBufferCount);
+    };
+    return tieBlendState(*this) == tieBlendState(other);
+}
+
+bool BlendStateExt::operator!=(const BlendStateExt &other) const
+{
+    return !(*this == other);
 }
 
 static void MinMax(int a, int b, int *minimum, int *maximum)
@@ -1211,6 +1279,98 @@ bool DecompressBlob(const uint8_t *compressedData,
 
     return true;
 }
+
+#if defined(ANGLE_HAS_ZSTD)
+bool CompressBlobZstd(const size_t cacheSize,
+                      const uint8_t *cacheData,
+                      MemoryBuffer *compressedData)
+{
+    // Like zlib's streams, a context is created for each call rather than kept between calls.
+    std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> context(ZSTD_createCCtx(), ZSTD_freeCCtx);
+    if (context == nullptr)
+    {
+        ERR() << "Failed to allocate memory for compression";
+        return false;
+    }
+
+    // The checksum is zstd's counterpart to zlib's CRC32.  DecompressBlobZstd() verifies it, as
+    // DecompressBlob() verifies zlib's, so callers need no checksum of their own.
+    const size_t result = ZSTD_CCtx_setParameter(context.get(), ZSTD_c_checksumFlag, 1);
+    if (ZSTD_isError(result))
+    {
+        ERR() << "Failed to enable the checksum: " << ZSTD_getErrorName(result);
+        return false;
+    }
+
+    const size_t bound = ZSTD_compressBound(cacheSize);
+    if (!compressedData->clearAndReserve(bound))
+    {
+        ERR() << "Failed to allocate memory for compression";
+        return false;
+    }
+
+    const size_t compressedSize =
+        ZSTD_compress2(context.get(), compressedData->data(), bound, cacheData, cacheSize);
+    if (ZSTD_isError(compressedSize))
+    {
+        ERR() << "Failed to compress cache data: " << ZSTD_getErrorName(compressedSize);
+        return false;
+    }
+
+    compressedData->setSize(compressedSize);
+    return true;
+}
+
+bool DecompressBlobZstd(const uint8_t *compressedData,
+                        const size_t compressedSize,
+                        size_t maxUncompressedDataSize,
+                        MemoryBuffer *uncompressedData)
+{
+    // CompressBlobZstd() always records the size in the frame header.
+    const unsigned long long frameContentSize =
+        ZSTD_getFrameContentSize(compressedData, compressedSize);
+
+    // These are the only two error codes at this time.
+    if (frameContentSize == ZSTD_CONTENTSIZE_ERROR)
+    {
+        WARN() << "Failed to decompress data: not a zstd frame";
+        return false;
+    }
+    if (frameContentSize == ZSTD_CONTENTSIZE_UNKNOWN)
+    {
+        WARN() << "Failed to decompress data: the zstd frame does not record its size";
+        return false;
+    }
+
+    if (frameContentSize == 0 || frameContentSize > maxUncompressedDataSize)
+    {
+        ERR() << "Decompressed data size is zero or larger than the maximum supported ("
+              << frameContentSize << " vs " << maxUncompressedDataSize << ")";
+        return false;
+    }
+
+    // The size fits in size_t, having been checked against maxUncompressedDataSize.
+    const size_t uncompressedSize = static_cast<size_t>(frameContentSize);
+
+    if (!uncompressedData->clearAndReserve(uncompressedSize))
+    {
+        ERR() << "Failed to allocate memory for decompression";
+        return false;
+    }
+
+    // This also verifies the checksum.
+    const size_t decompressedSize =
+        ZSTD_decompress(uncompressedData->data(), uncompressedSize, compressedData, compressedSize);
+    if (ZSTD_isError(decompressedSize) || decompressedSize != uncompressedSize)
+    {
+        WARN() << "Failed to decompress data: " << ZSTD_getErrorName(decompressedSize);
+        return false;
+    }
+
+    uncompressedData->setSize(decompressedSize);
+    return true;
+}
+#endif  // defined(ANGLE_HAS_ZSTD)
 
 uint32_t GenerateCRC32(const uint8_t *data, size_t size)
 {

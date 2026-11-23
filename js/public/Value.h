@@ -117,12 +117,14 @@ class JS_PUBLIC_API Value;
 //    unboxing and tag tests for these GC things need no instruction to
 //    materialize the tag.
 // 2. Numbers (Double and Int32) are the lowest tags, to simplify isNumber
-//    checks. (See ValueUpperInclNumberTag)
+//    checks. (See ValueUpperInclNumberTag and ValueUpperExclShiftedNumberTag)
 // 3. Non-GC tags are ordered before GC-tags, to simplify isGCThing checks. (See
 //    ValueLowerInclGCThingTag)
 // 4. The tags for Object and Null differ by a single flipped bit, to simplify
 //    toObjectOrNull. (See ValueObjectOrNullBit)
-// 5. In PUNBOX64, the most significant bit of every non-Double tag is always
+// 5. The tags for Null and Undefined are the only tags between 4 and 8, to
+//    simplify isNullOrUndefined. (See ValueNullOrUndefinedBits)
+// 6. In PUNBOX64, the most significant bit of every non-Double tag is always
 //    set. This is to simplify isDouble checks. Note that the highest bitstring
 //    that corresponds to a non-NaN double is -Infinity:
 //      0xfff0_0000_0000_0000
@@ -139,9 +141,13 @@ class JS_PUBLIC_API Value;
 //    left to allocate new tags.)
 //
 //    * But see JS_NONCANONICAL_HARDWARE_NAN below.
-// 6. The low two bits of the String, Object and BigInt tags are their
-//    JS::TraceKind, and the PrivateGCThing and Symbol tags are adjacent, so
-//    Value::traceKind needs a single branch. (See Value::traceKind)
+// 7. The low two bits of the String, Object and BigInt tags are their
+//    JS::TraceKind, and those of the PrivateGCThing and Symbol tags are both
+//    0b11, so Value::traceKind needs a single branch. (See Value::traceKind)
+// 8. Every non-GC, non-Double type has an even type code, so on PUNBOX64 its
+//    shifted tag occupies only the top 16 bits: AArch64 materializes the tag,
+//    or a Value with a small payload, without a movk for bits 32-47. The odd
+//    type codes below the GC things are unused so that these can be even.
 //
 // [1]:
 // https://wingolog.org/archives/2011/05/18/value-representation-in-javascript-implementations#969f63bbe4eb912778c9da85feb0f5763e7a7862
@@ -162,16 +168,16 @@ class JS_PUBLIC_API Value;
 
 enum JSValueType : uint8_t {
   JSVAL_TYPE_DOUBLE = 0x00,
-  JSVAL_TYPE_INT32 = 0x01,
-  JSVAL_TYPE_BOOLEAN = 0x02,
-  JSVAL_TYPE_UNDEFINED = 0x03,
+  JSVAL_TYPE_INT32 = 0x02,
   JSVAL_TYPE_NULL = 0x04,
-  JSVAL_TYPE_MAGIC = 0x05,
-  JSVAL_TYPE_PRIVATE_GCTHING = 0x07,
-  JSVAL_TYPE_SYMBOL = 0x08,
-  JSVAL_TYPE_BIGINT = 0x09,
+  JSVAL_TYPE_UNDEFINED = 0x06,
+  JSVAL_TYPE_BOOLEAN = 0x08,
+  JSVAL_TYPE_MAGIC = 0x0a,
+  JSVAL_TYPE_PRIVATE_GCTHING = 0x0b,
   JSVAL_TYPE_OBJECT = 0x0c,
+  JSVAL_TYPE_BIGINT = 0x0d,
   JSVAL_TYPE_STRING = 0x0e,
+  JSVAL_TYPE_SYMBOL = 0x0f,
 
   // This type never appears in a Value; it's only an out-of-band value.
   JSVAL_TYPE_UNKNOWN = 0x20
@@ -305,7 +311,8 @@ constexpr uint64_t ValueTypeToShiftedTag(JSValueType type) {
 constexpr JSValueTag ValueUpperInclNumberTag = JSVAL_TAG_INT32;
 constexpr JSValueTag ValueLowerInclGCThingTag = JSVAL_TAG_PRIVATE_GCTHING;
 
-constexpr uint64_t ValueUpperExclShiftedNumberTag = JSVAL_SHIFTED_TAG_BOOLEAN;
+constexpr uint64_t ValueUpperExclShiftedNumberTag =
+    uint64_t(JSVAL_TAG_INT32 + 1) << JSVAL_TAG_SHIFT;
 constexpr uint64_t ValueLowerInclShiftedGCThingTag =
     JSVAL_SHIFTED_TAG_PRIVATE_GCTHING;
 
@@ -327,6 +334,26 @@ constexpr uint64_t IsValidUserModePointer(uint64_t bits) {
 constexpr bool ValueTypeIsGCThing(JSValueType type) {
   return ValueTypeToTag(type) >= ValueLowerInclGCThingTag;
 }
+
+// Null and Undefined differ in a single bit, and theirs are the only type codes
+// between 4 and 8. When shifted right by 2, their tags share a unique
+// representation. See MacroAssembler::branchTestNullOrUndefined and
+// Value::isNullOrUndefined.
+constexpr unsigned ValueNullOrUndefinedShift = JSVAL_TAG_SHIFT + 2;
+constexpr uint32_t ValueNullOrUndefinedBits = JSVAL_TAG_NULL >> 2;
+constexpr bool MatchWhenShifted(JSValueType type, JSValueType type2) {
+  return (ValueTypeToTag(type) >> 2) == (ValueTypeToTag(type2) >> 2);
+}
+static_assert(MatchWhenShifted(JSVAL_TYPE_UNDEFINED, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_DOUBLE, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_INT32, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_BOOLEAN, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_MAGIC, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_PRIVATE_GCTHING, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_OBJECT, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_BIGINT, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_STRING, JSVAL_TYPE_NULL));
+static_assert(!MatchWhenShifted(JSVAL_TYPE_SYMBOL, JSVAL_TYPE_NULL));
 
 }  // namespace detail
 }  // namespace JS
@@ -813,7 +840,10 @@ class Value {
 #endif
   }
 
-  bool isNullOrUndefined() const { return isNull() || isUndefined(); }
+  bool isNullOrUndefined() const {
+    return (asBits_ >> detail::ValueNullOrUndefinedShift) ==
+           detail::ValueNullOrUndefinedBits;
+  }
 
   bool isInt32() const { return toTag() == JSVAL_TAG_INT32; }
 
@@ -895,12 +925,12 @@ class Value {
                   "Value type tags must correspond with JS::TraceKinds.");
     static_assert((JSVAL_TAG_BIGINT & 0x03) == size_t(JS::TraceKind::BigInt),
                   "Value type tags must correspond with JS::TraceKinds.");
-    static_assert(JSVAL_TAG_PRIVATE_GCTHING + 1 == JSVAL_TAG_SYMBOL,
-                  "Symbol and PrivateGCThing tags should be adjacent to allow "
-                  "checking for them with a single branch");
+    static_assert((JSVAL_TAG_SYMBOL & 0x03) == 0x03 &&
+                      (JSVAL_TAG_PRIVATE_GCTHING & 0x03) == 0x03,
+                  "Symbol and PrivateGCThing tags should share their low bits "
+                  "to allow checking for them with a single branch");
     JSValueTag tag = toTag();
-    if (MOZ_UNLIKELY(tag == JSVAL_TAG_SYMBOL ||
-                     tag == JSVAL_TAG_PRIVATE_GCTHING)) {
+    if (MOZ_UNLIKELY((tag & 0x03) == 0x03)) {
       return JS::GCThingTraceKind(toGCThing());
     }
     return JS::TraceKind(tag & 0x03);
@@ -1012,7 +1042,7 @@ class Value {
     }
 
     JSValueType type = extractNonDoubleType();
-    MOZ_ASSERT(type <= JSVAL_TYPE_STRING);
+    MOZ_ASSERT(type <= JSVAL_TYPE_SYMBOL);
     return JS::ValueType(type);
   }
 

@@ -26,6 +26,7 @@
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticPrefs_webgl.h"
 #include "mozilla/dom/BufferSourceBinding.h"
+#include "mozilla/dom/CanvasRenderingContextHelper.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/GeneratePlaceholderCanvasData.h"
 #include "mozilla/dom/ToJSValue.h"
@@ -211,7 +212,15 @@ static inline void SafeReleaseNotLostData(RefPtr<webgl::NotLostData>& notLost) {
 
 ClientWebGLContext::~ClientWebGLContext() {
   RemovePostRefreshObserver();
+  RemoveShutdownObserver();
   SafeReleaseNotLostData(mNotLost);
+}
+
+nsresult ClientWebGLContext::Initialize() {
+  if (NS_WARN_IF(!AddShutdownObserver())) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
 }
 
 void ClientWebGLContext::JsWarning(const std::string& utf8) const {
@@ -333,11 +342,45 @@ void ClientWebGLContext::Event_webglcontextlost() const {
   const bool useDefaultHandler = DispatchEvent(u"webglcontextlost"_ns);
   if (useDefaultHandler) {
     mLossStatus = webgl::LossStatus::LostForever;
+    mRemoteCanvasLost = false;
   }
 
-  if (mLossStatus == webgl::LossStatus::Lost) {
+  // If we lost the remote canvas, OnRemoteCanvasRestored will restore us.
+  if (mLossStatus == webgl::LossStatus::Lost && !mRemoteCanvasLost) {
     RestoreContext(webgl::LossStatus::Lost);
   }
+}
+
+void ClientWebGLContext::OnRemoteCanvasLost() {
+  if (mLossStatus == webgl::LossStatus::LostForever) {
+    return;
+  }
+
+  mRemoteCanvasLost = true;
+  if (mNotLost) {
+    OnContextLoss(webgl::ContextLossReason::None);
+  }
+}
+
+void ClientWebGLContext::OnRemoteCanvasRestored() {
+  if (!mRemoteCanvasLost) {
+    return;
+  }
+
+  // Dispatch so that we run after any pending webglcontextlost event.
+  const auto weak = WeakPtr<const ClientWebGLContext>(this);
+  const auto fnRun = [weak]() {
+    const auto strong = RefPtr<const ClientWebGLContext>(weak);
+    if (!strong || !strong->mRemoteCanvasLost ||
+        strong->mLossStatus != webgl::LossStatus::Lost) {
+      return;
+    }
+    strong->RestoreContext(webgl::LossStatus::Lost);
+  };
+  already_AddRefed<mozilla::CancelableRunnable> runnable =
+      NS_NewCancelableRunnableFunction(
+          "ClientWebGLContext::OnRemoteCanvasRestored", fnRun);
+  NS_DispatchToCurrentThread(std::move(runnable));
 }
 
 void ClientWebGLContext::RestoreContext(
@@ -393,10 +436,20 @@ void ClientWebGLContext::Event_webglcontextrestored() const {
   const auto mutThis = const_cast<ClientWebGLContext*>(
       this);  // TODO: Make context loss non-mutable.
   if (!mutThis->CreateHostContext(requestSize)) {
+    // The new CanvasManagerChild may already be dead if the remote process
+    // was lost again, so wait for it to be recreated before trying again.
+    if (mRemoteCanvasLost) {
+      mLossStatus = webgl::LossStatus::Lost;
+      JsWarning(mDeferContextCreationError);
+      mDeferContextCreationError.clear();
+      return;
+    }
     mLossStatus = webgl::LossStatus::LostForever;
+    mutThis->MaybeThrowContextCreationError();
     return;
   }
 
+  mRemoteCanvasLost = false;
   mResetLayer = true;
 
   (void)DispatchEvent(u"webglcontextrestored"_ns);
@@ -428,6 +481,15 @@ void ClientWebGLContext::ThrowEvent_WebGLContextCreationError(
   event->SetTrusted(true);
 
   target->DispatchEvent(*event);
+}
+
+NS_IMETHODIMP
+ClientWebGLContext::MaybeThrowContextCreationError() {
+  if (!mDeferContextCreationError.empty()) {
+    std::string error = std::move(mDeferContextCreationError);
+    ThrowEvent_WebGLContextCreationError(error);
+  }
+  return NS_OK;
 }
 
 // -------------------------------------------------------------------------
@@ -812,6 +874,7 @@ ClientWebGLContext::SetDimensions(const int32_t signedWidth,
                                   const int32_t signedHeight) {
   const FuncScope funcScope(*this, "<SetDimensions>");
   MOZ_ASSERT(mInitialOptions);
+  MOZ_ASSERT(mDeferContextCreationError.empty());
 
   if (mLossStatus != webgl::LossStatus::Ready) {
     // Attempted resize of a lost context.
@@ -864,6 +927,8 @@ void ClientWebGLContext::ResetBitmap() {
 }
 
 bool ClientWebGLContext::CreateHostContext(const uvec2& requestedSize) {
+  MOZ_ASSERT(mDeferContextCreationError.empty());
+
   const auto pNotLost = MakeRefPtr<webgl::NotLostData>(*this);
   auto& notLost = *pNotLost;
 
@@ -942,7 +1007,7 @@ bool ClientWebGLContext::CreateHostContext(const uvec2& requestedSize) {
     notLost.info.error = str;
   }
   if (!notLost.info.error->empty()) {
-    ThrowEvent_WebGLContextCreationError(notLost.info.error);
+    mDeferContextCreationError = notLost.info.error;
     return false;
   }
   mNotLost = pNotLost;
@@ -1051,16 +1116,12 @@ void ClientWebGLContext::OnMemoryPressure() {
 }
 
 NS_IMETHODIMP
-ClientWebGLContext::SetContextOptions(JSContext* cx,
-                                      JS::Handle<JS::Value> options,
-                                      ErrorResult& aRvForDictionaryInit) {
-  if (mInitialOptions && options.isNullOrUndefined()) return NS_OK;
-
-  dom::WebGLContextAttributes attributes;
-  if (!attributes.Init(cx, options)) {
-    aRvForDictionaryInit.Throw(NS_ERROR_UNEXPECTED);
+ClientWebGLContext::SetContextOptions(
+    const dom::CanvasRenderingContextOptions& aOptions) {
+  if (!aOptions.is<dom::WebGLContextAttributes>()) {
     return NS_ERROR_UNEXPECTED;
   }
+  const auto& attributes = aOptions.as<dom::WebGLContextAttributes>();
 
   WebGLContextOptions newOpts;
 
@@ -1195,9 +1256,8 @@ RefPtr<gfx::SourceSurface> ClientWebGLContext::GetFrontBufferSnapshot(
   if (!res.shmem) return nullptr;
 
   const auto& surfSize = res.surfSize;
-  const webgl::RaiiShmem shmem{child, res.shmem.ref()};
-  if (!shmem) return nullptr;
-  const auto& shmemBytes = shmem.ByteRange();
+  const auto shmemMapping = res.shmem.Map();
+  if (!shmemMapping) return nullptr;
   if (!surfSize.x) return nullptr;  // Zero means failure.
 
   const auto stride = surfSize.x * 4;
@@ -1213,15 +1273,15 @@ RefPtr<gfx::SourceSurface> ClientWebGLContext::GetFrontBufferSnapshot(
       MOZ_ASSERT(false);
       return nullptr;
     }
-    MOZ_RELEASE_ASSERT(shmemBytes.length() == byteSize);
+    MOZ_RELEASE_ASSERT(shmemMapping.Size() == byteSize);
     if (requireAlphaPremult && options.alpha && !options.premultipliedAlpha) {
       bool rv = gfx::PremultiplyData(
-          shmemBytes.begin().get(), stride, gfx::SurfaceFormat::R8G8B8A8,
+          shmemMapping.DataAs<uint8_t>(), stride, gfx::SurfaceFormat::R8G8B8A8,
           map.GetData(), map.GetStride(), gfx::SurfaceFormat::B8G8R8A8,
           surf->GetSize());
       MOZ_RELEASE_ASSERT(rv, "PremultiplyData failed!");
     } else {
-      bool rv = gfx::SwizzleData(shmemBytes.begin().get(), stride,
+      bool rv = gfx::SwizzleData(shmemMapping.DataAs<uint8_t>(), stride,
                                  gfx::SurfaceFormat::R8G8B8A8, map.GetData(),
                                  map.GetStride(), gfx::SurfaceFormat::B8G8R8A8,
                                  surf->GetSize());
@@ -7625,10 +7685,21 @@ NS_INTERFACE_MAP_END
 NS_IMPL_CYCLE_COLLECTING_ADDREF(ClientWebGLContext)
 NS_IMPL_CYCLE_COLLECTING_RELEASE(ClientWebGLContext)
 
-NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_WEAK_PTR(
-    ClientWebGLContext, mExtLoseContext, mNotLost,
-    // Don't forget nsICanvasRenderingContextInternal:
-    mCanvasElement, mOffscreenCanvas)
+NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_CLASS(ClientWebGLContext)
+
+NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(ClientWebGLContext)
+  tmp->RemoveShutdownObserver();
+  // Don't forget nsICanvasRenderingContextInternal's members.
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mExtLoseContext, mNotLost, mCanvasElement,
+                                  mOffscreenCanvas)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_PRESERVED_WRAPPER
+  NS_IMPL_CYCLE_COLLECTION_UNLINK_WEAK_PTR
+NS_IMPL_CYCLE_COLLECTION_UNLINK_END
+
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(ClientWebGLContext)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mExtLoseContext, mNotLost, mCanvasElement,
+                                    mOffscreenCanvas)
+NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 // -----------------------------
 

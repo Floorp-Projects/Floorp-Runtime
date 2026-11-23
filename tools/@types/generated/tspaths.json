@@ -46,9 +46,6 @@
       "chrome://browser/content/aiwindow/components/ai-sff-tab-selector.mjs": [
         "../../../browser/components/aiwindow/ui/components/ai-sff-tab-selector/ai-sff-tab-selector.mjs"
       ],
-      "chrome://browser/content/aiwindow/components/ai-website-chip.mjs": [
-        "../../../browser/components/aiwindow/ui/components/ai-website-chip/ai-website-chip.mjs"
-      ],
       "chrome://browser/content/aiwindow/components/ai-website-confirmation.mjs": [
         "../../../browser/components/aiwindow/ui/components/ai-website-confirmation/ai-website-confirmation.mjs"
       ],
@@ -61,11 +58,14 @@
       "chrome://browser/content/aiwindow/components/aitab-error.mjs": [
         "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-error/aitab-error.mjs"
       ],
+      "chrome://browser/content/aiwindow/components/aitab-footer.mjs": [
+        "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-footer/aitab-footer.mjs"
+      ],
       "chrome://browser/content/aiwindow/components/aitab-header.mjs": [
         "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-header/aitab-header.mjs"
       ],
       "chrome://browser/content/aiwindow/components/aitab-highlights.mjs": [
-        "../../../browser/components/aiwindow/ui/components/aitab-highlights/aitab-highlights.mjs"
+        "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-highlights/aitab-highlights.mjs"
       ],
       "chrome://browser/content/aiwindow/components/aitab-list.mjs": [
         "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-list/aitab-list.mjs"
@@ -74,7 +74,7 @@
         "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-page-actions/aitab-page-actions.mjs"
       ],
       "chrome://browser/content/aiwindow/components/aitab-table.mjs": [
-        "../../../browser/components/aiwindow/ui/components/aitab-table/aitab-table.mjs"
+        "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-table/aitab-table.mjs"
       ],
       "chrome://browser/content/aiwindow/components/aitab-text-block.mjs": [
         "../../../browser/components/aiwindow/ui/components/aitab-page/aitab-text-block/aitab-text-block.mjs"
@@ -126,6 +126,9 @@
       ],
       "chrome://browser/content/aiwindow/components/monitors-display.mjs": [
         "../../../browser/components/aiwindow/ui/components/monitors-display/monitors-display.mjs"
+      ],
+      "chrome://browser/content/aiwindow/components/smartwindow-chip.mjs": [
+        "../../../browser/components/aiwindow/ui/components/smartwindow-chip/smartwindow-chip.mjs"
       ],
       "chrome://browser/content/aiwindow/components/smartwindow-footer.mjs": [
         "../../../browser/components/aiwindow/ui/components/smartwindow-footer/smartwindow-footer.mjs"
@@ -337,8 +340,14 @@
       "chrome://browser/content/preferences/config/account-sync.mjs": [
         "../../../browser/components/preferences/config/account-sync.mjs"
       ],
+      "chrome://browser/content/preferences/config/default-browser.mjs": [
+        "../../../browser/components/preferences/config/default-browser.mjs"
+      ],
       "chrome://browser/content/preferences/config/downloads.mjs": [
         "../../../browser/components/preferences/config/downloads.mjs"
+      ],
+      "chrome://browser/content/preferences/config/notification-permissions.mjs": [
+        "../../../browser/components/preferences/config/notification-permissions.mjs"
       ],
       "chrome://browser/content/preferences/config/passwords-autofill.mjs": [
         "../../../browser/components/preferences/config/passwords-autofill.mjs"
@@ -528,6 +537,9 @@
       ],
       "chrome://browser/content/webrtc/webrtc-preview.mjs": [
         "../../../browser/components/webrtc/content/webrtc-preview/webrtc-preview.mjs"
+      ],
+      "chrome://browser/content/widgets/moz-widget-header.mjs": [
+        "../../../browser/components/widgets/content/moz-widget-header.mjs"
       ],
       "chrome://devtools-startup/content/DevToolsShim.sys.mjs": [
         "../../../devtools/startup/DevToolsShim.sys.mjs"
@@ -877,6 +889,9 @@
       "chrome://mochitests/content/browser/devtools/shared/test-helpers/trace-objects.sys.mjs": [
         "../../../devtools/shared/test-helpers/trace-objects.sys.mjs"
       ],
+      "chrome://mochitests/content/browser/dom/base/test/file_process_script_dynamic_import.sys.mjs": [
+        "../../../dom/base/test/file_process_script_dynamic_import.sys.mjs"
+      ],
       "chrome://mochitests/content/browser/dom/serviceworkers/test/browser_head.js": [
         "../../../dom/serviceworkers/test/browser_head.js"
       ],
@@ -918,6 +933,9 @@
       ],
       "chrome://mozapps/content/extensions/components/aboutaddons-themes-picker.mjs": [
         "../../../toolkit/mozapps/extensions/content/components/aboutaddons-themes-picker.mjs"
+      ],
+      "chrome://mozapps/content/extensions/components/aboutaddons-themes-pickers.mjs": [
+        "../../../toolkit/mozapps/extensions/content/components/aboutaddons-themes-pickers.mjs"
       ],
       "chrome://mozapps/content/extensions/components/addon-card.mjs": [
         "../../../toolkit/mozapps/extensions/content/components/addon-card.mjs"
@@ -2200,6 +2218,9 @@
       "resource://devtools/client/application/src/actions/session-history.js": [
         "../../../devtools/client/application/src/actions/session-history.js"
       ],
+      "resource://devtools/client/application/src/actions/speculative-loads.js": [
+        "../../../devtools/client/application/src/actions/speculative-loads.js"
+      ],
       "resource://devtools/client/application/src/actions/ui.js": [
         "../../../devtools/client/application/src/actions/ui.js"
       ],
@@ -2278,6 +2299,9 @@
       "resource://devtools/client/application/src/components/session-history/SessionHistoryUnavailable.js": [
         "../../../devtools/client/application/src/components/session-history/SessionHistoryUnavailable.js"
       ],
+      "resource://devtools/client/application/src/components/speculative-loads/SpeculativeLoadsPage.js": [
+        "../../../devtools/client/application/src/components/speculative-loads/SpeculativeLoadsPage.js"
+      ],
       "resource://devtools/client/application/src/components/ui/UIButton.js": [
         "../../../devtools/client/application/src/components/ui/UIButton.js"
       ],
@@ -2307,6 +2331,9 @@
       ],
       "resource://devtools/client/application/src/reducers/session-history-state.js": [
         "../../../devtools/client/application/src/reducers/session-history-state.js"
+      ],
+      "resource://devtools/client/application/src/reducers/speculative-loads-state.js": [
+        "../../../devtools/client/application/src/reducers/speculative-loads-state.js"
       ],
       "resource://devtools/client/application/src/reducers/ui-state.js": [
         "../../../devtools/client/application/src/reducers/ui-state.js"
@@ -3931,8 +3958,8 @@
       "resource://devtools/client/responsive/utils/window.js": [
         "../../../devtools/client/responsive/utils/window.js"
       ],
-      "resource://devtools/client/settings/panel.js": [
-        "../../../devtools/client/settings/panel.js"
+      "resource://devtools/client/settings/panel.mjs": [
+        "../../../devtools/client/settings/panel.mjs"
       ],
       "resource://devtools/client/shared/WeakMapMap.js": [
         "../../../devtools/client/shared/WeakMapMap.js"
@@ -5644,9 +5671,6 @@
       "resource://gre/modules/AddonManager.sys.mjs": [
         "../../../toolkit/mozapps/extensions/AddonManager.sys.mjs"
       ],
-      "resource://gre/modules/AndroidLog.sys.mjs": [
-        "../../../mobile/android/modules/geckoview/AndroidLog.sys.mjs"
-      ],
       "resource://gre/modules/AppConstants.sys.mjs": [
         "../../../tools/@types/subs/AppConstants.sys.d.mts"
       ],
@@ -5725,9 +5749,6 @@
       "resource://gre/modules/ChildCrashHandler.sys.mjs": [
         "../../../mobile/shared/modules/geckoview/ChildCrashHandler.sys.mjs"
       ],
-      "resource://gre/modules/ChromePushSubscription.sys.mjs": [
-        "../../../dom/push/ChromePushSubscription.sys.mjs"
-      ],
       "resource://gre/modules/ClientID.sys.mjs": [
         "../../../toolkit/components/telemetry/app/ClientID.sys.mjs"
       ],
@@ -5757,6 +5778,9 @@
       ],
       "resource://gre/modules/ContentBlockingAllowList.sys.mjs": [
         "../../../toolkit/components/antitracking/ContentBlockingAllowList.sys.mjs"
+      ],
+      "resource://gre/modules/ContentClassifierRemoteSettingsClient.sys.mjs": [
+        "../../../toolkit/components/content-classifier/ContentClassifierRemoteSettingsClient.sys.mjs"
       ],
       "resource://gre/modules/ContentDOMReference.sys.mjs": [
         "../../../toolkit/modules/ContentDOMReference.sys.mjs"
@@ -6091,11 +6115,8 @@
       "resource://gre/modules/GeckoViewModule.sys.mjs": [
         "../../../mobile/shared/modules/geckoview/GeckoViewModule.sys.mjs"
       ],
-      "resource://gre/modules/GeckoViewPreferences.sys.mjs": [
-        "../../../mobile/shared/components/geckoview/GeckoViewPreferences.sys.mjs"
-      ],
-      "resource://gre/modules/GeckoViewPrompter.sys.mjs": [
-        "../../../mobile/shared/components/geckoview/GeckoViewPrompter.sys.mjs"
+      "resource://gre/modules/GeckoViewPictureInPicture.sys.mjs": [
+        "../../../mobile/shared/modules/geckoview/GeckoViewPictureInPicture.sys.mjs"
       ],
       "resource://gre/modules/GeckoViewSessionStore.sys.mjs": [
         "../../../mobile/shared/modules/geckoview/GeckoViewSessionStore.sys.mjs"
@@ -6129,6 +6150,9 @@
       ],
       "resource://gre/modules/HealthPing.sys.mjs": [
         "../../../toolkit/components/telemetry/pings/HealthPing.sys.mjs"
+      ],
+      "resource://gre/modules/HelperAppDlg.sys.mjs": [
+        "../../../toolkit/mozapps/downloads/HelperAppDlg.sys.mjs"
       ],
       "resource://gre/modules/HiddenFrame.sys.mjs": [
         "../../../toolkit/modules/HiddenFrame.sys.mjs"
@@ -6331,6 +6355,9 @@
       "resource://gre/modules/ProfileAge.sys.mjs": [
         "../../../toolkit/modules/ProfileAge.sys.mjs"
       ],
+      "resource://gre/modules/ProfileKekPassword.sys.mjs": [
+        "../../../toolkit/modules/ProfileKekPassword.sys.mjs"
+      ],
       "resource://gre/modules/PromiseWorker.sys.mjs": [
         "../../../toolkit/components/promiseworker/PromiseWorker.sys.mjs"
       ],
@@ -6343,29 +6370,11 @@
       "resource://gre/modules/ProxyChannelFilter.sys.mjs": [
         "../../../toolkit/components/extensions/ProxyChannelFilter.sys.mjs"
       ],
-      "resource://gre/modules/PushBroadcastService.sys.mjs": [
-        "../../../dom/push/PushBroadcastService.sys.mjs"
-      ],
-      "resource://gre/modules/PushCrypto.sys.mjs": [
-        "../../../dom/push/PushCrypto.sys.mjs"
-      ],
-      "resource://gre/modules/PushDB.sys.mjs": [
-        "../../../dom/push/PushDB.sys.mjs"
-      ],
       "resource://gre/modules/PushNotificationHelper.sys.mjs": [
         "../../../toolkit/mozapps/pushnotificationhelper/PushNotificationHelper.sys.mjs"
       ],
       "resource://gre/modules/PushNotificationHelperRegistry.sys.mjs": [
         "../../../toolkit/mozapps/pushnotificationhelper/PushNotificationHelperRegistry.sys.mjs"
-      ],
-      "resource://gre/modules/PushRecord.sys.mjs": [
-        "../../../dom/push/PushRecord.sys.mjs"
-      ],
-      "resource://gre/modules/PushService.sys.mjs": [
-        "../../../dom/push/PushService.sys.mjs"
-      ],
-      "resource://gre/modules/PushServiceWebSocket.sys.mjs": [
-        "../../../dom/push/PushServiceWebSocket.sys.mjs"
       ],
       "resource://gre/modules/RFPHelper.sys.mjs": [
         "../../../toolkit/components/resistfingerprinting/RFPHelper.sys.mjs"
@@ -6429,9 +6438,6 @@
       ],
       "resource://gre/modules/SitePolicyUtils.sys.mjs": [
         "../../../toolkit/components/enterprisepolicies/SitePolicyUtils.sys.mjs"
-      ],
-      "resource://gre/modules/SpeechRecognitionFeature.sys.mjs": [
-        "../../../dom/media/webspeech/recognition/SpeechRecognitionFeature.sys.mjs"
       ],
       "resource://gre/modules/Sqlite.sys.mjs": [
         "../../../toolkit/modules/Sqlite.sys.mjs"
@@ -6646,9 +6652,6 @@
       "resource://gre/modules/ctypes.sys.mjs": [
         "../../../toolkit/components/ctypes/ctypes.sys.mjs"
       ],
-      "resource://gre/modules/dbg-browser-actors.js": [
-        "../../../mobile/shared/modules/dbg-browser-actors.js"
-      ],
       "resource://gre/modules/handlers/HandlerList.sys.mjs": [
         "../../../uriloader/exthandler/HandlerList.sys.mjs"
       ],
@@ -6660,12 +6663,6 @@
       ],
       "resource://gre/modules/launchonlogin/WindowsLaunchOnLogin.sys.mjs": [
         "../../../toolkit/modules/launchonlogin/WindowsLaunchOnLogin.sys.mjs"
-      ],
-      "resource://gre/modules/media/IdpSandbox.sys.mjs": [
-        "../../../dom/media/IdpSandbox.sys.mjs"
-      ],
-      "resource://gre/modules/media/PeerConnectionIdp.sys.mjs": [
-        "../../../dom/media/PeerConnectionIdp.sys.mjs"
       ],
       "resource://gre/modules/megalist/MegalistViewModel.sys.mjs": [
         "../../../toolkit/components/satchel/megalist/MegalistViewModel.sys.mjs"
@@ -6702,21 +6699,6 @@
       ],
       "resource://gre/modules/policies/macOSPoliciesParser.sys.mjs": [
         "../../../toolkit/components/enterprisepolicies/macOSPoliciesParser.sys.mjs"
-      ],
-      "resource://gre/modules/psm/DER.sys.mjs": [
-        "../../../security/manager/ssl/DER.sys.mjs"
-      ],
-      "resource://gre/modules/psm/QWACs.sys.mjs": [
-        "../../../security/manager/ssl/QWACs.sys.mjs"
-      ],
-      "resource://gre/modules/psm/RemoteSecuritySettings.sys.mjs": [
-        "../../../security/manager/ssl/RemoteSecuritySettings.sys.mjs"
-      ],
-      "resource://gre/modules/psm/X509.sys.mjs": [
-        "../../../security/manager/ssl/X509.sys.mjs"
-      ],
-      "resource://gre/modules/psm/pippki.sys.mjs": [
-        "../../../security/manager/pki/pippki.sys.mjs"
       ],
       "resource://gre/modules/services-automation/ServicesAutomation.sys.mjs": [
         "../../../services/automation/ServicesAutomation.sys.mjs"
@@ -6847,9 +6829,6 @@
       "resource://gre/modules/translations/LanguageDetector.sys.mjs": [
         "../../../toolkit/components/translations/LanguageDetector.sys.mjs"
       ],
-      "resource://gre/modules/vtt.sys.mjs": [
-        "../../../dom/media/webvtt/vtt.sys.mjs"
-      ],
       "resource://gre/modules/workers/PromiseWorker.js": [
         "../../../tools/@types/subs/PromiseWorker.d.ts"
       ],
@@ -6891,6 +6870,9 @@
       ],
       "resource://newtab/common/StocksWatchlist.mjs": [
         "../../../browser/extensions/newtab/common/StocksWatchlist.mjs"
+      ],
+      "resource://newtab/common/SurfaceId.mjs": [
+        "../../../browser/extensions/newtab/common/SurfaceId.mjs"
       ],
       "resource://newtab/common/WidgetsRegistry.mjs": [
         "../../../browser/extensions/newtab/common/WidgetsRegistry.mjs"
@@ -6942,6 +6924,9 @@
       ],
       "resource://newtab/lib/InferredModel/InferredConstants.sys.mjs": [
         "../../../browser/extensions/newtab/lib/InferredModel/InferredConstants.sys.mjs"
+      ],
+      "resource://newtab/lib/InferredModel/LocationInterestGrid.sys.mjs": [
+        "../../../browser/extensions/newtab/lib/InferredModel/LocationInterestGrid.sys.mjs"
       ],
       "resource://newtab/lib/InferredPersonalizationFeed.sys.mjs": [
         "../../../browser/extensions/newtab/lib/InferredPersonalizationFeed.sys.mjs"
@@ -7003,6 +6988,9 @@
       "resource://newtab/lib/SmartShortcutsRanker/ThomSample.mjs": [
         "../../../browser/extensions/newtab/lib/SmartShortcutsRanker/ThomSample.mjs"
       ],
+      "resource://newtab/lib/SponsoredTopSitesScoreProvider/SponsoredTopSitesScoreProvider.mjs": [
+        "../../../browser/extensions/newtab/lib/SponsoredTopSitesScoreProvider/SponsoredTopSitesScoreProvider.mjs"
+      ],
       "resource://newtab/lib/StartupCacheInit.sys.mjs": [
         "../../../browser/extensions/newtab/lib/StartupCacheInit.sys.mjs"
       ],
@@ -7042,6 +7030,9 @@
       "resource://newtab/lib/WebNotificationsFeed.sys.mjs": [
         "../../../browser/extensions/newtab/lib/WebNotificationsFeed.sys.mjs"
       ],
+      "resource://newtab/lib/Widgets/ExtensionWidgetsFeed.sys.mjs": [
+        "../../../browser/extensions/newtab/lib/Widgets/ExtensionWidgetsFeed.sys.mjs"
+      ],
       "resource://newtab/lib/Widgets/ListsFeed.sys.mjs": [
         "../../../browser/extensions/newtab/lib/Widgets/ListsFeed.sys.mjs"
       ],
@@ -7062,6 +7053,9 @@
       ],
       "resource://newtab/lib/Widgets/TimerFeed.sys.mjs": [
         "../../../browser/extensions/newtab/lib/Widgets/TimerFeed.sys.mjs"
+      ],
+      "resource://newtab/lib/Widgets/TravelFeed.sys.mjs": [
+        "../../../browser/extensions/newtab/lib/Widgets/TravelFeed.sys.mjs"
       ],
       "resource://newtab/lib/actors/NewTabAttributionParent.sys.mjs": [
         "../../../browser/extensions/newtab/lib/actors/NewTabAttributionParent.sys.mjs"
@@ -7102,9 +7096,6 @@
       "resource://nimbus/lib/Telemetry.sys.mjs": [
         "../../../toolkit/components/nimbus/lib/Telemetry.sys.mjs"
       ],
-      "resource://normandy-content/AboutPages.sys.mjs": [
-        "../../../toolkit/components/normandy/content/AboutPages.sys.mjs"
-      ],
       "resource://normandy/Normandy.sys.mjs": [
         "../../../toolkit/components/normandy/Normandy.sys.mjs"
       ],
@@ -7125,9 +7116,6 @@
       ],
       "resource://normandy/lib/CleanupManager.sys.mjs": [
         "../../../toolkit/components/normandy/lib/CleanupManager.sys.mjs"
-      ],
-      "resource://normandy/lib/ClientEnvironment.sys.mjs": [
-        "../../../toolkit/components/normandy/lib/ClientEnvironment.sys.mjs"
       ],
       "resource://normandy/lib/EventEmitter.sys.mjs": [
         "../../../toolkit/components/normandy/lib/EventEmitter.sys.mjs"
@@ -7191,6 +7179,9 @@
       ],
       "resource://pdf.js/build/pdf.sandbox.external.sys.mjs": [
         "../../../toolkit/components/pdfjs/content/build/pdf.sandbox.external.sys.mjs"
+      ],
+      "resource://pdf.js/build/pdf.worker.mjs": [
+        "../../../toolkit/components/pdfjs/content/build/pdf.worker.mjs"
       ],
       "resource://pdf.js/web/wasm/jbig2_nowasm_fallback.js": [
         "../../../toolkit/components/pdfjs/content/web/wasm/jbig2_nowasm_fallback.js"
@@ -7444,6 +7435,12 @@
       "resource://test/es6module_top_level_await.js": [
         "../../../js/xpconnect/tests/unit/es6module_top_level_await.js"
       ],
+      "resource://test/es6module_valid_import_target.js": [
+        "../../../js/xpconnect/tests/unit/es6module_valid_import_target.js"
+      ],
+      "resource://test/es6module_valid_then_missing_import.js": [
+        "../../../js/xpconnect/tests/unit/es6module_valid_then_missing_import.js"
+      ],
       "resource://test/esm_lazy-1.sys.mjs": [
         "../../../js/xpconnect/tests/unit/esm_lazy-1.sys.mjs"
       ],
@@ -7536,6 +7533,9 @@
       ],
       "resource://testing-common/BrowserTestUtils.sys.mjs": [
         "../../../testing/mochitest/BrowserTestUtils/BrowserTestUtils.sys.mjs"
+      ],
+      "resource://testing-common/ContentClassifierTestUtils.sys.mjs": [
+        "../../../toolkit/components/content-classifier/test/ContentClassifierTestUtils.sys.mjs"
       ],
       "resource://testing-common/ContentSharingMockServer.sys.mjs": [
         "../../../browser/components/sharing/tests/browser/ContentSharingMockServer.sys.mjs"

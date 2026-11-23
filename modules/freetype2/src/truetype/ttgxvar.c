@@ -373,12 +373,9 @@
     FT_Long   version;
     FT_Long   axisCount;
     FT_ULong  table_len;
-
-#ifndef TT_CONFIG_OPTION_NO_BORING_EXPANSION
     FT_ULong  table_offset;
     FT_ULong  store_offset;
     FT_ULong  axisMap_offset;
-#endif
 
 
     FT_TRACE2(( "AVAR " ));
@@ -391,9 +388,7 @@
       return;
     }
 
-#ifndef TT_CONFIG_OPTION_NO_BORING_EXPANSION
     table_offset = FT_STREAM_POS();
-#endif
 
     if ( FT_FRAME_ENTER( table_len ) )
       return;
@@ -401,11 +396,8 @@
     version   = FT_GET_LONG();
     axisCount = FT_GET_LONG();
 
-    if ( version != 0x00010000L
-#ifndef TT_CONFIG_OPTION_NO_BORING_EXPANSION
-         && version != 0x00020000L
-#endif
-       )
+    if ( version != 0x00010000L &&
+         version != 0x00020000L )
     {
       FT_TRACE2(( "bad table version\n" ));
       goto Exit;
@@ -413,7 +405,7 @@
 
     FT_TRACE2(( "loaded\n" ));
 
-    if ( axisCount != (FT_Long)blend->mmvar->num_axis )
+    if ( axisCount != (FT_Long)blend->num_axis )
     {
       FT_TRACE2(( "ft_var_load_avar:"
                   " number of axes in `avar' and `fvar'\n" ));
@@ -462,7 +454,6 @@
       FT_TRACE5(( "\n" ));
     }
 
-#ifndef TT_CONFIG_OPTION_NO_BORING_EXPANSION
     if ( version < 0x00020000L )
       goto Exit;
 
@@ -490,7 +481,6 @@
       if ( error )
         goto Exit;
     }
-#endif
 
 
   Exit:
@@ -571,7 +561,7 @@
          FT_READ_USHORT( region_count ) )
       goto Exit;
 
-    if ( axis_count != (FT_Long)blend->mmvar->num_axis )
+    if ( axis_count != (FT_Long)blend->num_axis )
     {
       FT_TRACE2(( "tt_var_load_item_variation_store:"
                   " number of axes in item variation store\n" ));

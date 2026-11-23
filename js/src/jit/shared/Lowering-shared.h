@@ -266,6 +266,8 @@ class LIRGeneratorShared {
                                            bool useAtStart = false);
   inline LInt64Allocation useInt64RegisterOrConstant(MDefinition* mir,
                                                      bool useAtStart = false);
+  inline LInt64Allocation useInt64RegisterOrZero(MDefinition* mir,
+                                                 bool useAtStart = false);
   inline LInt64Allocation useInt64Fixed(MDefinition* mir, Register64 regs,
                                         bool useAtStart = false);
   inline LInt64Allocation useInt64FixedAtStart(MDefinition* mir,
@@ -376,6 +378,10 @@ class LIRGeneratorShared {
                                      MDefinition* lhs, MDefinition* rhs) {
     return false;
   }
+
+  // Whether |value| is a constant that can be stored to memory without first
+  // being moved to a register.
+  bool canStoreConstantWithoutRegister(MDefinition* value) { return false; }
 
   bool canSpecializeWasmCompareAndSelect(MCompare::CompareType compTy,
                                          MIRType insTy);

@@ -895,18 +895,19 @@ RefPtr<PlatformDecoderModule::CreateDecoderPromise> MediaChangeMonitor::Create(
   if (aParams.IsVideo()) {
     const VideoInfo& config = aParams.VideoConfig();
     if (VPXDecoder::IsVPX(config.mMimeType)) {
-      changeMonitor = MakeUnique<VPXChangeMonitor>(config);
+      changeMonitor = std::make_unique<VPXChangeMonitor>(config);
     } else if (AOMDecoder::IsAV1(config.mMimeType)) {
-      changeMonitor = MakeUnique<AV1ChangeMonitor>(config);
+      changeMonitor = std::make_unique<AV1ChangeMonitor>(config);
     } else if (MP4Decoder::IsHEVC(config.mMimeType)) {
-      changeMonitor = MakeUnique<HEVCChangeMonitor>(config);
+      changeMonitor = std::make_unique<HEVCChangeMonitor>(config);
     } else {
       MOZ_ASSERT(MP4Decoder::IsH264(config.mMimeType));
-      changeMonitor = MakeUnique<H264ChangeMonitor>(aParams);
+      changeMonitor = std::make_unique<H264ChangeMonitor>(aParams);
     }
   } else {
     MOZ_ASSERT(MP4Decoder::IsAAC(aParams.AudioConfig().mMimeType));
-    changeMonitor = MakeUnique<AACCodecChangeMonitor>(aParams.AudioConfig());
+    changeMonitor =
+        std::make_unique<AACCodecChangeMonitor>(aParams.AudioConfig());
   }
 
   // The change monitor may have an updated track config. E.g. the h264 monitor
@@ -919,6 +920,9 @@ RefPtr<PlatformDecoderModule::CreateDecoderPromise> MediaChangeMonitor::Create(
   RefPtr<MediaChangeMonitor> instance = new MediaChangeMonitor(
       aPDMFactory, std::move(changeMonitor), nullptr, updatedParams);
 
+  MOZ_ASSERT_IF(aParams.mOptions.contains(
+                    CreateDecoderParams::Option::AssertCanInstantiate),
+                instance->mChangeMonitor->CanBeInstantiated());
   if (instance->mChangeMonitor->CanBeInstantiated()) {
     RefPtr<PlatformDecoderModule::CreateDecoderPromise> p =
         instance->CreateDecoder()->Then(
@@ -1120,9 +1124,13 @@ RefPtr<ShutdownPromise> MediaChangeMonitor::ShutdownDecoder() {
 
 bool MediaChangeMonitor::IsHardwareAccelerated(
     nsACString& aFailureReason) const {
-  if (mDecoder) {
-    return mDecoder->IsHardwareAccelerated(aFailureReason);
+  if (RefPtr<MediaDataDecoder> decoder = GetDecoderOnNonOwnerThread()) {
+    return decoder->IsHardwareAccelerated(aFailureReason);
   }
+  MOZ_ASSERT(!mParams.mOptions.contains(
+                 CreateDecoderParams::Option::AssertCanInstantiate),
+             "Should not get here if the underlying decoder could not be "
+             "instantiated");
 #ifdef MOZ_APPLEMEDIA
   // On mac, we can assume H264 is hardware accelerated for now.
   // This allows MediaCapabilities to report that playback will be smooth.
@@ -1431,7 +1439,8 @@ void MediaChangeMonitor::FlushThenShutdownDecoder(
       ->Track(mFlushRequest);
 }
 
-MediaDataDecoder* MediaChangeMonitor::GetDecoderOnNonOwnerThread() const {
+RefPtr<MediaDataDecoder> MediaChangeMonitor::GetDecoderOnNonOwnerThread()
+    const {
   MutexAutoLock lock(mMutex);
   return mDecoder;
 }

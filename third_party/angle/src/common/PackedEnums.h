@@ -932,6 +932,12 @@ ANGLE_EGL_ID_TYPES_OP(ANGLE_DEFINE_ID_TYPE)
 #undef ANGLE_EGL_ID_TYPES_OP
 
 template <>
+struct ResourceTypeToID<gl::Context>
+{
+    using IDType = gl::ContextID;
+};
+
+template <>
 struct IsResourceIDType<gl::ContextID>
 {
     static constexpr bool value = true;
@@ -969,6 +975,11 @@ gl::TextureTarget EGLCubeMapTargetToCubeMapTarget(EGLenum eglTarget);
 gl::TextureTarget EGLImageTargetToTextureTarget(EGLenum eglTarget);
 gl::TextureType EGLTextureTargetToTextureType(EGLenum eglTarget);
 }  // namespace egl_gl
+
+namespace gl_egl
+{
+EGLenum TextureTargetToEGLImageTarget(gl::TextureTarget target);
+}  // namespace gl_egl
 
 namespace gl
 {

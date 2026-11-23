@@ -381,7 +381,7 @@ add_task(async function test_watch_url_chip_dispatches_open() {
         e => (openDetail = e.detail)
       );
 
-      const chip = shadow.querySelector(".url-chips ai-website-chip");
+      const chip = shadow.querySelector(".url-chips smartwindow-chip");
       Assert.ok(chip, "Watched pages render as website chips");
       Assert.equal(
         chip.label,
@@ -429,7 +429,7 @@ add_task(async function test_watch_url_chip_shows_resolved_title() {
     await SpecialPowers.spawn(browser, [], async () => {
       const el = content.document.getElementById("test-agent-monitor-item");
       const chips = el.shadowRoot.querySelectorAll(
-        ".url-chips ai-website-chip"
+        ".url-chips smartwindow-chip"
       );
 
       Assert.equal(chips.length, 2, "Both watched pages render as chips");
@@ -461,7 +461,7 @@ add_task(async function test_edit_mode_shows_pages_and_scheduler() {
       const shadow = el.shadowRoot;
 
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         1,
         "Edit mode seeds a pill for the monitor's existing URL"
       );
@@ -761,7 +761,7 @@ add_task(async function test_create_mode_empty_state_inputs() {
       );
       await el.updateComplete;
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         1,
         "Adding a URL shows a pill"
       );
@@ -1097,7 +1097,7 @@ add_task(async function test_draft_restores_over_agent_values() {
         "Condition is restored from the draft, not the agent"
       );
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         2,
         "Added URLs are restored from the draft, replacing the seeded one"
       );
@@ -1132,6 +1132,94 @@ add_task(async function test_draft_restores_over_agent_values() {
   });
 });
 
+add_task(async function test_form_requests_and_shows_page_titles() {
+  const SEEDED = "https://example.com/seeded";
+  const ADDED = "https://example.com/added";
+
+  await withTestPage(async browser => {
+    await SpecialPowers.spawn(
+      browser,
+      [SEEDED, ADDED],
+      async (seeded, added) => {
+        const el = content.document.getElementById("test-agent-monitor-item");
+        const requests = [];
+        el.addEventListener("agent-monitor-item:resolve-titles", e =>
+          requests.push([...e.detail.urls])
+        );
+        const chipLabels = () =>
+          [
+            ...el.shadowRoot.querySelectorAll(
+              ".page-pills-row smartwindow-chip"
+            ),
+          ].map(chip => chip.label);
+
+        el.agent = Cu.cloneInto(
+          { condition: "", watchUrls: [seeded] },
+          content
+        );
+        el.mode = "create";
+        await el.updateComplete;
+
+        Assert.deepEqual(
+          requests,
+          [[seeded]],
+          "The form asks for the title of the page it was seeded with"
+        );
+        Assert.deepEqual(
+          chipLabels(),
+          ["example.com"],
+          "A chip shows the hostname until its title arrives"
+        );
+
+        el.dispatchEvent(
+          new content.CustomEvent("agent-monitor-item:titles-resolved", {
+            detail: Cu.cloneInto(
+              { titles: { [seeded]: "Seeded Page" } },
+              content
+            ),
+          })
+        );
+        await el.updateComplete;
+        Assert.deepEqual(
+          chipLabels(),
+          ["Seeded Page"],
+          "The chip shows the title once the host answers"
+        );
+
+        el.pendingUrl = added;
+        await el.updateComplete;
+        el.shadowRoot.querySelector(".add-page-btn").click();
+        await el.updateComplete;
+
+        Assert.deepEqual(
+          requests,
+          [[seeded], [added]],
+          "Adding a page asks only for the new page's title"
+        );
+
+        el.alertDescription = "edited";
+        await el.updateComplete;
+        Assert.equal(
+          requests.length,
+          2,
+          "An untitled page is not asked about again on later updates"
+        );
+
+        el.agent = Cu.cloneInto(
+          { condition: "", watchUrls: [seeded, added] },
+          content
+        );
+        await el.updateComplete;
+        Assert.deepEqual(
+          requests,
+          [[seeded], [added], [added]],
+          "Fresh agent data asks again for pages still without a title"
+        );
+      }
+    );
+  });
+});
+
 add_task(async function test_add_and_remove_page_pills() {
   await withTestPage(async browser => {
     await setProps(browser, {
@@ -1144,7 +1232,7 @@ add_task(async function test_add_and_remove_page_pills() {
       const shadow = el.shadowRoot;
 
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         0,
         "Starts with no page pills when nothing is seeded"
       );
@@ -1155,19 +1243,19 @@ add_task(async function test_add_and_remove_page_pills() {
       shadow.querySelector("moz-button.add-page-btn").click();
       await el.updateComplete;
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         1,
         "Add button adds the typed URL as a pill"
       );
 
-      const chip = shadow.querySelector(".page-pills-row ai-website-chip");
+      const chip = shadow.querySelector(".page-pills-row smartwindow-chip");
       await chip.updateComplete;
       // The chip's remove button only becomes visible on hover, which a test
       // can't trigger reliably, so click it directly.
       chip.shadowRoot.querySelector(".chip-remove").click();
       await el.updateComplete;
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         0,
         "Pill remove button removes the URL"
       );
@@ -1198,7 +1286,7 @@ add_task(async function test_invalid_url_shows_error() {
         "A value that is not a URL shows the invalid-URL error"
       );
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         0,
         "An invalid URL is not added as a pill"
       );
@@ -1352,29 +1440,43 @@ add_task(async function test_max_watch_urls_from_host() {
       const el = content.document.getElementById("test-agent-monitor-item");
       const shadow = el.shadowRoot;
 
-      const addUrl = async url => {
-        const urlInput = shadow.querySelector("moz-input-url.page-url-input");
-        urlInput.value = url;
-        urlInput.dispatchEvent(new content.Event("input", { bubbles: true }));
-        shadow.querySelector("moz-button.add-page-btn").click();
-        await el.updateComplete;
+      const setValue = (input, value) => {
+        input.value = value;
+        input.dispatchEvent(new content.Event("input", { bubbles: true }));
+        input.dispatchEvent(new content.Event("change", { bubbles: true }));
       };
+      const urlInput = shadow.querySelector("moz-input-url.page-url-input");
 
-      await addUrl("https://example.com/a");
+      setValue(urlInput, "https://example.com/a");
+      shadow.querySelector("moz-button.add-page-btn").click();
+      await el.updateComplete;
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         1,
         "The first URL is added"
       );
+      Assert.ok(
+        !shadow.querySelector("moz-button.add-page-btn"),
+        "The add page button is hidden once the cap is reached"
+      );
+      Assert.equal(
+        shadow.activeElement,
+        urlInput,
+        "Focus moves to the url input when the add button goes away"
+      );
 
-      await addUrl("https://example.com/b");
+      setValue(urlInput, "https://example.com/b");
+      urlInput.dispatchEvent(
+        new content.KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+      );
+      await el.updateComplete;
       Assert.equal(
         shadow.querySelector(".error-message")?.getAttribute("data-l10n-id"),
         "ai-tasks-alert-error-max-urls",
         "Adding past the cap shows the max-pages error"
       );
       Assert.equal(
-        shadow.querySelectorAll(".page-pills-row ai-website-chip").length,
+        shadow.querySelectorAll(".page-pills-row smartwindow-chip").length,
         1,
         "A URL past the host's cap is not added"
       );
@@ -1391,6 +1493,67 @@ add_task(async function test_max_watch_urls_from_host() {
       Assert.ok(
         errorText.includes("1") && !errorText.includes("{"),
         `The error message interpolates the cap: ${errorText}`
+      );
+
+      let submitDetail = null;
+      el.addEventListener(
+        "agent-monitor-item:submit",
+        e => (submitDetail = e.detail)
+      );
+      setValue(
+        shadow.querySelector("moz-input-text.monitor-name-input"),
+        "Sony Headphone"
+      );
+      setValue(
+        shadow.querySelector("moz-textarea.monitor-condition-input"),
+        "the price drops"
+      );
+      shadow
+        .querySelector(
+          'moz-button[data-l10n-id="ai-tasks-alert-create-button"]'
+        )
+        .click();
+      await el.updateComplete;
+
+      Assert.deepEqual(
+        submitDetail?.watchUrls,
+        ["https://example.com/a"],
+        "A url left in the input is ignored on submit once the cap is reached"
+      );
+    });
+  });
+});
+
+add_task(async function test_add_page_button_returns_below_cap() {
+  await withTestPage(async browser => {
+    await setProps(browser, {
+      agent: {
+        conditionPresets: [],
+        watchUrls: ["https://example.com/a", "https://example.com/b"],
+      },
+      mode: "create",
+      maxWatchUrls: 2,
+    });
+
+    await SpecialPowers.spawn(browser, [], async () => {
+      const el = content.document.getElementById("test-agent-monitor-item");
+      const shadow = el.shadowRoot;
+
+      Assert.ok(
+        !shadow.querySelector("moz-button.add-page-btn"),
+        "The add page button is hidden when seeded at the cap"
+      );
+
+      shadow
+        .querySelector(".page-pills-row smartwindow-chip")
+        .dispatchEvent(
+          new content.CustomEvent("smartwindow-chip:remove", { bubbles: true })
+        );
+      await el.updateComplete;
+
+      Assert.ok(
+        shadow.querySelector("moz-button.add-page-btn"),
+        "The add page button returns after removing a page"
       );
     });
   });

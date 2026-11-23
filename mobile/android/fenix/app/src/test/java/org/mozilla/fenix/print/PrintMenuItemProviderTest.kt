@@ -8,12 +8,12 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.text.Text
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.ui.MenuItemIconRes
 import mozilla.components.feature.session.SessionUseCases
@@ -31,18 +31,18 @@ class PrintMenuItemProviderTest {
 
     @Test
     fun `GIVEN the app runs on Android Automotive WHEN building the menu item THEN return null`() {
-        assertNull(createProvider(isAndroidAutomotiveAvailable = true).itemFlow.value)
+        assertTrue(createProvider(isAndroidAutomotiveAvailable = true).itemsFlow.value.isEmpty())
     }
 
     @Test
     fun `GIVEN a non Automotive device WHEN building the menu item THEN return a properly configured menu button`() {
         assertEquals(
             StandardMenuItem(
-                title = Text.Resource(R.string.browser_menu_print_2),
+                title = MenuItemTitle(Text.Resource(R.string.browser_menu_print_2)),
                 icon = MenuItemIconRes(iconsR.drawable.mozac_ic_print_24),
                 onClickEvent = MenuAction.PrintRequested,
             ),
-            createProvider(isAndroidAutomotiveAvailable = false).itemFlow.value,
+            createProvider(isAndroidAutomotiveAvailable = false).itemsFlow.value.single(),
         )
     }
 
@@ -60,7 +60,7 @@ class PrintMenuItemProviderTest {
     fun `WHEN building the item THEN handle all events it can dispatch and no others`() {
         val provider = createProvider(isAndroidAutomotiveAvailable = false)
 
-        val events = requireNotNull(provider.itemFlow.value).reachableEvents()
+        val events = provider.itemsFlow.value.single().reachableEvents()
 
         assertTrue(events.all { provider.handles(it) }, "Not all of $events are handled")
         assertFalse(provider.handles(MenuAction.SaveAsPdfRequested))

@@ -154,9 +154,8 @@ NativeLayerRootCA::NativeLayerRootCA(CALayer* aLayer)
     : mMutex("NativeLayerRootCA"), mOnscreenRootCALayer([aLayer retain]) {}
 
 NativeLayerRootCA::~NativeLayerRootCA() {
-  MOZ_RELEASE_ASSERT(
-      mSublayers.IsEmpty(),
-      "Please clear all layers before destroying the layer root.");
+  MOZ_ASSERT(mSublayers.IsEmpty(),
+             "Sublayers should be empty when destroying the layer root.");
 
   {
     // Clear the root layer's sublayers. At this point the window is usually
@@ -214,8 +213,14 @@ void NativeLayerRootCA::RemoveLayer(NativeLayer* aLayer) {
   RefPtr<NativeLayerCA> layerCA = aLayer->AsNativeLayerCA();
   MOZ_RELEASE_ASSERT(layerCA);
 
-  mSublayers.RemoveElement(layerCA);
-  SetMutatedLayerStructure();
+  bool layerWasRemoved = mSublayers.RemoveElement(layerCA);
+  MOZ_ASSERT(
+      layerWasRemoved,
+      "Calling RemoveLayer on a layer we don't know about violates sanity "
+      "checks, and might leave sublayers non-empty when root is destroyed.");
+  if (MOZ_LIKELY(layerWasRemoved)) {
+    SetMutatedLayerStructure();
+  }
 }
 
 void NativeLayerRootCA::SetLayers(
@@ -372,7 +377,7 @@ UniquePtr<NativeLayerRootSnapshotter> NativeLayerRootCA::CreateSnapshotter() {
                      "should exist when this is called");
 
   auto cr = NativeLayerRootSnapshotterCA::Create(
-      MakeUnique<SnapshotterDelegate>(this));
+      std::make_unique<SnapshotterDelegate>(this));
   if (cr) {
     mWeakSnapshotter = cr.get();
   }

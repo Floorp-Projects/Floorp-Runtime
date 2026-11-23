@@ -563,10 +563,12 @@ class ReportBrokenSiteHelper {
     await Promise.all(promises);
   }
 
-  clickSend() {
-    const promise = this.waitForViewToShow(this.sentView);
-    this.sendButton.click();
-    return promise;
+  async clickSend() {
+    const { sendButton, sentView } = this;
+    const promise = this.waitForViewToShow(sentView);
+    sendButton.click();
+    await promise;
+    await isNotDisabled(sendButton, "send button should not be disabled");
   }
 
   clickCancel() {
@@ -1130,10 +1132,17 @@ function filterFrameworkDetectorFails(ping, expected) {
   }
 }
 
+async function setupBuiltInTestTrackers() {
+  await UrlClassifierTestUtils.addBuiltInTestTrackers();
+  registerCleanupFunction(async () => {
+    await UrlClassifierTestUtils.cleanupTestTrackers();
+  });
+}
+
 async function setupStrictETP() {
   await UrlClassifierTestUtils.addTestTrackers();
-  registerCleanupFunction(() => {
-    UrlClassifierTestUtils.cleanupTestTrackers();
+  registerCleanupFunction(async () => {
+    await UrlClassifierTestUtils.cleanupTestTrackers();
   });
 
   await SpecialPowers.pushPrefEnv({

@@ -490,7 +490,7 @@ FindDOMTextOffsetAttributes(LocalAccessible* aAcc, int32_t aRenderedStart,
   };
 
   for (auto [selType, attr] : kSelectionTypesToAttributes) {
-    dom::Selection* domSel = frameSel->GetSelection(selType);
+    dom::Selection* domSel = frameSel->GetExistingSelection(selType);
     if (!domSel) {
       continue;
     }
@@ -2341,7 +2341,7 @@ LayoutDeviceIntRect TextLeafRange::Bounds() const {
   // result rectangle.
   LayoutDeviceIntRect result;
   const bool succeeded = WalkLineRects(
-      [&result](TextLeafRange aLine, LayoutDeviceIntRect aLineRect) {
+      [&result](TextLeafRange /*aLine*/, LayoutDeviceIntRect aLineRect) {
         result.UnionRect(result, aLineRect);
       });
 
@@ -2360,7 +2360,7 @@ nsTArray<LayoutDeviceIntRect> TextLeafRange::LineRects() const {
   }
 
   nsTArray<LayoutDeviceIntRect> lineRects;
-  WalkLineRects([&lineRects, &contentBounds](TextLeafRange aLine,
+  WalkLineRects([&lineRects, &contentBounds](TextLeafRange /*aLine*/,
                                              LayoutDeviceIntRect aLineRect) {
     // Clip the bounds to the bounds of the content area.
     bool boundsVisible = true;

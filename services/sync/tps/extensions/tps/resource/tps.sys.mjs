@@ -45,15 +45,14 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
   Svc: "resource://services-sync/util.sys.mjs",
   SyncTelemetry: "resource://services-sync/telemetry.sys.mjs",
+  WBORecord: "resource://services-sync/record.sys.mjs",
   WEAVE_VERSION: "resource://services-sync/constants.sys.mjs",
   Weave: "resource://services-sync/main.sys.mjs",
   extensionStorageSync: "resource://gre/modules/ExtensionStorageSync.sys.mjs",
 });
 
-// Options for wiping data during a sync
+// Options for initial actions to perform before syncing
 const SYNC_RESET_CLIENT = "resetClient";
-const SYNC_WIPE_CLIENT = "wipeClient";
-const SYNC_WIPE_REMOTE = "wipeRemote";
 
 // Actions a test can perform
 const ACTION_ADD = "add";
@@ -62,8 +61,6 @@ const ACTION_MODIFY = "modify";
 const ACTION_SET_ENABLED = "set-enabled";
 const ACTION_SYNC = "sync";
 const ACTION_SYNC_RESET_CLIENT = SYNC_RESET_CLIENT;
-const ACTION_SYNC_WIPE_CLIENT = SYNC_WIPE_CLIENT;
-const ACTION_SYNC_WIPE_REMOTE = SYNC_WIPE_REMOTE;
 const ACTION_VERIFY = "verify";
 const ACTION_VERIFY_NOT = "verify-not";
 
@@ -97,7 +94,7 @@ export var TPS = {
   _syncCount: 0,
   _syncsReportedViaTelemetry: 0,
   _syncErrors: 0,
-  _syncWipeAction: null,
+  _firstSyncAction: null,
   _tabsAdded: 0,
   _tabsFinished: 0,
   _test: null,
@@ -109,8 +106,6 @@ export var TPS = {
   shouldValidatePasswords: false,
   shouldValidateForms: false,
   _placesInitDeferred: Promise.withResolvers(),
-  SYNC_WIPE_CLIENT,
-  SYNC_WIPE_REMOTE,
   ACTIONS: [
     ACTION_ADD,
     ACTION_DELETE,
@@ -118,8 +113,6 @@ export var TPS = {
     ACTION_SET_ENABLED,
     ACTION_SYNC,
     ACTION_SYNC_RESET_CLIENT,
-    ACTION_SYNC_WIPE_CLIENT,
-    ACTION_SYNC_WIPE_REMOTE,
     ACTION_VERIFY,
     ACTION_VERIFY_NOT,
   ],
@@ -181,12 +174,12 @@ export var TPS = {
         case "weave:service:setup-complete":
           this._setupComplete = true;
 
-          if (this._syncWipeAction) {
+          if (this._firstSyncAction) {
             lazy.Weave.Svc.PrefBranch.setStringPref(
               "firstSync",
-              this._syncWipeAction
+              this._firstSyncAction
             );
-            this._syncWipeAction = null;
+            this._firstSyncAction = null;
           }
 
           break;
@@ -1319,24 +1312,26 @@ export var TPS = {
   /**
    * Triggers a sync operation
    *
-   * @param {string} [wipeAction]
-   *        Type of wipe to perform (resetClient, wipeClient, wipeRemote)
+   * @param {string} [firstSyncAction]
+   *        Type of wipe to perform (empty or 'resetClient')
+   * @param {string[]} [engines]
+   *        Engines to sync, as a hint; all of them by default.
    */
-  async Sync(wipeAction) {
+  async Sync(firstSyncAction, engines) {
     if (this._syncActive) {
       this.DumpError("Sync currently active which should be impossible");
       return;
     }
     lazy.Logger.logInfo(
-      "Executing Sync" + (wipeAction ? ": " + wipeAction : "")
+      "Executing Sync" + (firstSyncAction ? ": " + firstSyncAction : "")
     );
 
     // Force a wipe action if requested. In case of an initial sync the pref
     // will be overwritten by Sync itself (see bug 992198), so ensure that we
     // also handle it via the "weave:service:setup-complete" notification.
-    if (wipeAction) {
-      this._syncWipeAction = wipeAction;
-      lazy.Weave.Svc.PrefBranch.setStringPref("firstSync", wipeAction);
+    if (firstSyncAction) {
+      this._firstSyncAction = firstSyncAction;
+      lazy.Weave.Svc.PrefBranch.setStringPref("firstSync", firstSyncAction);
     } else {
       lazy.Weave.Svc.PrefBranch.clearUserPref("firstSync");
     }
@@ -1348,10 +1343,10 @@ export var TPS = {
     ++this._syncCount;
 
     lazy.Logger.logInfo(
-      "Executing Sync" + (wipeAction ? ": " + wipeAction : "")
+      "Executing Sync" + (firstSyncAction ? ": " + firstSyncAction : "")
     );
     this._triggeredSync = true;
-    await lazy.Weave.Service.sync();
+    await lazy.Weave.Service.sync({ engines });
     lazy.Logger.logInfo("Sync is complete");
     // wait a second for things to settle...
     await new Promise(resolve => {
@@ -1524,6 +1519,99 @@ export var TPS = {
     },
     async verify(prefs) {
       await TPS.HandlePrefs(prefs, ACTION_VERIFY);
+    },
+    // Sets local boolean prefs, such as CWTS choices, without syncing them.
+    async set(prefs) {
+      for (let { name, value } of prefs) {
+        lazy.Logger.logInfo(`setting local pref ${name} to ${value}`);
+        Services.prefs.setBoolPref(name, value);
+      }
+    },
+  },
+  // Checks the account's server state; run after a Sync. Every key is
+  // optional and lists names:
+  //   engines/notEngines: must/mustn't be in meta/global's `engines`.
+  //   declined/notDeclined: must/mustn't be in meta/global's `declined`.
+  //   syncIDs: must have an entry in meta/syncids for this account.
+  //   nonEmpty: collections that must have records.
+  //   matchesLocal: engines whose local syncID must be the account's
+  //     generation (meta/global's entry, else meta/syncids'), i.e. that
+  //     haven't been reset away from other devices.
+  //   registryMatchesGlobal: engines whose meta/syncids entry must match
+  //     meta/global's. Legacy clients only write meta/global, so checking
+  //     after a legacy sync shows that it didn't reset the engine.
+  Server: {
+    async fetchMeta(id, url) {
+      let record = new lazy.WBORecord("meta", id);
+      await record.fetch(lazy.Weave.Service.resource(url));
+      if (record.response.status == 404) {
+        return {};
+      }
+      lazy.Logger.AssertTrue(
+        record.response.success,
+        `fetching meta/${id} failed: ${record.response.status}`
+      );
+      return record.payload;
+    },
+
+    async verify(expected) {
+      let service = lazy.Weave.Service;
+      let meta = await TPS.Server.fetchMeta("global", service.metaURL);
+      let syncIDs = await TPS.Server.fetchMeta("syncids", service.syncIDsURL);
+      lazy.Logger.logInfo("meta/global: " + JSON.stringify(meta));
+      lazy.Logger.logInfo("meta/syncids: " + JSON.stringify(syncIDs));
+      let engines = meta.engines || {};
+      let declined = meta.declined || [];
+      let registry =
+        (syncIDs.globalSyncID == meta.syncID && syncIDs.engines) || {};
+
+      let check = (names = [], present, list, what) => {
+        for (let name of names) {
+          lazy.Logger.AssertEqual(
+            list.includes(name),
+            present,
+            `${name} ${what}`
+          );
+        }
+      };
+      check(expected.engines, true, Object.keys(engines), "in engines");
+      check(expected.notEngines, false, Object.keys(engines), "in engines");
+      check(expected.declined, true, declined, "in declined");
+      check(expected.notDeclined, false, declined, "in declined");
+      check(expected.syncIDs, true, Object.keys(registry), "in meta/syncids");
+
+      if (expected.nonEmpty) {
+        let res = service.resource(
+          service.userBaseURL + "info/collection_counts"
+        );
+        let counts = (await res.get()).obj;
+        lazy.Logger.logInfo("collection counts: " + JSON.stringify(counts));
+        check(
+          expected.nonEmpty,
+          true,
+          Object.keys(counts).filter(name => counts[name] > 0),
+          "has records"
+        );
+      }
+
+      for (let name of expected.matchesLocal || []) {
+        let account = engines[name] || registry[name];
+        lazy.Logger.AssertTrue(account, `${name} has an account generation`);
+        let local = await service.engineManager.get(name).getSyncID();
+        lazy.Logger.AssertEqual(local, account.syncID, `${name} local syncID`);
+      }
+      for (let name of expected.registryMatchesGlobal || []) {
+        lazy.Logger.AssertTrue(
+          engines[name] && registry[name],
+          `${name} is in meta/global and meta/syncids`
+        );
+        lazy.Logger.AssertEqual(
+          registry[name].syncID,
+          engines[name].syncID,
+          `${name} meta/syncids entry matches meta/global's`
+        );
+      }
+      lazy.Logger.logPass("verifying server state");
     },
   },
   Tabs: {

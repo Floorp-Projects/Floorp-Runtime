@@ -1248,6 +1248,7 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleText {
   mozilla::StyleOverflowWrap mOverflowWrap = mozilla::StyleOverflowWrap::Normal;
   mozilla::StyleTextAutospace mTextAutospace =
       mozilla::StyleTextAutospace::NO_AUTOSPACE;
+  float mTextAutospaceSize = 0.125;
 
  public:
   mozilla::StyleHyphens mHyphens;
@@ -1324,6 +1325,13 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleText {
       return mozilla::StyleTextAutospace::NO_AUTOSPACE;
     }
     return mTextAutospace;
+  }
+
+  float EffectiveTextAutospaceSize() const {
+    if (!mozilla::StaticPrefs::layout_css_text_autospace_size_enabled()) {
+      return 0.125;
+    }
+    return mTextAutospaceSize;
   }
 
   bool WhiteSpaceIsSignificant() const {
@@ -1706,6 +1714,10 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleDisplay {
 
   // The margin around a shape-outside: <image>.
   mozilla::NonNegativeLengthPercentage mShapeMargin;
+
+  // TODO: This is a grid-lanes container property, so it belongs in
+  // nsStylePosition, but that struct is at its size limit.
+  mozilla::StyleFitTolerance mFitTolerance;
 
   mozilla::StyleShapeOutside mShapeOutside;
 

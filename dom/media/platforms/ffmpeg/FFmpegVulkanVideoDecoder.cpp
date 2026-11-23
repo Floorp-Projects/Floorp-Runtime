@@ -40,7 +40,11 @@
 #  include "mozilla/StaticMutex.h"
 #  include "mozilla/StaticPrefs_media.h"
 #  ifdef __linux__
+#    include <fcntl.h>
+#    include <libdrm/drm.h>
+#    include <sys/ioctl.h>
 #    include <sys/sysmacros.h>
+#    include <unistd.h>
 #  elif defined(XP_SOLARIS) || defined(__sun)
 #    include <sys/mkdev.h>  // major(), minor() for st_rdev
 #  elif defined(XP_FREEBSD) || defined(XP_OPENBSD) || defined(XP_NETBSD)
@@ -477,72 +481,157 @@ uint32_t MapH264VulkanProfileIdc(uint8_t aIdc) {
   }
 }
 
-void H264VulkanProbeFormat(const MediaByteBuffer* aExtraData,
-                           gfx::ColorDepth aLumaDepth,
-                           gfx::ColorDepth* aChromaDepth,
-                           VkVideoChromaSubsamplingFlagBitsKHR* aChroma,
-                           uint32_t* aProfileIdc, uint32_t* aPictureLayout) {
-  SPSData sps;
-  if (!aExtraData || !H264::DecodeSPSFromExtraData(aExtraData, sps)) {
-    *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR;
-    *aChromaDepth = aLumaDepth;
+void VulkanProbeFormat(AVCodecID aCodecID, const MediaByteBuffer* aExtraData,
+                       gfx::ColorDepth aLumaDepth,
+                       gfx::ColorDepth* aChromaDepth,
+                       VkVideoChromaSubsamplingFlagBitsKHR* aChroma,
+                       uint32_t* aProfileIdc, uint32_t* aPictureLayout) {
+  *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR;
+  *aChromaDepth = aLumaDepth;
+  *aProfileIdc = 0;
+  *aPictureLayout = 0;
+  if (aCodecID == AV_CODEC_ID_H264) {
+    // Bug 2063809: skip COINCIDE without SEPARATE_REFERENCE_IMAGES on
+    // FFmpeg < n7.1. Parse this stream's SPS so the caps query matches
+    // the bitstream (profile, chroma, layout), not dummy Main 4:2:0.
     *aProfileIdc = STD_VIDEO_H264_PROFILE_IDC_MAIN;
     *aPictureLayout = VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_PROGRESSIVE_KHR;
-    return;
+    SPSData sps;
+    if (aExtraData && H264::DecodeSPSFromExtraData(aExtraData, sps)) {
+      *aProfileIdc = MapH264VulkanProfileIdc(sps.profile_idc);
+      *aPictureLayout =
+          sps.interlaced
+              ? VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_INTERLACED_INTERLEAVED_LINES_BIT_KHR
+              : VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_PROGRESSIVE_KHR;
+      switch (sps.chroma_format_idc) {
+        case 0:
+          *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_MONOCHROME_BIT_KHR;
+          break;
+        case 2:
+          *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR;
+          break;
+        case 3:
+          *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR;
+          break;
+        default:
+          break;
+      }
+      *aChromaDepth =
+          sps.chroma_format_idc == 0
+              ? aLumaDepth
+              : gfx::ColorDepthForBitDepth(sps.bit_depth_chroma_minus8 + 8);
+    }
   }
-  *aProfileIdc = MapH264VulkanProfileIdc(sps.profile_idc);
-  *aPictureLayout =
-      sps.interlaced
-          ? VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_INTERLACED_INTERLEAVED_LINES_BIT_KHR
-          : VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_PROGRESSIVE_KHR;
-  switch (sps.chroma_format_idc) {
-    case 0:
-      *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_MONOCHROME_BIT_KHR;
-      break;
-    case 2:
-      *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_422_BIT_KHR;
-      break;
-    case 3:
-      *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_444_BIT_KHR;
-      break;
-    default:
-      *aChroma = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR;
-      break;
-  }
-  *aChromaDepth =
-      sps.chroma_format_idc == 0
-          ? aLumaDepth
-          : gfx::ColorDepthForBitDepth(sps.bit_depth_chroma_minus8 + 8);
 }
 
 }  // namespace
 
 bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
-    VulkanCanDecodeFormat(AVCodecID aCodecID, unsigned aAvcodecVersion,
-                          AVBufferRef* aVulkanDeviceContext,
-                          const MediaByteBuffer* aExtraData,
-                          gfx::ColorDepth aColorDepth) const {
-  if (aCodecID != AV_CODEC_ID_H264 ||
-      aAvcodecVersion >= AV_VERSION_INT(61, 19, 100) || !aVulkanDeviceContext) {
-    return true;
+    CheckDecodeCapabilities(AVCodecID aCodecID,
+                            AVBufferRef* aVulkanDeviceContext,
+                            const MediaByteBuffer* aExtraData,
+                            gfx::ColorDepth aColorDepth) {
+  mDriverDistinctDpb = false;
+  if (!aVulkanDeviceContext) {
+    return false;
   }
 
   const auto* devCtx =
       reinterpret_cast<AVHWDeviceContext*>(aVulkanDeviceContext->data);
   const auto* vkCtx = reinterpret_cast<AVVulkanDeviceContext*>(devCtx->hwctx);
 
+  const char* requiredVideoCodecExtension;
+  switch (aCodecID) {
+    case AV_CODEC_ID_H264:
+      requiredVideoCodecExtension = "VK_KHR_video_decode_h264";
+      break;
+    case AV_CODEC_ID_HEVC:
+      requiredVideoCodecExtension = "VK_KHR_video_decode_h265";
+      break;
+#  if LIBAVCODEC_VERSION_MAJOR >= 61
+    case AV_CODEC_ID_AV1:
+      requiredVideoCodecExtension = "VK_KHR_video_decode_av1";
+      break;
+#  endif
+#  if LIBAVCODEC_VERSION_MAJOR >= 62
+    case AV_CODEC_ID_VP9:
+      requiredVideoCodecExtension = "VK_KHR_video_decode_vp9";
+      break;
+#  endif
+    default:
+      return false;
+  }
+
+  bool extensionEnabled = false;
+  for (int i = 0; i < vkCtx->nb_enabled_dev_extensions; ++i) {
+    if (strcmp(vkCtx->enabled_dev_extensions[i], requiredVideoCodecExtension) ==
+        0) {
+      extensionEnabled = true;
+      break;
+    }
+  }
+  if (!extensionEnabled) {
+    FFMPEGV_LOG("Skipping Vulkan decode: required extension {} is not enabled",
+                requiredVideoCodecExtension);
+    return false;
+  }
+
   gfx::ColorDepth chromaDepth;
   VkVideoChromaSubsamplingFlagBitsKHR chroma;
   uint32_t profileIdc;
   uint32_t pictureLayout;
-  H264VulkanProbeFormat(aExtraData, aColorDepth, &chromaDepth, &chroma,
-                        &profileIdc, &pictureLayout);
+  VulkanProbeFormat(aCodecID, aExtraData, aColorDepth, &chromaDepth, &chroma,
+                    &profileIdc, &pictureLayout);
+
+  auto cache = sInstanceFnCache.Lock();
+  EnsureVideoCaps(*cache, vkCtx->phys_dev, aColorDepth, chromaDepth, chroma,
+                  aCodecID, profileIdc, pictureLayout);
+
+  const VkVideoDecodeCapabilitiesKHR* decCaps = nullptr;
+  switch (aCodecID) {
+    case AV_CODEC_ID_H264:
+      if (cache->mH264.mValid) {
+        decCaps = &cache->mH264.mDecodeCaps;
+      }
+      break;
+    case AV_CODEC_ID_HEVC:
+      if (cache->mHevc.mValid) {
+        decCaps = &cache->mHevc.mDecodeCaps;
+      }
+      break;
+#  if LIBAVCODEC_VERSION_MAJOR >= 61
+    case AV_CODEC_ID_AV1:
+      if (cache->mAv1.mValid) {
+        decCaps = &cache->mAv1.mDecodeCaps;
+      }
+      break;
+#  endif
+#  if LIBAVCODEC_VERSION_MAJOR >= 62
+    case AV_CODEC_ID_VP9:
+      if (cache->mVp9.mValid) {
+        decCaps = &cache->mVp9.mDecodeCaps;
+      }
+      break;
+#  endif
+    default:
+      break;
+  }
+  mDriverDistinctDpb =
+      decCaps && (decCaps->flags &
+                  VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR);
+  return true;
+}
+
+bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
+    VulkanCanDecodeFormat(AVCodecID aCodecID, unsigned aAvcodecVersion) const {
+  if (aCodecID != AV_CODEC_ID_H264 ||
+      aAvcodecVersion >= AV_VERSION_INT(61, 19, 100)) {
+    return true;
+  }
 
   // FFmpeg < n7.1 (libavcodec < 61.19.100) mishandles COINCIDE without
   // SEPARATE_REFERENCE_IMAGES and SIGSEGVs in ff_vk_exec_add_dep_frame.
   auto cache = sInstanceFnCache.Lock();
-  EnsureVideoCaps(*cache, vkCtx->phys_dev, aColorDepth, chromaDepth, chroma,
-                  aCodecID, profileIdc, pictureLayout);
   if (cache->mH264.mValid) {
     const bool coincide =
         cache->mH264.mDecodeCaps.flags &
@@ -617,7 +706,8 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::IsLoaded() const {
 
 void FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::InitDrmModifiers(
     VkPhysicalDevice aPhysDev, VkFormat aFormatForModifiers,
-    const nsTArray<uint64_t>* aCompositorMods, VkImageUsageFlags aImageUsages) {
+    const nsTArray<uint64_t>* aCompositorMods, VkImageUsageFlags aImageUsages,
+    AVCodecID aCodecID) {
   mDrmModifiers.clear();
   mExportRequiresDedicatedByModifier.Clear();
   mForcedNvidiaBlockLinear = false;
@@ -790,6 +880,27 @@ void FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::InitDrmModifiers(
     }
   }
 
+  // When codec is H264, on Blackwell with driver 610 or older, use DRM
+  // modifiers with height 1 to avoid corruption.
+  const uint32_t driverMajor = (mVulkanDriverVersion >> 22) & 0x3ff;
+  if (aCodecID == AV_CODEC_ID_H264 &&
+      mNegotiatedCompositorDecoderVendorID == 0x10de &&
+      mNegotiatedCompositorDecoderDeviceID >= 0x2B00 && driverMajor > 0 &&
+      driverMajor <= 610) {
+    auto keptEnd = std::stable_partition(
+        mDrmModifiers.begin(), mDrmModifiers.end(), [](uint64_t modifier) {
+          return (modifier >> 56) == DRM_FORMAT_MOD_VENDOR_NVIDIA &&
+                 (modifier & 0xf) == 1;
+        });
+    if (keptEnd != mDrmModifiers.begin()) {
+      mDrmModifiers.erase(keptEnd, mDrmModifiers.end());
+      FFMPEGV_LOG(
+          "[VULKAN] H264 + NVIDIA driver version <= 610 on Blackwell: Kept {} "
+          "modifier(s) with height parameter 1",
+          mDrmModifiers.size());
+    }
+  }
+
   FFMPEGV_LOG("[VULKAN] Using {} modifiers, first=0x{:x}", mDrmModifiers.size(),
               (unsigned long long)mDrmModifiers[0]);
 }
@@ -851,6 +962,7 @@ static uint32_t sCachedRendererDrmMinor = 0;
 static char sCachedVulkanDeviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE] = {};
 static uint32_t sCachedVulkanVendorID = 0;
 static uint32_t sCachedVulkanDeviceID = 0;
+static uint32_t sCachedVulkanDriverVersion = 0;
 static bool sCachedDecoderMatchesCompositor = false;
 
 static bool PhysicalDeviceHasVulkanVideoDecodeStack(
@@ -888,18 +1000,104 @@ static bool PhysicalDeviceHasVulkanVideoDecodeStack(
 }
 
 #  ifdef XP_LINUX
-static bool NvidiaDrmModesetDisabled() {
+static bool NvidiaDrmModesetDisabled(
+    const VkPhysicalDeviceDrmPropertiesEXT& aDrmProps) {
+  enum class ModesetStatus { Enabled, Disabled, Unknown };
   static std::once_flag sOnce;
-  static bool sDisabled = false;
+  static ModesetStatus sStatus = ModesetStatus::Disabled;
   std::call_once(sOnce, [] {
     FILE* f = fopen("/sys/module/nvidia_drm/parameters/modeset", "r");
+    // Prefer the explicit module setting when it is readable.
     if (f) {
       const int c = fgetc(f);
       fclose(f);
-      sDisabled = c == 'N' || c == 'n' || c == '0';
+      // A failed or empty read must not be treated as enabled modesetting.
+      if (c == EOF) {
+        FFMPEGV_LOG("Cannot read nvidia_drm modeset value: skipping NVIDIA");
+        return;
+      }
+      sStatus = c == 'N' || c == 'n' || c == '0' ? ModesetStatus::Disabled
+                                                 : ModesetStatus::Enabled;
+    } else {
+      const int error = errno;
+      // Older drivers restrict this file to root; its value remains unknown.
+      if (error == EACCES || error == EPERM) {
+        FFMPEGV_LOG(
+            "Cannot read nvidia_drm modeset (errno={}): checking DRM "
+            "capability",
+            error);
+        sStatus = ModesetStatus::Unknown;
+      } else {
+        FFMPEGV_LOG(
+            "Cannot open nvidia_drm modeset (errno={}): skipping NVIDIA",
+            error);
+      }
     }
   });
-  return sDisabled;
+  // Only unknown sysfs results need a per-GPU DRM capability query.
+  if (sStatus != ModesetStatus::Unknown) {
+    return sStatus == ModesetStatus::Disabled;
+  }
+  // Missing DRM properties leave the probe inconclusive; keep Vulkan eligible.
+  if (!aDrmProps.hasRender) {
+    FFMPEGV_LOG(
+        "No DRM render node reported: modeset status unknown, trying Vulkan "
+        "decode");
+    return false;
+  }
+
+  static nsTHashMap<uint64_t, bool> sDisabledByRenderNode;
+  const uint64_t key = (static_cast<uint64_t>(aDrmProps.renderMajor) << 32) |
+                       static_cast<uint32_t>(aDrmProps.renderMinor);
+  return sDisabledByRenderNode.LookupOrInsertWith(key, [&] {
+    nsPrintfCString path("/dev/dri/renderD%lld",
+                         static_cast<long long>(aDrmProps.renderMinor));
+    const int fd = open(path.get(), O_RDWR | O_CLOEXEC);
+    // Access or sandbox restrictions do not establish that modesetting is
+    // disabled.
+    if (fd < 0) {
+      const int error = errno;
+      FFMPEGV_LOG(
+          "Cannot open {} (errno={}): modeset status unknown, trying Vulkan "
+          "decode",
+          path.get(), error);
+      return false;
+    }
+    auto closeFd = MakeScopeExit([&] { close(fd); });
+
+    struct stat st = {};
+    // Only trust capabilities from the candidate GPU's own DRM render node.
+    if (fstat(fd, &st) != 0 || !S_ISCHR(st.st_mode) ||
+        static_cast<int64_t>(major(st.st_rdev)) != aDrmProps.renderMajor ||
+        static_cast<int64_t>(minor(st.st_rdev)) != aDrmProps.renderMinor) {
+      FFMPEGV_LOG(
+          "DRM fd does not match candidate GPU: modeset status unknown, trying "
+          "Vulkan decode");
+      return false;
+    }
+
+    struct drm_get_cap cap = {};
+    cap.capability = DRM_CAP_DUMB_BUFFER;
+    // NVIDIA exposes dumb-buffer support when modesetting is enabled.
+    // Querying it requires no buffer allocation.
+    if (ioctl(fd, DRM_IOCTL_GET_CAP, &cap) < 0) {
+      const int error = errno;
+      // The kernel rejects this KMS capability when DRIVER_MODESET is absent.
+      if (error == EOPNOTSUPP) {
+        FFMPEGV_LOG(
+            "NVIDIA DRM modesetting is unsupported: skipping candidate");
+        return true;
+      }
+      FFMPEGV_LOG(
+          "Cannot query DRM_CAP_DUMB_BUFFER (errno={}): modeset status "
+          "unknown, "
+          "trying Vulkan decode",
+          error);
+      return false;
+    }
+    FFMPEGV_LOG("NVIDIA DRM_CAP_DUMB_BUFFER={}", cap.value);
+    return cap.value == 0;
+  });
 }
 #  endif
 
@@ -935,6 +1133,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
            VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
     mNegotiatedCompositorDecoderVendorID = sCachedVulkanVendorID;
     mNegotiatedCompositorDecoderDeviceID = sCachedVulkanDeviceID;
+    mVulkanDriverVersion = sCachedVulkanDriverVersion;
     mDecoderMatchesCompositor = sCachedDecoderMatchesCompositor;
     FFMPEGV_LOG(
         "Reusing cached Vulkan device for video decoding: {} (vendorID=0x{:x}, "
@@ -986,20 +1185,20 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
   for (uint32_t i = 0; i < count; i++) {
     VkPhysicalDeviceProperties p = {};
     bool isDecoderMatchesRendererFound = false;
-    if (rendererDrmMajor && rendererDrmMinor &&
-        vkGetPhysicalDeviceProperties2) {
-      VkPhysicalDeviceDrmPropertiesEXT drmProps = {};
-      drmProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT;
+    VkPhysicalDeviceDrmPropertiesEXT drmProps = {};
+    drmProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT;
+    if (vkGetPhysicalDeviceProperties2) {
       VkPhysicalDeviceProperties2 props2 = {};
       props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
       props2.pNext = &drmProps;
       vkGetPhysicalDeviceProperties2(devices[i], &props2);
       p = props2.properties;
       isDecoderMatchesRendererFound =
-          (drmProps.hasRender && rendererDrmMajor == drmProps.renderMajor &&
-           rendererDrmMinor == drmProps.renderMinor) ||
-          (drmProps.hasPrimary && rendererDrmMajor == drmProps.primaryMajor &&
-           rendererDrmMinor == drmProps.primaryMinor);
+          rendererDrmMajor && rendererDrmMinor &&
+          ((drmProps.hasRender && rendererDrmMajor == drmProps.renderMajor &&
+            rendererDrmMinor == drmProps.renderMinor) ||
+           (drmProps.hasPrimary && rendererDrmMajor == drmProps.primaryMajor &&
+            rendererDrmMinor == drmProps.primaryMinor));
     } else {
       vkGetPhysicalDeviceProperties(devices[i], &p);
     }
@@ -1013,11 +1212,13 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
           continue;
         }
 #  ifdef XP_LINUX
+        // The modeset workaround and DRM capability fallback are NVIDIA-only.
         if (p.vendorID == 0x10de) {
           FFMPEGV_LOG("Checking {}: nvidia_drm modeset status", p.deviceName);
-          if (NvidiaDrmModesetDisabled()) {
-            FFMPEGV_LOG("Skipping {}: nvidia_drm modeset is disabled",
-                        p.deviceName);
+          if (NvidiaDrmModesetDisabled(drmProps)) {
+            FFMPEGV_LOG(
+                "Skipping {}: nvidia_drm modeset unavailable or disabled",
+                p.deviceName);
             continue;
           }
         }
@@ -1060,11 +1261,13 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
          VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
   mNegotiatedCompositorDecoderVendorID = validDevices[0].first.vendorID;
   mNegotiatedCompositorDecoderDeviceID = validDevices[0].first.deviceID;
+  mVulkanDriverVersion = validDevices[0].first.driverVersion;
   mDecoderMatchesCompositor = validDevices[0].second;
   memcpy(sCachedVulkanDeviceName, mNegotiatedVulkanDeviceName,
          VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
   sCachedVulkanVendorID = mNegotiatedCompositorDecoderVendorID;
   sCachedVulkanDeviceID = mNegotiatedCompositorDecoderDeviceID;
+  sCachedVulkanDriverVersion = mVulkanDriverVersion;
   sCachedDecoderMatchesCompositor = mDecoderMatchesCompositor;
   sCachedRendererDrmMajor = rendererDrmMajor;
   sCachedRendererDrmMinor = rendererDrmMinor;

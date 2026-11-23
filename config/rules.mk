@@ -117,21 +117,6 @@ endif
 endif # CC_TYPE == clang-cl
 endif # WINNT
 
-ifeq (arm-Darwin,$(TARGET_CPU)-$(OS_TARGET))
-ifdef PROGRAM
-MOZ_PROGRAM_LDFLAGS += -Wl,-rpath -Wl,@executable_path/Frameworks
-endif
-endif
-
-# For Mac executables, set the @rpath to be @executable_path by default so that
-# shared libraries built with an @rpath install name in the same directory
-# as the executable can be resolved. Executables not in the same directory
-# should override the @rpath with a relative path such as @executable_path/../
-# depending on their install location.
-ifeq ($(OS_ARCH),Darwin)
-MOZ_PROGRAM_LDFLAGS += -Wl,-rpath,@executable_path
-endif
-
 ifeq ($(OS_ARCH),WINNT)
 ifeq ($(CC_TYPE),clang)
 MOZ_PROGRAM_LDFLAGS += -Wl,-pdb,$(dir $@)/$(LINK_PDBFILE)
@@ -224,15 +209,6 @@ endif
 # TAG_PROGRAM := ctags -L -
 #
 TAG_PROGRAM		= xargs etags -a
-
-#
-# Turn on C++ linking if we have any .cpp or .mm files
-# (moved this from config.mk so that config.mk can be included
-#  before the CPPSRCS are defined)
-#
-ifneq ($(HOST_CPPSRCS),)
-HOST_CPP_PROG_LINK	= 1
-endif
 
 #
 # MacOS X specific stuff
@@ -374,9 +350,9 @@ $(PROGRAM): $(PROGOBJS) $(STATIC_LIBS) $(call resfile,$(PROGRAM)) $(GLOBAL_DEPS)
 	$(REPORT_BUILD)
 	$(call BUILDSTATUS,START_Program $(@F))
 ifeq (clang-cl_WINNT,$(CC_TYPE)_$(OS_ARCH))
-	$(LINKER) -OUT:$@ -PDB:$(LINK_PDBFILE) -IMPLIB:$(basename $(@F)).lib $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(MOZ_PROGRAM_LDFLAGS) $($(notdir $@)_OBJS) $(filter %.res,$^) $(STATIC_LIBS) $(SHARED_LIBS) $(OS_LIBS)
+	$(LINKER) -OUT:$@ -PDB:$(LINK_PDBFILE) -IMPLIB:$(basename $(@F)).lib $(WIN32_EXE_LDFLAGS) $(COMPUTED_PROGRAM_LDFLAGS) $(LDFLAGS) $(MOZ_PROGRAM_LDFLAGS) $($(notdir $@)_OBJS) $(filter %.res,$^) $(STATIC_LIBS) $(SHARED_LIBS) $(OS_LIBS)
 else # !WINNT || !clang-cl
-	$(call EXPAND_CC_OR_CXX,$@) -o $@ $(COMPUTED_CXX_LDFLAGS) $($(notdir $@)_OBJS) $(filter %.res,$^) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(STATIC_LIBS) $(MOZ_PROGRAM_LDFLAGS) $(SHARED_LIBS) $(OS_LIBS)
+	$(call EXPAND_CC_OR_CXX,$@) -o $@ $(COMPUTED_CXX_LDFLAGS) $($(notdir $@)_OBJS) $(filter %.res,$^) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(STATIC_LIBS) $(COMPUTED_PROGRAM_LDFLAGS) $(MOZ_PROGRAM_LDFLAGS) $(SHARED_LIBS) $(OS_LIBS)
 	$(call py_action,check_binary $(@F),$@)
 endif # WINNT && clang-cl
 
@@ -416,9 +392,9 @@ $(SIMPLE_PROGRAMS):
 	$(REPORT_BUILD)
 	$(call BUILDSTATUS,START_Program $(@F))
 ifeq (clang-cl_WINNT,$(CC_TYPE)_$(OS_ARCH))
-	$(LINKER) -out:$@ -pdb:$(LINK_PDBFILE) $($@_OBJS) $(filter %.res,$^) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(MOZ_PROGRAM_LDFLAGS) $(STATIC_LIBS) $(SHARED_LIBS) $(OS_LIBS)
+	$(LINKER) -out:$@ -pdb:$(LINK_PDBFILE) $($@_OBJS) $(filter %.res,$^) $(WIN32_EXE_LDFLAGS) $(COMPUTED_PROGRAM_LDFLAGS) $(LDFLAGS) $(MOZ_PROGRAM_LDFLAGS) $(STATIC_LIBS) $(SHARED_LIBS) $(OS_LIBS)
 else
-	$(call EXPAND_CC_OR_CXX,$@) $(COMPUTED_CXX_LDFLAGS) -o $@ $($@_OBJS) $(filter %.res,$^) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(STATIC_LIBS) $(MOZ_PROGRAM_LDFLAGS) $(SHARED_LIBS) $(OS_LIBS)
+	$(call EXPAND_CC_OR_CXX,$@) $(COMPUTED_CXX_LDFLAGS) -o $@ $($@_OBJS) $(filter %.res,$^) $(WIN32_EXE_LDFLAGS) $(LDFLAGS) $(STATIC_LIBS) $(COMPUTED_PROGRAM_LDFLAGS) $(MOZ_PROGRAM_LDFLAGS) $(SHARED_LIBS) $(OS_LIBS)
 	$(call py_action,check_binary $(@F),$@)
 endif # WINNT && clang-cl
 
@@ -433,7 +409,7 @@ $(HOST_SIMPLE_PROGRAMS): host_%$(HOST_BIN_SUFFIX): $(HOST_LIBS) $(GLOBAL_DEPS)
 ifeq (WINNT_clang-cl,$(HOST_OS_ARCH)_$(HOST_CC_TYPE))
 	$(HOST_LINKER) -OUT:$@ -PDB:$(HOST_PDBFILE) $($(notdir $@)_OBJS) $(WIN32_EXE_LDFLAGS) $(HOST_LDFLAGS) $(HOST_LINKER_LIBPATHS) $(HOST_LIBS) $(HOST_EXTRA_LIBS)
 else
-ifneq (,$(HOST_CPPSRCS)$(USE_HOST_CXX))
+ifeq ($(HOST_CPP_PROG_LINK),1)
 	$(HOST_CXX) $(HOST_OUTOPTION)$@ $(HOST_CXX_LDFLAGS) $(HOST_LDFLAGS) $($(notdir $@)_OBJS) $(HOST_LIBS) $(HOST_EXTRA_LIBS)
 else
 	$(HOST_CC) $(HOST_OUTOPTION)$@ $(HOST_C_LDFLAGS) $(HOST_LDFLAGS) $($(notdir $@)_OBJS) $(HOST_LIBS) $(HOST_EXTRA_LIBS)
@@ -577,6 +553,13 @@ endif # WINCHECKSEC
 endif # WINNT
 endif
 endef
+
+# Binaries installed into dist/bin/gtest (the gtest libxul and the libraries
+# its tests load) are only used by gtest runs. Keep their symbols out of the
+# main symbols archive, so that other tasks don't have to download them.
+ifneq (,$(filter $(DIST)/bin/gtest%,$(FINAL_TARGET)))
+DUMP_SYMBOLS_FLAGS += --symbols-dir=crashreporter-symbols-gtest
+endif
 
 ifneq (,$(filter $(DIST)/bin%,$(FINAL_TARGET)))
 DUMP_SYMS_TARGETS := $(filter-out $(MOZBUILD_NON_DEFAULT_TARGETS),$(SHARED_LIBRARY) $(PROGRAM) $(SIMPLE_PROGRAMS) $(RUST_PROGRAMS))
@@ -765,72 +748,6 @@ endif
 
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
-
-###############################################################################
-# Bunch of things that extend the 'export' rule (in order):
-###############################################################################
-
-ifneq ($(XPI_NAME),)
-$(FINAL_TARGET):
-	$(NSINSTALL) -D $@
-
-export:: $(FINAL_TARGET)
-endif
-
-################################################################################
-# CHROME PACKAGING
-
-chrome::
-	$(MAKE) realchrome
-	$(LOOP_OVER_DIRS)
-
-$(FINAL_TARGET)/chrome: $(call mkdir_deps,$(FINAL_TARGET)/chrome)
-
-ifneq (,$(JAR_MANIFEST))
-ifndef NO_DIST_INSTALL
-
-misc realchrome:: $(FINAL_TARGET)/chrome
-	$(call py_action,jar_maker $(subst $(topsrcdir)/,,$(JAR_MANIFEST)),\
-	  $(QUIET) -d $(FINAL_TARGET) \
-	  $(MAKE_JARS_FLAGS) $(DEFINES) $(ACDEFINES) \
-	  $(JAR_MANIFEST))
-
-ifdef AB_CD
-.PHONY: l10n
-l10n: misc ;
-endif
-endif
-
-endif
-
-# Usage:
-# xpi_package_rule(package-name,directory-to-package,relative-target-directory,parent-rule)
-# where:
-#     - package-name is the name of the xpi package, without suffix
-#     - directory-to-package is the path to the directory to package
-#     - relative-target-directory is the path to the directory where
-#       the archive is generated, relative to directory-to-package
-#     - parent-rule is the name(s) of the rule(s) this rule should be added to
-define xpi_package_rule
-$$(abspath $(3))/$(1).xpi: $$(call mkdir_deps,$(3) $$(MDDEPDIR))
-	@echo 'Packaging $(1).xpi...'
-	$$(call py_action,zip $(1).xpi,-C $(2) $$@ '*' --dep-target $$@ --dep-file $$(MDDEPDIR)/$(1).d)
-
-$(4):: $$(abspath $(3))/$(1).xpi
-
--include $$(MDDEPDIR)/$(1).d
-
-endef
-
-ifdef XPI_TESTDIR
-$(eval $(call xpi_package_rule,$(XPI_PKGNAME),$(srcdir),$(XPI_TESTDIR),misc))
-else
-# When you move this out of the tools tier, please remove the corresponding
-# hacks in recursivemake.py that check if Makefile.in sets the variable.
-ifdef XPI_PKGNAME
-$(eval $(call xpi_package_rule,$(XPI_PKGNAME),$(FINAL_TARGET),$(FINAL_TARGET)/..,tools realchrome))
-endif
-endif
 
 #############################################################################
 # MDDEPDIR is the subdirectory where all the dependency files are placed.
@@ -1051,7 +968,7 @@ endif
 # Fake targets.  Always run these rules, even if a file/directory with that
 # name already exists.
 #
-.PHONY: all alltags boot chrome realchrome export install libs makefiles run_apprunner tools $(DIRS) FORCE
+.PHONY: all alltags boot export install libs makefiles run_apprunner tools $(DIRS) FORCE
 
 # Used as a dependency to force targets to rebuild
 FORCE:

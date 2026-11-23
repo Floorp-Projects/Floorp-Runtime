@@ -152,11 +152,26 @@ add_task(async function test_show_selection_menu() {
   Services.prefs.setBoolPref("browser.ml.chat.enabled", false);
 
   Assert.ok(
+    GenAI.canShowSelectionMenu,
+    "Menu still shows for Search when the chatbot is blocked"
+  );
+
+  Services.prefs.setBoolPref("browser.highlightToSearch.search.enabled", false);
+
+  Assert.ok(
+    GenAI.canShowSelectionMenu,
+    "Menu still shows for Copy when the chatbot is blocked and Search is off"
+  );
+
+  Services.prefs.setBoolPref("browser.highlightToSearch.copy.enabled", false);
+
+  Assert.ok(
     !GenAI.canShowSelectionMenu,
-    "No menu when the chatbot is blocked, as it is the only action so far"
+    "No menu when the chatbot, search and copy have nothing to offer"
   );
 
   Services.prefs.setBoolPref("browser.ml.chat.enabled", true);
+  Services.prefs.setBoolPref("browser.highlightToSearch.search.enabled", true);
   Services.prefs.setBoolPref("browser.highlightToSearch.enabled", false);
 
   Assert.ok(!GenAI.canShowSelectionMenu, "Gate needs the feature enabled too");

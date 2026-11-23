@@ -2616,6 +2616,12 @@ data class RemoteSettingsContext (
     var `country`: kotlin.String? = null 
     , 
     /**
+     * Exposed as `env.distribution`.  When unset, the env value is `"default"`, matching the
+     * Gecko client which reads the `distribution.id` pref with that fallback.
+     */
+    var `distribution`: kotlin.String? = null 
+    , 
+    /**
      * Extra attributes to add to the env for JEXL filtering.
      *
      * Use this for prototyping / testing new features.  In the long-term, new fields should be
@@ -2646,6 +2652,7 @@ public object FfiConverterTypeRemoteSettingsContext: FfiConverterRustBuffer<Remo
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterOptionalMapStringString.read(buf),
         )
     }
@@ -2659,6 +2666,7 @@ public object FfiConverterTypeRemoteSettingsContext: FfiConverterRustBuffer<Remo
             FfiConverterOptionalString.allocationSize(value.`osVersion`) +
             FfiConverterOptionalString.allocationSize(value.`formFactor`) +
             FfiConverterOptionalString.allocationSize(value.`country`) +
+            FfiConverterOptionalString.allocationSize(value.`distribution`) +
             FfiConverterOptionalMapStringString.allocationSize(value.`customTargettingAttributes`)
     )
 
@@ -2671,6 +2679,7 @@ public object FfiConverterTypeRemoteSettingsContext: FfiConverterRustBuffer<Remo
             FfiConverterOptionalString.write(value.`osVersion`, buf)
             FfiConverterOptionalString.write(value.`formFactor`, buf)
             FfiConverterOptionalString.write(value.`country`, buf)
+            FfiConverterOptionalString.write(value.`distribution`, buf)
             FfiConverterOptionalMapStringString.write(value.`customTargettingAttributes`, buf)
     }
 }

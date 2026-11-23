@@ -445,6 +445,16 @@
         });
     };
 
+    window.test_driver_internal.bidi.emulation.set_media_features_override =
+        function (params) {
+            return create_action(
+                "bidi.emulation.set_media_features_override", {
+                    // Default to the current window.
+                    contexts: [window],
+                    ...(params ?? {})
+                });
+        }
+
     window.test_driver_internal.bidi.emulation.set_screen_orientation_override =
         function (params) {
             return create_action(
@@ -459,6 +469,16 @@
         function (params) {
             return create_action(
                 "bidi.emulation.set_touch_override", {
+                    // Default to the current window.
+                    contexts: [window],
+                    ...(params ?? {})
+                });
+        }
+
+    window.test_driver_internal.bidi.emulation.set_viewport_meta_override =
+        function (params) {
+            return create_action(
+                "bidi.emulation.set_viewport_meta_override", {
                     // Default to the current window.
                     contexts: [window],
                     ...(params ?? {})

@@ -12,6 +12,7 @@
 #include "mozilla/CycleCollectedJSContext.h"
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/EventStateManager.h"
+#include "mozilla/FocusModel.h"
 #include "mozilla/MappedDeclarationsBuilder.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/PresShell.h"
@@ -141,7 +142,7 @@ void HTMLSelectElement::SetupShadowTree() {
   {
     RefPtr slot = doc->CreateHTMLElement(nsGkAtoms::slot);
     slot->SetAttr(kNameSpaceID_None, nsGkAtoms::name,
-                  u"internal-select-button"_ns, false);
+                  u"internal-select-button"_ns, false, IsKnownNewAttr::Yes);
     sr->AppendChildTo(slot, false, IgnoreErrors());
   }
 
@@ -166,7 +167,8 @@ void HTMLSelectElement::SetupShadowTree() {
   picker->SetAttr(nsGkAtoms::name, u"select"_ns, IgnoreErrors());
   {
     nsAutoString popoverstate;
-    picker->SetAttr(kNameSpaceID_None, nsGkAtoms::popover, popoverstate, false);
+    picker->SetAttr(kNameSpaceID_None, nsGkAtoms::popover, popoverstate, false,
+                    IsKnownNewAttr::Yes);
     // SetAttr queues AfterSetPopoverAttr asynchronously, but
     // ShowPopoverInternal needs PopoverAttributeState set immediately.
     picker->EnsurePopoverData().SetPopoverAttributeState(
@@ -292,6 +294,11 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(
     HTMLSelectElement, nsGenericHTMLFormControlElementWithState)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mValidity)
+  // NOTE(emilio): Unlinking mOptions is not quite needed to break the cycle
+  // (the own content list unlink removes the root node, and unlinking would
+  // force a bunch of null-checks). However, we mark it dirty so that the list
+  // is not in an inconsistent state.
+  tmp->mOptions->SetDirty();
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mSelectedOptions)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mListBoxSelection.mStart)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mListBoxSelection.mEnd)
@@ -725,7 +732,7 @@ void HTMLSelectElement::DoScrollToOption(int32_t aIndex) {
   if (!option) {
     return;
   }
-  if (nsIFrame* childFrame = option->GetPrimaryFrame()) {
+  if (nsIFrame* childFrame = option->GetPrimaryFrame(FlushType::Layout)) {
     RefPtr<mozilla::PresShell> presShell = childFrame->PresShell();
     presShell->ScrollFrameIntoView(childFrame, Nothing(), AxisScrollParams(),
                                    AxisScrollParams(),
@@ -1019,7 +1026,7 @@ bool HTMLSelectElement::IsHTMLFocusable(IsFocusableFlags aFlags,
     return true;
   }
 
-  *aIsFocusable = !IsDisabled();
+  *aIsFocusable = (aFlags & IsFocusableFlags::IgnoreDisabled) || !IsDisabled();
 
   return false;
 }
@@ -1214,7 +1221,7 @@ void HTMLSelectElement::DoneAddingChildren(bool aHaveNotified) {
   }
 
   // Notify the frame
-  ResetListBoxSelection(/* aAllowScrolling = */ true);
+  ResetListBoxSelection();
 
   if (!mInhibitStateRestoration) {
     GenerateStateKey();
@@ -1346,7 +1353,7 @@ bool HTMLSelectElement::RestoreState(PresState* aState) {
   const PresContentData& state = aState->contentData();
   if (state.type() == PresContentData::TSelectContentData) {
     RestoreStateTo(state.get_SelectContentData());
-    ResetListBoxSelection(/* aAllowScrolling = */ true);
+    ResetListBoxSelection();
   }
 
   if (aState->disabledSet() && !aState->disabled()) {
@@ -1359,7 +1366,7 @@ bool HTMLSelectElement::RestoreState(PresState* aState) {
 void HTMLSelectElement::RestoreStateTo(const SelectContentData& aNewSelected) {
   if (!mIsDoneAddingChildren) {
     // Make a copy of the state for us to restore from in the future.
-    mRestoreState = MakeUnique<SelectContentData>(aNewSelected);
+    mRestoreState = std::make_unique<SelectContentData>(aNewSelected);
     return;
   }
 
@@ -1433,7 +1440,7 @@ HTMLSelectElement::Reset() {
 
   OnSelectionChanged();
   SetUserInteracted(false);
-  ResetListBoxSelection(/* aAllowScrolling = */ true);
+  ResetListBoxSelection();
 
   // https://html.spec.whatwg.org/#update-a-select's-descendant-selectedcontent-elements
   UpdateDescendantSelectedContentElements();
@@ -1478,17 +1485,15 @@ HTMLSelectElement::SubmitNamesValues(FormData* aFormData) {
   return NS_OK;
 }
 
-void HTMLSelectElement::ResetListBoxSelection(bool aAllowScrolling) {
+void HTMLSelectElement::ResetListBoxSelection() {
   if (!IsDoneAddingChildren() || IsCombobox()) {
     return;
   }
   mListBoxSelection.Clear();
-  if (nsListControlFrame* listFrame = GetListBoxFrame()) {
-    listFrame->OnSelectionReset();
+  if (nsListControlFrame* listBox = GetListBoxFrame()) {
+    listBox->InvalidateFocus();
   }
-  if (aAllowScrolling) {
-    ScrollToSelectedOption();
-  }
+  ScrollToSelectedOption();
 }
 
 bool HTMLSelectElement::IsValueMissing(IgnoredOptionList aIgnored) const {
@@ -1792,11 +1797,6 @@ void HTMLSelectElement::ContentAppendedOrInserted(nsIContent* aFirstNewContent,
     anySelected |= CollectOptions(*this, cur, options);
     if (!aIsAppend) {
       break;
-    }
-  }
-  if (!options.IsEmpty()) {
-    if (nsListControlFrame* listBox = GetListBoxFrame()) {
-      listBox->OptionsAdded();
     }
   }
   if (anySelected && !Multiple()) {
@@ -2890,7 +2890,15 @@ void HTMLSelectElement::UpdateSelectedContentElement(
       selectedIndex >= 0 ? Item(static_cast<uint32_t>(selectedIndex)) : nullptr;
 
   // 2. If option is null, then clear a selectedcontent given selectedcontent.
-  if (!option) {
+  //
+  // NOTE(emilio): The IsDoneAddingChildren() check is a bit of a hack-around.
+  // If the option isn't done adding children, we shouldn't really have
+  // scheduled an update yet (the update was intended to be sync before the
+  // option was even here, e.g. like the ones on BindToTree, and the option
+  // wasn't supposed to be observable). But cloning an option before the parser
+  // is done is a fun way to maybe run scripts twice or so, so prevent that from
+  // happening explicitly.
+  if (!option || !option->IsDoneAddingChildren()) {
     aSelectedContent->ClearContent();
     return;
   }

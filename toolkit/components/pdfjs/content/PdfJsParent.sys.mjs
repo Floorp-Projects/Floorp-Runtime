@@ -28,7 +28,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PdfJsFeaturesNotification:
     "resource://pdf.js/PdfJsFeaturesNotification.sys.mjs",
   PdfJsGuessAltTextFeature: "resource://pdf.js/PdfJsAIFeature.sys.mjs",
-  PdfJsPrint: "resource://pdf.js/PdfJsPrint.sys.mjs",
   Progress: "chrome://global/content/ml/Utils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
@@ -38,6 +37,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
 
 const IMAGE_TO_TEXT_TASK = "moz-image-to-text";
 const ML_ENGINE_MAX_TIMEOUT = 60000;
+// Lets a test run the real alt-text model in automation.
+const ALT_TEXT_INFERENCE_IN_AUTOMATION_PREF =
+  "pdfjs.altText.inferenceInAutomation";
 const PDFJS_DB_NAME = "pdfjs";
 const PDFJS_DB_VERSION = 1;
 const PDFJS_STORE_NAME = "signatures";
@@ -122,6 +124,13 @@ export function filterCertsForView(data) {
   return certs.length ? certs : null;
 }
 
+function stubAltTextInference() {
+  return (
+    Cu.isInAutomation &&
+    !Services.prefs.getBoolPref(ALT_TEXT_INFERENCE_IN_AUTOMATION_PREF, false)
+  );
+}
+
 /**
  * Validate an `mlGuess` IPC payload before forwarding it to the ML engine.
  *
@@ -172,9 +181,9 @@ export class PdfJsParent extends JSWindowActorParent {
   #nextTextRequestId = 0;
 
   /**
-   * Holds the Promise resolves for getTextContent requests.
+   * Pending getTextContent() promises and their resolvers.
    *
-   * @type {Map<number, (text: string) => void>}
+   * @type {Map<number, PromiseWithResolvers<string>>}
    */
   #textRequests = new Map();
 
@@ -196,6 +205,14 @@ export class PdfJsParent extends JSWindowActorParent {
   }
 
   didDestroy() {
+    const error = new DOMException(
+      "PdfJs actor destroyed with a pending text request",
+      "AbortError"
+    );
+    for (const { reject } of this.#textRequests.values()) {
+      reject(error);
+    }
+    this.#textRequests.clear();
     this._removeEventListener();
     if (this.#signatureStorageChangedObserver) {
       Services.obs.removeObserver(
@@ -238,14 +255,6 @@ export class PdfJsParent extends JSWindowActorParent {
         return this._verifyPdfSignature(aMsg);
       case "PDFJS:Parent:viewPdfCertificate":
         return this._viewPdfCertificate(aMsg);
-      case "PDFJS:Parent:printToPDF": {
-        return lazy.PdfJsPrint.printToPDF(
-          this.browsingContext,
-          BrowsingContext.get(aMsg.data.id),
-          aMsg.data.width,
-          aMsg.data.height
-        );
-      }
       case "PDFJS:Parent:openAboutPdfFeatures":
         return this._openAboutPdfFeatures();
       case "PDFJS:Parent:claimFeaturesNotification":
@@ -255,14 +264,16 @@ export class PdfJsParent extends JSWindowActorParent {
   }
 
   _openAboutPdfFeatures() {
-    // Do not let an embedded viewer navigate the top-level tab.
+    // Ignore embedded viewers.
     if (this.browsingContext !== this.browsingContext.top) {
       return;
     }
-    const browser = this.browser;
-    browser?.documentGlobal.openTrustedLinkIn("about:pdf#features", "current", {
-      targetBrowser: browser,
-    });
+    // Keep the PDF and unsaved edits open.
+    this.browser?.documentGlobal.openTrustedLinkIn(
+      "about:pdf#features",
+      "tab",
+      { inBackground: false, relatedToCurrent: true }
+    );
   }
 
   _claimFeaturesNotification() {
@@ -398,14 +409,14 @@ export class PdfJsParent extends JSWindowActorParent {
    * @returns {Promise<string>}
    */
   getTextContent() {
-    const { promise, resolve } = Promise.withResolvers();
+    const capability = Promise.withResolvers();
     const requestId = this.#nextTextRequestId++;
-    this.#textRequests.set(requestId, resolve);
+    this.#textRequests.set(requestId, capability);
     this.sendAsyncMessage("PDFJS:Child:handleEvent", {
       type: "requestTextContent",
       detail: { requestId },
     });
-    return promise;
+    return capability.promise;
   }
 
   async #openDatabase() {
@@ -590,7 +601,7 @@ export class PdfJsParent extends JSWindowActorParent {
       const now = ChromeUtils.now();
 
       let response;
-      if (Cu.isInAutomation) {
+      if (stubAltTextInference()) {
         response = { output: "In Automation" };
       } else {
         const engine = await this.#createAIEngine(service, null);
@@ -619,7 +630,7 @@ export class PdfJsParent extends JSWindowActorParent {
       throw new Error("Invalid service");
     }
 
-    if (Cu.isInAutomation) {
+    if (stubAltTextInference()) {
       PdfJsTelemetry.report({
         type: "editing",
         data: {
@@ -763,7 +774,7 @@ export class PdfJsParent extends JSWindowActorParent {
           engineId: lazy.PdfJsGuessAltTextFeature.engineId,
           featureId: lazy.PdfJsGuessAltTextFeature.id,
           taskName,
-          backend: "onnx-native",
+          backend: "best-onnx",
         },
         aggregator?.aggregateCallback.bind(aggregator) || null
       );
@@ -855,9 +866,9 @@ export class PdfJsParent extends JSWindowActorParent {
    * @param {{ data: { text: string, requestId: number } }}
    */
   _reportText({ data }) {
-    const resolve = this.#textRequests.get(data.requestId);
+    const capability = this.#textRequests.get(data.requestId);
     this.#textRequests.delete(data.requestId);
-    if (!resolve) {
+    if (!capability) {
       console.error(
         "Unable to find the text content request",
         data.requestId,
@@ -865,7 +876,7 @@ export class PdfJsParent extends JSWindowActorParent {
       );
       return;
     }
-    resolve(data.text);
+    capability.resolve(data.text);
   }
 
   _updateMatchesCount(aMsg) {
@@ -947,6 +958,13 @@ export class PdfJsParent extends JSWindowActorParent {
       throw new Error(
         "FindEventManager was not bound for the current browser."
       );
+    }
+    // Open and focus the findbar so Escape can clear PDF highlights.
+    const findbar = aEvent.currentTarget;
+    if (type === "findagain" && findbar.hidden) {
+      findbar.open(findbar.FIND_NORMAL);
+      findbar._findField.select();
+      findbar._findField.focus();
     }
     browser.sendMessageToActor(
       "PDFJS:Child:handleEvent",

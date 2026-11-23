@@ -4,6 +4,8 @@
 
 SPHINX_TREES["/toolkit/components/downloads"] = "docs"
 
+MARIONETTE_MANIFESTS += ["test/marionette/manifest.toml"]
+
 XPCSHELL_TESTS_MANIFESTS += ["test/unit/xpcshell.toml"]
 
 TEST_HARNESS_FILES.xpcshell.toolkit.components.downloads.test.data += [
@@ -53,3 +55,7 @@ FINAL_LIBRARY = "xul"
 
 with Files("**"):
     BUG_COMPONENT = ("Toolkit", "Downloads API")
+
+SOURCE_HEADERS += [
+    "DownloadPlatform.h",
+]

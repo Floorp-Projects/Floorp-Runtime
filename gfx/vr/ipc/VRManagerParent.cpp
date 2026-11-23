@@ -13,6 +13,7 @@
 #include "mozilla/ipc/Endpoint.h"
 #include "mozilla/ipc/ProtocolTypes.h"
 #include "mozilla/ipc/ProtocolUtils.h"  // for IToplevelProtocol
+#include "mozilla/layers/LayerTreeLog.h"
 
 using mozilla::dom::GamepadHandle;
 
@@ -33,13 +34,13 @@ VRManagerParent::VRManagerParent(ipc::EndpointProcInfo aChildProcess,
       mIsContentChild(aIsContentChild),
       mVRActiveStatus(false) {
   MOZ_COUNT_CTOR(VRManagerParent);
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_RELEASE_ASSERT(NS_IsMainThread());
 
   SetOtherEndpointProcInfo(aChildProcess);
 }
 
 VRManagerParent::~VRManagerParent() {
-  MOZ_ASSERT(!mVRManagerHolder);
+  MOZ_RELEASE_ASSERT(!mVRManagerHolder);
 
   MOZ_COUNT_DTOR(VRManagerParent);
 }
@@ -96,6 +97,8 @@ void VRManagerParent::Bind(Endpoint<PVRManagerParent>&& aEndpoint) {
   mCompositorThreadHolder = CompositorThreadHolder::GetSingleton();
 
   RegisterWithManager();
+  LAYERTREE_LOG("VR manager bound, namespace {}, content {}", mNamespace,
+                mChildId);
 }
 
 /*static*/
@@ -131,8 +134,8 @@ bool VRManagerParent::CreateForGPUProcess(
 
 /*static*/
 void VRManagerParent::Shutdown() {
-  MOZ_ASSERT(NS_IsMainThread());
-  MOZ_ASSERT(
+  MOZ_RELEASE_ASSERT(NS_IsMainThread());
+  MOZ_RELEASE_ASSERT(
       CompositorThread(),
       "Shutdown() must gets called before the compositor thread is shutdown");
   ReleaseVRManagerParentSingleton();
@@ -147,6 +150,8 @@ void VRManagerParent::Shutdown() {
 }
 
 void VRManagerParent::ActorDestroy(ActorDestroyReason why) {
+  LAYERTREE_LOG("VR manager namespace {} destroyed, reason {}", mNamespace,
+                fmt::enums::format_as(why));
   UnregisterFromManager();
   mCompositorThreadHolder = nullptr;
 }

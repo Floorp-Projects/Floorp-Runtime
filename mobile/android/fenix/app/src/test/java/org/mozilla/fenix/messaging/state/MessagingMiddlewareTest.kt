@@ -30,16 +30,13 @@ import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.Restore
 import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.messaging.FenixMessageSurfaceId
 import org.mozilla.fenix.messaging.MessagingState
-import org.mozilla.fenix.utils.Settings
 
 class MessagingMiddlewareTest {
     private lateinit var controller: NimbusMessagingController
-    private lateinit var settings: Settings
 
     @Before
     fun setUp() {
         controller = mockk(relaxed = true)
-        settings = mockk(relaxed = true)
     }
 
     @Test
@@ -47,7 +44,7 @@ class MessagingMiddlewareTest {
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = emptyList())),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
         val message = createMessage()
 
@@ -65,7 +62,7 @@ class MessagingMiddlewareTest {
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = listOf(message))),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         every {
@@ -84,12 +81,27 @@ class MessagingMiddlewareTest {
     }
 
     @Test
+    fun `WHEN Evaluate with trigger context THEN getNextMessage is called with the trigger context`() = runTest {
+        val message = createMessage()
+        val store =
+            AppStore(
+                AppState(messaging = MessagingState(messages = listOf(message))),
+                listOf(MessagingMiddleware(controller, this)),
+            )
+        val triggerContext = mapOf("test" to mapOf("internal" to "value"))
+
+        store.dispatch(Evaluate(FenixMessageSurfaceId.HOMESCREEN, triggerContext))
+
+        verify { controller.getNextMessage(FenixMessageSurfaceId.HOMESCREEN, listOf(message), triggerContext) }
+    }
+
+    @Test
     fun `WHEN MessageClicked THEN update storage`() = runTest {
         val message = createMessage()
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = listOf(message))),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         assertEquals(message, store.state.messaging.messages.first())
@@ -113,7 +125,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.id to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         assertEquals(message, store.state.messaging.messages.first())
@@ -132,7 +144,7 @@ class MessagingMiddlewareTest {
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = listOf(message))),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
         store.dispatch(MessageDismissed(message))
         testScheduler.advanceUntilIdle()
@@ -148,7 +160,7 @@ class MessagingMiddlewareTest {
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = listOf(message))),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
         store.dispatch(Dismissed(message.id))
         testScheduler.advanceUntilIdle()
@@ -169,7 +181,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.id to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         assertEquals(message, store.state.messaging.messages.first())
@@ -193,7 +205,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.id to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         assertEquals(message, store.state.messaging.messages.first())
@@ -217,7 +229,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.id to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         assertEquals(message, store.state.messaging.messages.first())
@@ -241,7 +253,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.surface to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         store.dispatch(MessageDismissed(message))
@@ -264,7 +276,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.surface to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         store.dispatch(Dismissed(message.id))
@@ -287,7 +299,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.surface to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         store.dispatch(MessageClicked(message))
@@ -303,7 +315,7 @@ class MessagingMiddlewareTest {
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = listOf(message))),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         every {
@@ -342,7 +354,7 @@ class MessagingMiddlewareTest {
                                 )
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         every {
@@ -375,7 +387,7 @@ class MessagingMiddlewareTest {
             val store =
                 AppStore(
                     AppState(messaging = MessagingState(messages = listOf(message))),
-                    listOf(MessagingMiddleware(controller, settings, this)),
+                    listOf(MessagingMiddleware(controller, this)),
                 )
 
             every {
@@ -416,7 +428,7 @@ class MessagingMiddlewareTest {
                             messageToShow = mapOf(message.surface to message),
                         )
                 ),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         every {
@@ -441,7 +453,7 @@ class MessagingMiddlewareTest {
     }
 
     @Test
-    fun `GIVEN a microsurvey message that surpassed the maxDisplayCount WHEN onMessagedDisplayed THEN remove the message, consume it & reset the pref`() =
+    fun `GIVEN a microsurvey message that surpassed the maxDisplayCount WHEN onMessagedDisplayed THEN remove the message`() =
         runTest {
             val message =
                 createMessage(metadata = createMetadata(displayCount = 4), data = MessageData(surface = "microsurvey"))
@@ -460,7 +472,7 @@ class MessagingMiddlewareTest {
                                 messageToShow = mapOf(message.surface to message),
                             )
                     ),
-                    listOf(MessagingMiddleware(controller, settings, this)),
+                    listOf(MessagingMiddleware(controller, this)),
                 )
 
             every { controller.getNextMessage(FenixMessageSurfaceId.MICROSURVEY, any()) } returns message
@@ -470,7 +482,6 @@ class MessagingMiddlewareTest {
             store.dispatch(Evaluate(FenixMessageSurfaceId.MICROSURVEY))
             testScheduler.advanceUntilIdle()
 
-            verify { settings.shouldShowMicrosurveyPrompt = false }
             assertEquals(0, store.state.messaging.messages.size)
             assertEquals(1, store.state.messaging.messageToShow.size)
         }
@@ -482,7 +493,7 @@ class MessagingMiddlewareTest {
         val store =
             AppStore(
                 AppState(messaging = MessagingState(messages = listOf(message))),
-                listOf(MessagingMiddleware(controller, settings, this)),
+                listOf(MessagingMiddleware(controller, this)),
             )
 
         every {

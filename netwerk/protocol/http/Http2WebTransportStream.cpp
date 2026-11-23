@@ -11,6 +11,7 @@
 #include "CapsuleEncoder.h"
 #include "Http2WebTransportSession.h"
 #include "HttpLog.h"
+#include "nsHttp.h"
 #include "nsIOService.h"
 
 namespace mozilla::net {
@@ -111,7 +112,7 @@ class StreamId Http2WebTransportStream::WebTransportStreamId() const {
 
 uint64_t Http2WebTransportStream::GetStreamId() const { return mStreamId; }
 
-void Http2WebTransportStream::SendStopSending(uint8_t aErrorCode) {
+void Http2WebTransportStream::SendStopSending(uint64_t aErrorCode) {
   if (mSentStopSending || !mWebTransportSession) {
     // https://www.ietf.org/archive/id/draft-ietf-webtrans-http2-11.html#section-6.3
     // A WT_STOP_SENDING capsule MUST NOT be sent multiple times for the same
@@ -170,8 +171,22 @@ Http2WebTransportStream::OnInputStreamReady(nsIAsyncInputStream* aIn) {
   }
 
   uint32_t sendBytes = 0;
-  return mSendStreamPipeIn->ReadSegments(
+  nsresult rv = mSendStreamPipeIn->ReadSegments(
       ReadRequestSegment, this, nsIOService::gDefaultSegmentSize, &sendBytes);
+
+  if (rv >= NS_ERROR_WEBTRANSPORT_CODE_BASE &&
+      rv <= NS_ERROR_WEBTRANSPORT_CODE_END) {
+    // The DOM side closed the outgoing pipe with a WebTransport error code
+    // (see WebTransportSendStreamAlgorithms::AbortCallbackImpl) to request a
+    // WT_RESET_STREAM capsule; decode and send it. Mirrors
+    // Http3WebTransportStream::ReadSegments()'s handling of the same
+    // encoding, which this HTTP/2 backend was missing.
+    uint8_t errorCode = GetWebTransportErrorFromNSResult(rv);
+    Reset(errorCode);
+    return NS_OK;
+  }
+
+  return rv;
 }
 
 NS_IMETHODIMP
@@ -279,7 +294,7 @@ nsresult Http2WebTransportStream::ReadRequestSegment(
   data.AppendElements(buf, count);
   Capsule capsule = Capsule::WebTransportStreamData(wtStream->mStreamId, false,
                                                     std::move(data));
-  UniquePtr<CapsuleEncoder> encoder = MakeUnique<CapsuleEncoder>();
+  auto encoder = std::make_unique<CapsuleEncoder>();
   encoder->EncodeCapsule(capsule);
   wtStream->mCapsuleQueue.Push(std::move(encoder));
   *countRead = count;
@@ -303,14 +318,14 @@ void Http2WebTransportStream::TakeOutputCapsule(
 void Http2WebTransportStream::WriteMaintenanceCapsules(
     mozilla::Queue<UniquePtr<CapsuleEncoder>>& aOutput) {
   if (mStopSendingCapsule) {
-    UniquePtr<CapsuleEncoder> encoder = MakeUnique<CapsuleEncoder>();
+    auto encoder = std::make_unique<CapsuleEncoder>();
     encoder->EncodeCapsule(*mStopSendingCapsule);
     mStopSendingCapsule = Nothing();
     aOutput.Push(std::move(encoder));
   }
 
   if (mStreamResetCapsule) {
-    UniquePtr<CapsuleEncoder> encoder = MakeUnique<CapsuleEncoder>();
+    auto encoder = std::make_unique<CapsuleEncoder>();
     encoder->EncodeCapsule(*mStreamResetCapsule);
     mStreamResetCapsule = Nothing();
     aOutput.Push(std::move(encoder));
@@ -318,12 +333,12 @@ void Http2WebTransportStream::WriteMaintenanceCapsules(
 
   auto dataBlocked = mFc.CreateStreamDataBlockedCapsule();
   if (dataBlocked) {
-    aOutput.Push(MakeUnique<CapsuleEncoder>(dataBlocked.ref()));
+    aOutput.Push(std::make_unique<CapsuleEncoder>(dataBlocked.ref()));
   }
 
   auto maxStreamData = mReceiverFc.CreateMaxStreamDataCapsule();
   if (maxStreamData) {
-    aOutput.Push(MakeUnique<CapsuleEncoder>(maxStreamData.ref()));
+    aOutput.Push(std::make_unique<CapsuleEncoder>(maxStreamData.ref()));
   }
 
   // Keep reading data from the consumer.
@@ -445,7 +460,7 @@ nsresult Http2WebTransportStream::HandleStreamData(bool aFin,
             LOG(("Exceed session flow control limit"));
             mSocketInCondition = NS_ERROR_NOT_AVAILABLE;
           } else {
-            mOutgoingQueue.Push(MakeUnique<StreamData>(std::move(aData)));
+            mOutgoingQueue.Push(std::make_unique<StreamData>(std::move(aData)));
             mSocketInCondition = OnOutputStreamReady(mReceiveStreamPipeOut);
           }
         }

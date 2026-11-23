@@ -134,9 +134,9 @@ class MOZ_STACK_CLASS WSScanResult final {
 
   WSScanResult(WSScanResult&& aResult, EditorLineBreak&& aIgnoredLineBreak,
                const Element& aEditingHost)
-      : WSScanResult(std::forward<WSScanResult>(aResult)) {
+      : WSScanResult(std::move(aResult)) {
     MOZ_ASSERT(ReachedBlockBoundary());
-    mIgnoredLineBreak.emplace(std::forward<EditorLineBreak>(aIgnoredLineBreak));
+    mIgnoredLineBreak.emplace(std::move(aIgnoredLineBreak));
     // If an editing host is specified and the reached content is outside the
     // editing host, we should store the editing host to make the method
     // returning the reached point to return a point in the editing host.
@@ -641,6 +641,35 @@ class MOZ_STACK_CLASS WSScanResult final {
    */
   [[nodiscard]] const Maybe<EditorLineBreak>& MaybeIgnoredLineBreak() const {
     return mIgnoredLineBreak;
+  }
+
+  /**
+   * Return true if the ignored line break is required in the plaintext mail
+   * composer.
+   */
+  [[nodiscard]] bool IgnoredLineBreakIsRequiredInPlaintextMailComposer() const {
+    if (!mIgnoredLineBreak || !mIgnoredLineBreak->IsHTMLBRElement()) {
+      return false;
+    }
+    // <br> before the mailcite <span> is required by the serializer.
+    if (ReachedOtherBlockElement() &&
+        HTMLEditUtils::IsMailCiteElement(*ElementPtr()) &&
+        HTMLEditUtils::IsInlineContent(*ElementPtr(),
+                                       BlockInlineCheck::UseHTMLDefaultStyle)) {
+      return true;
+    }
+    // <br> in the mailcite <span> is required by the serializer too.
+    const Element* const blockElement = HTMLEditUtils::GetAncestorElement(
+        mIgnoredLineBreak->BRElementRef(),
+        HTMLEditUtils::ClosestEditableBlockElement,
+        BlockInlineCheck::UseComputedDisplayStyle);
+    if (blockElement && HTMLEditUtils::IsMailCiteElement(*blockElement) &&
+        HTMLEditUtils::IsInlineContent(*blockElement,
+                                       BlockInlineCheck::UseHTMLDefaultStyle)) {
+      return true;
+    }
+    // Otherwise, the <br> is not required even in the plaintext mail composer.
+    return false;
   }
 
   friend std::ostream& operator<<(std::ostream& aStream,

@@ -377,6 +377,47 @@ add_task(async function test_interaction_telemetry() {
 });
 
 /**
+ * Tests that we record how long it took to import each resource type that
+ * we time, keyed by the migrator.
+ */
+add_task(async function test_import_duration_telemetry() {
+  Services.fog.initializeFOG();
+  Services.fog.testResetFOG();
+
+  let key = InternalTestingProfileMigrator.key;
+  let testingMigrator = await MigrationUtils.getMigrator(key);
+  let durationMetrics = [
+    Glean.browserMigration.bookmarksImportDuration,
+    Glean.browserMigration.historyImportDuration,
+    Glean.browserMigration.loginsImportDuration,
+    Glean.browserMigration.cardsImportDuration,
+    Glean.browserMigration.extensionsImportDuration,
+  ];
+
+  for (let metric of durationMetrics) {
+    Assert.equal(
+      metric[key].testGetValue(),
+      null,
+      "No duration should be recorded before migrating."
+    );
+  }
+
+  await testingMigrator.migrate(
+    MigrationUtils.resourceTypes.ALL,
+    false,
+    InternalTestingProfileMigrator.testProfile
+  );
+
+  for (let metric of durationMetrics) {
+    Assert.equal(
+      metric[key].testGetValue().count,
+      1,
+      "Should have recorded one duration sample per resource."
+    );
+  }
+});
+
+/**
  * Tests that when importing passwords from a CSV file using the
  * migration wizard, we set an interaction pref. This preference
  * is sent using TelemetryEnvironment.sys.mjs.
@@ -433,4 +474,33 @@ user_pref("${PASSWORDS_PREF}", true);
     const EXPECTED = `user_pref("${prefKey}", true);`;
     Assert.ok(writtenPrefsString.includes(EXPECTED), "Found persisted pref.");
   }
+});
+
+add_task(async function test_migrate_glean_client_id() {
+  let [srcDir, targetDir] = getTestDirs();
+
+  // We don't know what format client_id.txt is in, but we also don't care.
+  const kClientIdContents = "<opaque value>";
+  let subDir = createSubDir(srcDir, "datareporting");
+  subDir = createSubDir(subDir, "glean");
+  writeToFile(subDir, "client_id.txt", kClientIdContents);
+
+  // Add in an events db file (not copied).
+  let eventsDir = createSubDir(subDir, "events");
+  writeToFile(eventsDir, "events", "<another opaque value>");
+
+  // Perform migration.
+  let ok = await promiseTelemetryMigrator(srcDir, targetDir);
+  Assert.ok(
+    ok,
+    "callback should have been true with important telemetry files copied"
+  );
+
+  checkDirectoryContains(targetDir, {
+    datareporting: {
+      glean: {
+        "client_id.txt": kClientIdContents,
+      },
+    },
+  });
 });

@@ -10,11 +10,11 @@ import io.mockk.verify
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import mozilla.components.compose.base.text.Text
 import mozilla.components.compose.menu.data.BannerMenuItem
 import mozilla.components.compose.menu.data.MenuItemSummary
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.ui.MenuItemIconRes
 import org.junit.Test
 import org.mozilla.fenix.R
@@ -34,7 +34,7 @@ class DefaultBrowserMenuItemProviderTest {
 
         assertEquals(
             BannerMenuItem(
-                title = Text.Resource(R.string.browser_menu_default_banner_title, listOf(APP_NAME)),
+                title = MenuItemTitle(Text.Resource(R.string.browser_menu_default_banner_title, listOf(APP_NAME))),
                 summary =
                     MenuItemSummary(
                         text = Text.Resource(R.string.browser_menu_default_banner_subtitle_2),
@@ -44,7 +44,7 @@ class DefaultBrowserMenuItemProviderTest {
                 onClickEvent = MenuAction.DefaultBrowserMenuBannerClicked,
                 onDismissEvent = MenuAction.DefaultBrowserMenuBannerDismissed,
             ),
-            provider.itemFlow.value,
+            provider.itemsFlow.value.single(),
         )
     }
 
@@ -52,14 +52,14 @@ class DefaultBrowserMenuItemProviderTest {
     fun `GIVEN the banner was dismissed before WHEN providing the item THEN don't show it`() {
         val provider = createProvider(shouldShowMenuBanner = false, isDefaultBrowser = false)
 
-        assertNull(provider.itemFlow.value)
+        assertTrue(provider.itemsFlow.value.isEmpty())
     }
 
     @Test
     fun `GIVEN this is already the default browser WHEN providing the item THEN don't show it`() {
         val provider = createProvider(shouldShowMenuBanner = true, isDefaultBrowser = true)
 
-        assertNull(provider.itemFlow.value)
+        assertTrue(provider.itemsFlow.value.isEmpty())
     }
 
     @Test
@@ -70,7 +70,7 @@ class DefaultBrowserMenuItemProviderTest {
 
         assertEquals(1, setAsDefaultBrowserCount)
         assertFalse(menu.isUsed)
-        assertIs<BannerMenuItem>(provider.itemFlow.value)
+        assertIs<BannerMenuItem>(provider.itemsFlow.value.single())
     }
 
     @Test
@@ -80,7 +80,7 @@ class DefaultBrowserMenuItemProviderTest {
         provider.onEvent(MenuAction.DefaultBrowserMenuBannerDismissed, menu)
 
         verify { settings.shouldShowMenuBanner = false }
-        assertNull(provider.itemFlow.value)
+        assertTrue(provider.itemsFlow.value.isEmpty())
         assertEquals(0, setAsDefaultBrowserCount)
         assertFalse(menu.isUsed)
     }
@@ -89,7 +89,7 @@ class DefaultBrowserMenuItemProviderTest {
     fun `WHEN building the item THEN handle all events it can dispatch and no others`() {
         val provider = createProvider(shouldShowMenuBanner = true, isDefaultBrowser = false)
 
-        val events = requireNotNull(provider.itemFlow.value).reachableEvents()
+        val events = provider.itemsFlow.value.single().reachableEvents()
 
         assertTrue(events.all { provider.handles(it) }, "Not all of $events are handled")
         assertFalse(provider.handles(MenuAction.Navigate.Settings))

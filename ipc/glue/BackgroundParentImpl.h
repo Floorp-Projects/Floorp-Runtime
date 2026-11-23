@@ -127,7 +127,12 @@ class BackgroundParentImpl : public PBackgroundParent {
       const uint64_t& aBrowsingContextID, const IPCClientInfo& aClientInfo,
       const bool& aDedicated, const bool& aRequireUnreliable,
       const uint32_t& aCongestionControl, nsTArray<nsString>&& aProtocols,
+      nsTArray<WebTransportHeader>&& aHeaders,
       nsTArray<WebTransportHash>&& aServerCertHashes,
+      const mozilla::Maybe<uint16_t>&
+          aAnticipatedConcurrentIncomingUnidirectionalStreams,
+      const mozilla::Maybe<uint16_t>&
+          aAnticipatedConcurrentIncomingBidirectionalStreams,
       Endpoint<PWebTransportParent>&& aParentEndpoint,
       CreateWebTransportParentResolver&& aResolver) override;
 

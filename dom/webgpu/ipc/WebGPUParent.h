@@ -11,6 +11,8 @@
 #include "mozilla/WeakPtr.h"
 #include "mozilla/dom/ipc/IdType.h"
 #include "mozilla/webgpu/ExternalTexture.h"
+#include "mozilla/webgpu/FrontBufferSnapshot.h"
+#include "mozilla/webgpu/MappedRangeGuard.h"
 #include "mozilla/webgpu/PWebGPUParent.h"
 #include "mozilla/webgpu/ffi/wgpu.h"
 
@@ -71,9 +73,9 @@ class WebGPUParent final : public PWebGPUParent, public SupportsWeakPtr {
                      layers::RemoteTextureTxnId aTxnId);
 
   ipc::IPCResult GetFrontBufferSnapshot(
-      IProtocol* aProtocol, const layers::RemoteTextureOwnerId& aOwnerId,
+      const layers::RemoteTextureOwnerId& aOwnerId,
       const RawId& aCommandEncoderId, const RawId& aCommandBufferId,
-      Maybe<Shmem>& aShmem, gfx::IntSize& aSize, uint32_t& aByteStride);
+      FrontBufferSnapshot& aSnapshot);
 
   void ActorDestroy(ActorDestroyReason aWhy) override;
 
@@ -167,6 +169,17 @@ class WebGPUParent final : public PWebGPUParent, public SupportsWeakPtr {
  private:
   virtual ~WebGPUParent();
   void MaintainDevices();
+
+  /* Return a `MappedRangeGuard` for the `aSize` bytes at offset
+   * `aStart` within `aBufferId`, or `Nothing` on failure.
+   *
+   * To avoid deadlock, do not hold `MappedRangeGuard` across
+   * operations that might unmap or destroy the buffer. See the
+   * comments for `MappedRangeGuard::Create` and `MappedRangeGuard`
+   * itself for details.
+   */
+  Maybe<MappedRangeGuard> LockMappedRange(ffi::WGPUBufferId aBufferId,
+                                          uint64_t aStart, uint64_t aSize);
 
   UniquePtr<ffi::WGPUGlobal> mContext;
   base::RepeatingTimer<WebGPUParent> mTimer;

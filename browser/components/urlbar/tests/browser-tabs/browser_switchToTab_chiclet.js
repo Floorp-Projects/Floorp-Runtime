@@ -9,8 +9,6 @@
 "use strict";
 
 ChromeUtils.defineESModuleGetters(this, {
-  ContextualIdentityService:
-    "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
   TabGroupTestUtils: "resource://testing-common/TabGroupTestUtils.sys.mjs",
 });
 
@@ -18,16 +16,9 @@ const TEST_URL = `${TEST_BASE_URL}dummy_page.html`;
 
 add_task(async function test_with_oneoff_button() {
   await SpecialPowers.pushPrefEnv({
-    set: [
-      ["browser.urlbar.scotchBonnet.enableOverride", false],
-      // Tests get no default Top Sites, and the view is opened on an empty
-      // string here, which would otherwise leave it closed with no results.
-      [
-        "browser.newtabpage.activity-stream.default.sites",
-        "https://example.com/",
-      ],
-    ],
+    set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
   });
+  UrlbarTestUtils.registerZeroPrefixProvider();
   info("Loading test page into first tab");
   let promiseLoad = BrowserTestUtils.browserLoaded(
     gBrowser.selectedBrowser,
@@ -173,9 +164,7 @@ add_task(async function test_chiclet_contextual_id() {
 
   // The row should have the contextual ID chiclet, and the chiclet shouldn't
   // have any l10n attributes.
-  let chiclet = Services.prefs.getBoolPref("browser.nova.enabled", false)
-    ? row.querySelector(".urlbarView-user-context")
-    : row.querySelector(".action-contextualidentity");
+  let chiclet = row.querySelector(".urlbarView-user-context");
   Assert.ok(chiclet, "The contextual ID chiclet should be in the row");
   Assert.ok(
     BrowserTestUtils.isVisible(chiclet),
@@ -186,17 +175,6 @@ add_task(async function test_chiclet_contextual_id() {
     { id: null, args: null },
     "The contextual ID chiclet should not have l10n attributes"
   );
-
-  // Check its text content. In Nova, there is no text content.
-  if (!Services.prefs.getBoolPref("browser.nova.enabled", false)) {
-    let label = ContextualIdentityService.getUserContextLabel(1);
-    Assert.ok(label, "Sanity check: A label is defined for the contextual ID");
-    Assert.equal(
-      chiclet.textContent,
-      label,
-      "The contextual ID chiclet should have the expected label"
-    );
-  }
 
   await UrlbarTestUtils.promisePopupClose(window);
   await BrowserTestUtils.removeTab(containerTab);
@@ -239,11 +217,7 @@ add_task(async function test_chiclet_tab_group() {
 
   // The row should have the tab group chiclet, and the chiclet shouldn't have
   // any l10n attributes.
-  let chiclet = row.querySelector(
-    Services.prefs.getBoolPref("browser.nova.enabled", false)
-      ? ".urlbarView-tab-group-container"
-      : ".urlbarView-tabGroup"
-  );
+  let chiclet = row.querySelector(".urlbarView-tab-group-container");
   Assert.ok(chiclet, "The tab group chiclet should be in the row");
   Assert.ok(
     BrowserTestUtils.isVisible(chiclet),
@@ -313,12 +287,7 @@ add_task(async function test_chiclet_tab_group_no_stale_after_row_reuse() {
   let switchTabDetails = await getDetailsOfTabSwitchResult();
   Assert.ok(switchTabDetails, "TAB_SWITCH row should be present");
 
-  let tabGroupSelector = Services.prefs.getBoolPref(
-    "browser.nova.enabled",
-    false
-  )
-    ? ".urlbarView-tab-group-container"
-    : ".urlbarView-tabGroup";
+  let tabGroupSelector = ".urlbarView-tab-group-container";
   let tabGroupElement =
     switchTabDetails.element.row.querySelector(tabGroupSelector);
   Assert.ok(
@@ -343,17 +312,10 @@ add_task(async function test_chiclet_tab_group_no_stale_after_row_reuse() {
       `Row ${i} should not be a TAB_SWITCH result`
     );
     let groupElement = details.element.row.querySelector(tabGroupSelector);
-    if (Services.prefs.getBoolPref("browser.nova.enabled", false)) {
-      Assert.ok(
-        BrowserTestUtils.isHidden(groupElement),
-        `Row ${i} should not have a visible stale tab group chiclet`
-      );
-    } else {
-      Assert.ok(
-        !groupElement,
-        `Row ${i} should not have a stale tab group chiclet`
-      );
-    }
+    Assert.ok(
+      BrowserTestUtils.isHidden(groupElement),
+      `Row ${i} should not have a visible stale tab group chiclet`
+    );
   }
 
   await UrlbarTestUtils.promisePopupClose(window);

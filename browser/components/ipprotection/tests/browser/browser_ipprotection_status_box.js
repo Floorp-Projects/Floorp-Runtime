@@ -343,3 +343,82 @@ add_task(async function test_unavailable_error() {
 
   await closePanel();
 });
+
+/**
+ * Tests that clicking the support link in the unavailable error closes the panel.
+ */
+add_task(async function test_unavailable_error_support_link_closes_panel() {
+  let content = await openPanel({
+    unauthenticated: false,
+    error: ERRORS.VPN_UNAVAILABLE,
+  });
+
+  let supportLink = content.statusBoxEl.descriptionEl.querySelector("a");
+  Assert.ok(supportLink, "Support link should be present");
+
+  let newTabPromise = BrowserTestUtils.waitForNewTab(
+    gBrowser,
+    Services.urlFormatter.formatURLPref("app.support.baseURL") +
+      LINKS.NO_ACCESS_SUPPORT_SLUG
+  );
+  let panelHiddenPromise = waitForPanelEvent(document, "popuphidden");
+  supportLink.click();
+  info("after click");
+  let newTab = await newTabPromise;
+  info("after newTabPromise");
+  await panelHiddenPromise;
+  info("afterpanelHiddenPromise");
+  await setPanelState();
+  info("after setPanelState");
+  BrowserTestUtils.removeTab(newTab);
+});
+
+/**
+ * Tests that failing to activate because the region is unavailable shows the
+ * generic error rather than the unavailable error.
+ */
+add_task(async function test_region_unavailable_shows_generic_error() {
+  setupService({
+    isReady: true,
+    proxyPass: {
+      status: 451,
+      error: "region_unavailable",
+      pass: null,
+    },
+  });
+  IPProtectionService.updateState();
+  await waitForProxyState(IPPProxyStates.READY);
+
+  const sandbox = sinon.createSandbox();
+  let startSpy = sandbox.spy(IPPProxyManager, "start");
+
+  let content = await openPanel({
+    isReady: true,
+  });
+
+  let turnOnButton = content.statusCardEl?.actionButtonEl;
+  Assert.ok(turnOnButton, "Turn on button should be present");
+  turnOnButton.click();
+
+  await TestUtils.waitForCondition(
+    () => content.state.error === ERRORS.GENERIC,
+    "Panel should show generic error after failed activation"
+  );
+  await content.updateComplete;
+
+  let { error } = await startSpy.firstCall.returnValue;
+  Assert.equal(
+    error,
+    ERRORS.VPN_UNAVAILABLE,
+    "Activation should fail with the unavailable error"
+  );
+  Assert.equal(
+    content.statusBoxEl?.type,
+    ERRORS.GENERIC,
+    "Status box type should be generic-error"
+  );
+
+  await closePanel();
+  sandbox.restore();
+  cleanupService();
+});

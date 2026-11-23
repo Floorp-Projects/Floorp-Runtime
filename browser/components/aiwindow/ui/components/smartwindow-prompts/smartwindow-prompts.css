@@ -37,7 +37,7 @@
 }
 
 /* Fade the overflow edge to indicate more content, swapping sides in
- * RTL - matches the pattern in ai-website-chip.css. */
+ * RTL - matches the pattern in smartwindow-chip.css. */
 :host([mode="fullpage"]) {
   --sw-prompts-fade-size: var(--space-xlarge);
 }
@@ -75,7 +75,7 @@
 .sw-prompts-scroll-button {
   opacity: 0;
   position: absolute;
-  top: 50%;
+  inset-block-start: 50%;
   transform: translateY(-50%);
   z-index: 1;
 }
@@ -143,7 +143,6 @@
 
 .sw-prompt-button::part(button) {
   position: relative;
-  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
   box-shadow: var(--smartwindow-shadow, var(--box-shadow-level-2));
 }
 
@@ -162,13 +161,13 @@
   cursor: pointer;
   display: flex;
   height: var(--size-item-small);
+  inset-block-start: 50%;
   inset-inline-end: var(--space-small);
   justify-content: center;
   opacity: 0;
   pointer-events: none;
   padding: 0;
   position: absolute;
-  top: 50%;
   transform: translateY(-50%);
   width: var(--size-item-small);
   /* Keep above the following fade overlay. */
@@ -177,12 +176,10 @@
   &:hover {
     /* Not the pill's own hover token: Nova sets that equal to the resting
      * background. */
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
     background-color: color-mix(in srgb, currentColor 14%, var(--button-background-color));
   }
 
   &:active {
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
     background-color: color-mix(in srgb, currentColor 21%, var(--button-background-color));
   }
 }
@@ -249,7 +246,6 @@
 .sw-prompt-favicon-overflow {
   border-radius: var(--border-radius-xsmall);
   height: var(--size-item-small);
-  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
   margin-inline-end: calc(-1 * var(--space-xxsmall));
   width: var(--size-item-small);
 }

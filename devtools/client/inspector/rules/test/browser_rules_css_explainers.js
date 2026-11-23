@@ -38,6 +38,7 @@ const TEST_URI = `data:text/html,${encodeURIComponent(`<meta charset=utf8>
     aside {
       width: 300px;
       height: 200px;
+      translate: calc(2 * random(2em, 16px)) calc(4 * random(--name, 2em, 16px));
     }
 
     aside div {
@@ -60,6 +61,14 @@ const TEST_URI = `data:text/html,${encodeURIComponent(`<meta charset=utf8>
       color: hsl(200 30% 90%);
       --x: 85%;
     }
+
+    #nested-substitutions {
+      --attr-name: data-x;
+      --var-name: --primary-color;
+      --primary-color: tomato;
+      height: attr(var(--attr-name) type(<length>));
+      color: var(var(--var-name));
+    }
   </style>
   <div>CSS explainers</div>
   <ol>
@@ -70,11 +79,16 @@ const TEST_URI = `data:text/html,${encodeURIComponent(`<meta charset=utf8>
   <aside>
     <div>Side</div>
     <section id="single-length-percentage">length-percentage</section>
-  </aside>`)}`;
+  </aside>
+  <section
+    id="nested-substitutions"
+    data-x="10rem"
+  >nested-substitutions</section>`)}`;
 
 add_task(async function () {
   await pushPref("devtools.inspector.css-explainers", true);
   await pushPref("layout.css.tree-counting-functions.enabled", true);
+  await pushPref("layout.css.random.enabled", true);
 
   await addTab(TEST_URI);
   const { inspector, view } = await openRuleView();
@@ -249,6 +263,41 @@ add_task(async function () {
     },
   });
 
+  info("Select the <aside> to check random() computation");
+  await selectNode("aside ", inspector);
+
+  await assertCssExplainersTooltip({
+    view,
+    selector: "aside",
+    propertyName: "translate",
+    functionIndex: 0,
+    expected: {
+      functionText: "calc(2 * random(2em, 16px))",
+      tooltipLines: [
+        "calc(2 * random(2em, 16px))",
+        "calc(2 * random(element-scoped ua-translate-1, 2em, 16px))",
+        /calc\(2 \* random\(fixed 0\.\d+, 32px, 16px\)\)/,
+        "calc(2 * 32px)",
+        "64px",
+      ],
+    },
+  });
+  await assertCssExplainersTooltip({
+    view,
+    selector: "aside",
+    propertyName: "translate",
+    functionIndex: 2,
+    expected: {
+      functionText: "calc(4 * random(--name, 2em, 16px))",
+      tooltipLines: [
+        "calc(4 * random(--name, 2em, 16px))",
+        /calc\(4 \* random\(fixed 0\.\d+, 32px, 16px\)\)/,
+        "calc(4 * 32px)",
+        "128px",
+      ],
+    },
+  });
+
   info("Select the <div> inside <aside> to check % computation");
   await selectNode("aside div", inspector);
 
@@ -397,6 +446,55 @@ add_task(async function () {
       tooltipText: ["85%"].join("\n"),
     },
   });
+
+  info(
+    "Select #nested-substitutions to check tooltip for nested arbitrary functions"
+  );
+  await selectNode("#nested-substitutions", inspector);
+  await assertCssExplainersTooltip({
+    view,
+    selector: "#nested-substitutions",
+    propertyName: "height",
+    functionIndex: 0,
+    expected: {
+      functionText: "attr(var(--attr-name) type(<length>))",
+      tooltipText: [
+        "attr(var(--attr-name) type(<length>))",
+        "10rem",
+        "160px",
+      ].join("\n"),
+    },
+  });
+  await assertCssExplainersTooltip({
+    view,
+    selector: "#nested-substitutions",
+    propertyName: "height",
+    functionIndex: 1,
+    expected: {
+      functionText: "var(--attr-name)",
+      tooltipText: ["var(--attr-name)", "data-x"].join("\n"),
+    },
+  });
+  await assertCssExplainersTooltip({
+    view,
+    selector: "#nested-substitutions",
+    propertyName: "color",
+    functionIndex: 0,
+    expected: {
+      functionText: "var(var(--var-name))",
+      tooltipText: ["var(var(--var-name))", "tomato"].join("\n"),
+    },
+  });
+  await assertCssExplainersTooltip({
+    view,
+    selector: "#nested-substitutions",
+    propertyName: "color",
+    functionIndex: 1,
+    expected: {
+      functionText: "var(--var-name)",
+      tooltipText: ["var(--var-name)", "--primary-color"].join("\n"),
+    },
+  });
 });
 
 async function assertCssExplainersTooltip({
@@ -451,11 +549,37 @@ async function assertCssExplainersTooltip({
   );
   await onTooltipReady;
 
-  is(
-    tooltip.panel.innerText,
-    expected.tooltipText,
-    `Tooltip has expected text for ${Number.isInteger(functionIndex) ? "function" : "length/percentage"} at index ${functionIndex} in ${propertyName} declaration`
-  );
+  if (expected.tooltipText) {
+    is(
+      tooltip.panel.innerText,
+      expected.tooltipText,
+      `Tooltip has expected text for ${Number.isInteger(functionIndex) ? "function" : "length/percentage"} at index ${functionIndex} in ${propertyName} declaration`
+    );
+  } else if (expected.tooltipLines) {
+    const tooltipLines = tooltip.panel.innerText.split("\n");
+    is(
+      tooltipLines.length,
+      expected.tooltipLines.length,
+      `Tooltip has expected number of lines for ${Number.isInteger(functionIndex) ? "function" : "length/percentage"} at index ${functionIndex} in ${propertyName} declaration`
+    );
+    for (let i = 0; i < tooltipLines.length; i++) {
+      const tooltipLine = tooltipLines[i];
+      const expectedLine = expected.tooltipLines[i];
+      if (expectedLine instanceof RegExp) {
+        Assert.stringMatches(
+          tooltipLine,
+          expectedLine,
+          `Tooltip has matching line ${i + 1} for ${Number.isInteger(functionIndex) ? "function" : "length/percentage"} at index ${functionIndex} in ${propertyName} declaration`
+        );
+      } else {
+        is(
+          tooltipLine,
+          expectedLine,
+          `Tooltip has expected line ${i + 1} for ${Number.isInteger(functionIndex) ? "function" : "length/percentage"} at index ${functionIndex} in ${propertyName} declaration`
+        );
+      }
+    }
+  }
 
   info("Hide the tooltip");
   const onHidden = tooltip.once("hidden");

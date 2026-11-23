@@ -9,6 +9,7 @@
 #include "Selection.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "ErrorList.h"
 #include "LayoutConstants.h"
@@ -502,7 +503,8 @@ class AutoScroller final : public nsITimerCallback, public nsINamed {
   MOZ_CAN_RUN_SCRIPT_BOUNDARY NS_IMETHOD Notify(nsITimer* timer) override {
     if (mPresContext) {
       AutoWeakFrame frame =
-          mContent ? mPresContext->GetPrimaryFrameFor(mContent) : nullptr;
+          mContent ? mPresContext->GetPrimaryOrAreaImageFrameFor(mContent)
+                   : nullptr;
       if (!frame) {
         return NS_OK;
       }
@@ -2243,7 +2245,7 @@ UniquePtr<SelectionDetails> Selection::LookUpSelection(
     const bool isFullySelected =
         cache->MaybeCollectNodesAndCheckIfFullySelected(aContent, this);
     if (isFullySelected) {
-      auto newHead = MakeUnique<SelectionDetails>();
+      auto newHead = std::make_unique<SelectionDetails>();
 
       newHead->mNext = std::move(aDetailsHead);
       newHead->mStart = AssertedCast<int32_t>(0);
@@ -2334,7 +2336,7 @@ UniquePtr<SelectionDetails> Selection::LookUpSelection(
       continue;  // the ranges do not overlap the input range
     }
 
-    auto newHead = MakeUnique<SelectionDetails>();
+    auto newHead = std::make_unique<SelectionDetails>();
 
     newHead->mNext = std::move(detailsHead);
     newHead->mStart = AssertedCast<int32_t>(*start);
@@ -2359,16 +2361,16 @@ UniquePtr<SelectionDetails> Selection::LookUpSelection(
 
 NS_IMETHODIMP
 Selection::Repaint(nsPresContext* aPresContext) {
-  int32_t arrCount = (int32_t)mStyledRanges.Length();
+  if (mStyledRanges.mRanges.IsEmpty()) {
+    return NS_OK;
+  }
 
-  if (arrCount < 1) return NS_OK;
-
-  int32_t i;
-
-  for (i = 0; i < arrCount; i++) {
-    MOZ_ASSERT(mStyledRanges.GetAbstractRangeAt(i));
-    nsresult rv =
-        SelectFrames(aPresContext, *mStyledRanges.GetAbstractRangeAt(i), true);
+  // SelectFrames() can cause mStyledRanges to be modified, so let's iterate
+  // over a snapshot.
+  nsTArray<RefPtr<AbstractRange>> ranges{mStyledRanges.Ranges()};
+  for (const auto& range : ranges) {
+    MOZ_ASSERT(range);
+    nsresult rv = SelectFrames(aPresContext, *range, true);
 
     if (NS_FAILED(rv)) {
       return rv;
@@ -3997,6 +3999,12 @@ nsresult Selection::PostScrollSelectionIntoViewEvent(
   return NS_OK;
 }
 
+void Selection::LimitPendingScrollToFirstAncestor() {
+  if (mScrollEvent.IsPending()) {
+    mScrollEvent.get()->LimitScrollTargetToFirstAncestor();
+  }
+}
+
 nsresult Selection::ScrollIntoView(SelectionRegion aRegion,
                                    AxisScrollParams aVertical,
                                    AxisScrollParams aHorizontal,
@@ -4784,7 +4792,7 @@ void Selection::SetColors(const nsAString& aForegroundColor,
     return;
   }
 
-  mCustomColors.reset(new SelectionCustomColors);
+  mCustomColors = std::make_unique<SelectionCustomColors>();
 
   constexpr auto currentColorStr = u"currentColor"_ns;
   constexpr auto transparentStr = u"transparent"_ns;

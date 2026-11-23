@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "api/candidate.h"
 #include "api/create_modular_peer_connection_factory.h"
@@ -907,6 +908,34 @@ TEST_P(PeerConnectionIceTest, AsyncAddIceCandidateCompletesInOrder) {
 }
 
 TEST_P(PeerConnectionIceTest,
+       AsyncAddIceCandidateWaitsForResultDeliveryBeforeStartingNextOperation) {
+  auto candidate = CreateLocalUdpCandidate(SocketAddress("1.1.1.1", 1111));
+
+  auto caller = CreatePeerConnectionWithAudioVideo();
+  auto callee = CreatePeerConnectionWithAudioVideo();
+  ASSERT_TRUE(callee->SetRemoteDescription(caller->CreateOfferAndSetAsLocal()));
+
+  absl::AnyInvocable<void() &&> operation_complete_callback;
+  callee->pc()->AddIceCandidate(
+      callee->CreateJsepCandidateForFirstTransport(&candidate),
+      [&operation_complete_callback](
+          RTCError result, absl::AnyInvocable<void() &&> complete_callback) {
+        EXPECT_TRUE(result.ok());
+        operation_complete_callback = std::move(complete_callback);
+      });
+
+  ASSERT_TRUE(operation_complete_callback);
+  auto queued_observer = make_ref_counted<MockCreateSessionDescriptionObserver>(
+      main_.QuitClosure());
+  callee->pc()->CreateOffer(queued_observer.get(), RTCOfferAnswerOptions());
+  EXPECT_FALSE(queued_observer->called());
+
+  std::move(operation_complete_callback)();
+  main_.Run();
+  EXPECT_TRUE(queued_observer->called());
+}
+
+TEST_P(PeerConnectionIceTest,
        AsyncAddIceCandidateFailsBeforeSetRemoteDescription) {
   auto candidate = CreateLocalUdpCandidate(SocketAddress("1.1.1.1", 1111));
 
@@ -1512,7 +1541,7 @@ class PeerConnectionIceConfigTest : public ::testing::Test {
  protected:
   void SetUp() override {
     pc_factory_ = CreatePeerConnectionFactory(
-        network_thread_.get(), network_thread_.get(), Thread::Current(),
+        network_thread_.get(), Thread::Current(),
         FakeAudioCaptureModule::Create(), CreateBuiltinAudioEncoderFactory(),
         CreateBuiltinAudioDecoderFactory(),
         std::make_unique<VideoEncoderFactoryTemplate<
@@ -1539,7 +1568,6 @@ class PeerConnectionIceConfigTest : public ::testing::Test {
   }
 
   test::RunLoop main_thread_;
-  std::unique_ptr<Thread> worker_thread_;
   std::unique_ptr<SocketServer> socket_server_;
   std::unique_ptr<Thread> network_thread_;
   scoped_refptr<PeerConnectionFactoryInterface> pc_factory_ = nullptr;

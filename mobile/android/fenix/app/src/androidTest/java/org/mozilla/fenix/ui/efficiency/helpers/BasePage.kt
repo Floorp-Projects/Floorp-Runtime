@@ -519,6 +519,25 @@ abstract class BasePage(protected val composeRule: AndroidComposeTestRule<HomeAc
     /** On screen right now? Never throws, never waits, so it can drive control flow. */
     fun mozIsElementPresent(selector: Selector): Boolean = mozVerifyElement(selector, applyPreconditions = false)
 
+    /** Read an element's text once it is non-blank; an async fill (e.g. an autofilled password) can lag the action. */
+    fun mozReadText(
+        selector: Selector,
+        timeout: Long = TestAssetHelper.waitingTime,
+        interval: Long = 300,
+    ): String {
+        var text = ""
+        require(
+            verb = "read_text",
+            selector = selector,
+            expectation = "has non-blank text",
+            policy = WaitPolicy.Poll(timeout, interval),
+            applyPreconditions = false,
+            predicate = { it.text()?.isNotBlank() == true },
+            action = { text = it.text().orEmpty() },
+        )
+        return text
+    }
+
     fun mozVerifyElementAbsent(selector: Selector) = requireAbsent("verify_absent", selector)
 
     fun mozWaitUntilAbsent(
@@ -760,6 +779,21 @@ abstract class BasePage(protected val composeRule: AndroidComposeTestRule<HomeAc
             action = UiActions::click,
         )
 
+    /**
+     * Click a view by firing its nearest clickable ancestor's handler instead of tapping coordinates. Use for a row in
+     * a View-based list reached via a momentum scroll (e.g. a `PreferenceFragment` radio row with a `scrollDirection`):
+     * [mozClick]'s coordinate tap can be eaten as a scroll-stop while the list is still settling, reporting success
+     * while the app never acts. Delegates to [UiActions.performClick].
+     */
+    fun mozClickByPerformClick(selector: Selector, policy: WaitPolicy = WaitPolicy.Immediate) =
+        require(
+            verb = "perform_click",
+            selector = selector,
+            expectation = "clickable",
+            policy = policy,
+            action = UiActions::performClick,
+        )
+
     fun mozClickIfPresent(selector: Selector, timeout: Long = 3_000, interval: Long = 200) =
         require(
             verb = "click_if_present",
@@ -924,6 +958,20 @@ abstract class BasePage(protected val composeRule: AndroidComposeTestRule<HomeAc
         mDevice.pressBack()
         mDevice.waitForIdle()
         cmd.ok("Pressed back")
+        return this
+    }
+
+    /**
+     * Fling the whole screen from its center toward [direction], with no element to aim at. Unlike [mozSwipeElement],
+     * this needs no selector resolution and never starts the gesture from a screen edge, so it won't be grabbed by the
+     * system navigation gesture (which backgrounds the app). Used to scroll web content, where the only reliable target
+     * is the viewport itself.
+     */
+    fun mozSwipeScreen(direction: SwipeDirection): BasePage {
+        val cmd = rep().start(TimedReporter.Type.CMD, "swipe_screen", "Swiping screen $direction...")
+        Gestures.onScreen(direction)
+        mDevice.waitForIdle()
+        cmd.ok("Swiped screen $direction")
         return this
     }
 

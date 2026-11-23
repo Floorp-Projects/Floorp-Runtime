@@ -27,6 +27,8 @@ const PREF_MEMORIES_FROM_HISTORY =
   "browser.smartwindow.memories.generateFromHistory";
 const PREF_IS_DEFAULT_WINDOW = "browser.smartwindow.isDefaultWindow";
 const PREF_SMARTWINDOW_ENABLED = "browser.smartwindow.enabled";
+const PREF_SIDEBAR_OPEN_BY_DEFAULT =
+  "browser.smartwindow.sidebar.openByDefault";
 const lazy = {};
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -69,7 +71,17 @@ XPCOMUtils.defineLazyPreferenceGetter(
   () => SmartWindowTelemetry.updateEnabledMetric()
 );
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "sidebarOpenByDefault",
+  PREF_SIDEBAR_OPEN_BY_DEFAULT,
+  true,
+  () => SmartWindowTelemetry.recordSidebarOpenByDefaultChange()
+);
+
 ChromeUtils.defineESModuleGetters(lazy, {
+  AuthProvider:
+    "moz-src:///browser/components/aiwindow/models/AuthProvider.sys.mjs",
   getModelForChoice:
     "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs",
 });
@@ -89,6 +101,60 @@ export const SmartWindowTelemetry = {
     this.updateMemoriesFromHistoryMetric();
     this.updateSetDefaultOptinMetric();
     this.updateEnabledMetric();
+    this.updateSidebarOpenByDefaultMetric();
+    this.initAuthTelemetry();
+  },
+
+  /**
+   * Listens for the events AuthProvider dispatches, and sets auth_impl if a
+   * provider was chosen before init.
+   */
+  initAuthTelemetry() {
+    for (const type of [
+      "ImplChanged",
+      "ImplSwitched",
+      "SignInFlowStarted",
+      "SignInFlowCompleted",
+    ]) {
+      lazy.AuthProvider.addEventListener(
+        `AuthProvider:${type}`,
+        this.onAuthProviderEvent
+      );
+    }
+    if (lazy.AuthProvider.currentProviderName) {
+      Glean.smartWindow.authImpl.set(lazy.AuthProvider.currentProviderName);
+    }
+  },
+
+  /**
+   * Records the Glean data for an AuthProvider event. The sign-in events get
+   * the provider from AuthProvider.currentProviderName, as the flow does not
+   * report it.
+   *
+   * @param {CustomEvent} event
+   */
+  onAuthProviderEvent({ type, detail }) {
+    const provider = lazy.AuthProvider.currentProviderName ?? undefined;
+    switch (type) {
+      case "AuthProvider:ImplChanged":
+        Glean.smartWindow.authImpl.set(detail.providerName);
+        break;
+      case "AuthProvider:ImplSwitched":
+        Glean.smartWindow.authImplSwitched.record(detail);
+        break;
+      case "AuthProvider:SignInFlowStarted":
+        Glean.smartWindow.signinFlowStarted.record({
+          ...detail,
+          auth_provider: provider,
+        });
+        break;
+      case "AuthProvider:SignInFlowCompleted":
+        Glean.smartWindow.signinFlowCompleted.record({
+          ...detail,
+          auth_provider: provider,
+        });
+        break;
+    }
   },
 
   updateMemoriesFromConversationMetric() {
@@ -111,6 +177,17 @@ export const SmartWindowTelemetry = {
 
   updateEnabledMetric() {
     Glean.smartWindow.enabled.set(lazy.smartWindowEnabled);
+  },
+
+  updateSidebarOpenByDefaultMetric() {
+    Glean.smartWindow.sidebarOpenByDefault.set(lazy.sidebarOpenByDefault);
+  },
+
+  recordSidebarOpenByDefaultChange() {
+    this.updateSidebarOpenByDefaultMetric();
+    Glean.smartWindow.sidebarOpenByDefaultChange.record({
+      enabled: lazy.sidebarOpenByDefault,
+    });
   },
 
   async updateModelMetric() {

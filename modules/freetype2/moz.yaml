@@ -10,11 +10,11 @@ origin:
 
   url: https://gitlab.freedesktop.org/freetype/freetype
 
-  release: d5d4bef0c6d5363931d346a6b2380317a32b8601 (2026-10-06T10:11:29.000-04:00).
-  revision: d5d4bef0c6d5363931d346a6b2380317a32b8601
+  release: c4a3c188e82bc5b457390a87630ac782316421a1 (2026-11-03T18:07:31.000-05:00).
+  revision: c4a3c188e82bc5b457390a87630ac782316421a1
 
   license: FTL
-  license-file: LICENSE.TXT
+  license-file: docs/FTL.TXT
 
 updatebot:
   maintainer-phab: jfkthame
@@ -48,6 +48,9 @@ vendoring:
     - subprojects
     - tests
     - vms_make.com
+
+  include:
+    - docs/FTL.TXT
 
   keep:
     - moz.build

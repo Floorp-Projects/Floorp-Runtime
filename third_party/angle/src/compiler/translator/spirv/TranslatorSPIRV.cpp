@@ -28,13 +28,11 @@
 #include "compiler/translator/tree_ops/RewriteAtomicCounters.h"
 #include "compiler/translator/tree_ops/RewriteDfdy.h"
 #include "compiler/translator/tree_ops/RewriteStructSamplers.h"
-#include "compiler/translator/tree_ops/SeparateStructFromUniformDeclarations.h"
 #include "compiler/translator/tree_ops/spirv/ClampGLLayer.h"
 #include "compiler/translator/tree_ops/spirv/EmulateAdvancedBlendEquations.h"
 #include "compiler/translator/tree_ops/spirv/EmulateFragColorData.h"
 #include "compiler/translator/tree_ops/spirv/EmulateFramebufferFetch.h"
 #include "compiler/translator/tree_ops/spirv/EmulateYUVBuiltIns.h"
-#include "compiler/translator/tree_ops/spirv/FlagSamplersWithTexelFetch.h"
 #include "compiler/translator/tree_ops/spirv/ReswizzleYUVOps.h"
 #include "compiler/translator/tree_ops/spirv/RewriteInterpolateAtOffset.h"
 #include "compiler/translator/tree_ops/spirv/RewriteR32fImages.h"
@@ -101,17 +99,21 @@ constexpr ImmutableString kDefaultUniformsBlockName = ImmutableString("defaultUn
     TIntermBinary *inverseXY   = new TIntermBinary(EOpMul, removePivot, flipXY);
     TIntermBinary *plusPivot   = new TIntermBinary(EOpAdd, inverseXY, pivot->deepCopy());
 
-    // Create the corrected variable and copy the value of the original builtin.
-    TIntermBinary *assignment =
-        new TIntermBinary(EOpAssign, flippedBuiltinRef, builtinRef->deepCopy());
+    // Assign to the replaced variable, with .xy rotated and .zy (if any) retaining the original
+    // builtin value.
+    const uint8_t nominalSize = builtin->getType().getNominalSize();
+    ASSERT(nominalSize == 2 || nominalSize == 4);
 
-    // Create an assignment to the replaced variable's .xy.
-    TIntermSwizzle *correctedXY = new TIntermSwizzle(flippedBuiltinRef->deepCopy(), {0, 1});
-    TIntermBinary *assignToXY   = new TIntermBinary(EOpAssign, correctedXY, plusPivot);
+    TIntermTyped *flippedValue = plusPivot;
+    if (nominalSize == 4)
+    {
+        flippedValue = TIntermAggregate::CreateConstructor(
+            builtin->getType(), {plusPivot, new TIntermSwizzle(builtinRef->deepCopy(), {2, 3})});
+    }
 
     // Add this assigment at the beginning of the main function
-    insertSequence->insert(insertSequence->begin(), assignToXY);
-    insertSequence->insert(insertSequence->begin(), assignment);
+    insertSequence->insert(insertSequence->begin(),
+                           new TIntermBinary(EOpAssign, flippedBuiltinRef, flippedValue));
 
     return compiler->validateAST(root);
 }
@@ -207,7 +209,8 @@ TIntermSequence *GetMainSequence(TIntermBlock *root)
     //     ivec4 ANGLEGetXfbOffsets(ivec4 strides)
     //     {
     //         int xfbIndex = gl_VertexIndex
-    //                      + gl_InstanceIndex * ANGLEUniforms.xfbVerticesPerInstance;
+    //                      + (gl_InstanceIndex - ANGLEUniforms.baseInstance)
+    //                        * ANGLEUniforms.xfbVerticesPerInstance;
     //         return ANGLEUniforms.xfbBufferOffsets + xfbIndex * strides;
     //     }
 
@@ -222,16 +225,17 @@ TIntermSequence *GetMainSequence(TIntermBlock *root)
                                           SymbolType::AngleInternal);
     TIntermSymbol *stridesSymbol = new TIntermSymbol(stridesVar);
 
-    // Create references to gl_VertexIndex, gl_InstanceIndex, ANGLEUniforms.xfbVerticesPerInstance
-    // and ANGLEUniforms.xfbBufferOffsets.
+    // Create references to gl_VertexIndex, gl_InstanceIndex, ANGLEUniforms.baseInstance,
+    // ANGLEUniforms.xfbVerticesPerInstance and ANGLEUniforms.xfbBufferOffsets.
     TIntermSymbol *vertexIndex           = new TIntermSymbol(BuiltInVariable::gl_VertexIndex());
     TIntermSymbol *instanceIndex         = new TIntermSymbol(BuiltInVariable::gl_InstanceIndex());
+    TIntermTyped *baseInstance           = driverUniforms->getBaseInstance();
     TIntermTyped *xfbVerticesPerInstance = driverUniforms->getXfbVerticesPerInstance();
     TIntermTyped *xfbBufferOffsets       = driverUniforms->getXfbBufferOffsets();
 
-    // gl_InstanceIndex * ANGLEUniforms.xfbVerticesPerInstance
-    TIntermBinary *xfbInstanceIndex =
-        new TIntermBinary(EOpMul, instanceIndex, xfbVerticesPerInstance);
+    // (gl_InstanceIndex - ANGLEUniforms.baseInstance) * ANGLEUniforms.xfbVerticesPerInstance
+    TIntermBinary *instanceID       = new TIntermBinary(EOpSub, instanceIndex, baseInstance);
+    TIntermBinary *xfbInstanceIndex = new TIntermBinary(EOpMul, instanceID, xfbVerticesPerInstance);
 
     // gl_VertexIndex + |xfbInstanceIndex|
     TIntermBinary *xfbIndex = new TIntermBinary(EOpAdd, vertexIndex, xfbInstanceIndex);
@@ -440,16 +444,52 @@ TIntermSequence *GetMainSequence(TIntermBlock *root)
                                            SymbolType::AngleInternal);
     TIntermSymbol *positionSymbol = new TIntermSymbol(positionVar);
 
-    // swapXY ? position.yx : position.xy
-    TIntermTyped *swapXY = driverUniforms->getSwapXY();
+    TIntermTyped *rotatedFlippedXY = nullptr;
 
-    TIntermTyped *xy        = new TIntermSwizzle(positionSymbol, {0, 1});
-    TIntermTyped *swappedXY = new TIntermSwizzle(positionSymbol->deepCopy(), {1, 0});
-    TIntermTyped *rotatedXY = new TIntermTernary(swapXY, swappedXY, xy);
+    if (compileOptions.preferPrecomputedVertexTransform)
+    {
+        // The XY transformation is encoded as a pre-computed 2x2 matrix stored in the driver
+        // uniforms (transformXY).  The CPU pre-multiplies the swap and flip so the shader only
+        // needs two dot products:
+        //
+        //   result.x = dot(position.xy, transformXY.xy)
+        //   result.y = dot(position.xy, transformXY.zw)
+        //
+        // When not swapped: transformXY = (fx, 0, 0, fy)  -> (fx*x,      fy*y     )
+        // When swapped:     transformXY = (0,  fy, fx, 0) -> (fx*y,      fy*x     )
+        TIntermTyped *transformXY = driverUniforms->getTransformXY();
 
-    // (swapXY ? position.yx : position.xy) * flipXY
-    TIntermTyped *flipXY = driverUniforms->getFlipXY(symbolTable, DriverUniformFlip::PreFragment);
-    TIntermTyped *rotatedFlippedXY = new TIntermBinary(EOpMul, rotatedXY, flipXY);
+        TIntermTyped *xy = new TIntermSwizzle(positionSymbol, {0, 1});
+
+        // dot(position.xy, transformXY.xy)
+        TIntermTyped *transformXYxy = new TIntermSwizzle(transformXY, {0, 1});
+        TIntermSequence dotXArgs    = {xy, transformXYxy};
+        TIntermTyped *rotatedX = CreateBuiltInFunctionCallNode("dot", &dotXArgs, *symbolTable, 100);
+
+        // dot(position.xy, transformXY.zw)
+        TIntermTyped *transformXYzw = new TIntermSwizzle(transformXY->deepCopy(), {2, 3});
+        TIntermSequence dotYArgs    = {xy->deepCopy(), transformXYzw};
+        TIntermTyped *rotatedY = CreateBuiltInFunctionCallNode("dot", &dotYArgs, *symbolTable, 100);
+
+        // vec2(rotatedX, rotatedY)
+        const TType *vec2Type    = StaticType::GetBasic<EbtFloat, EbpHigh, 2>();
+        TIntermSequence vec2Args = {rotatedX, rotatedY};
+        rotatedFlippedXY         = TIntermAggregate::CreateConstructor(*vec2Type, &vec2Args);
+    }
+    else
+    {
+        // swapXY ? position.yx : position.xy
+        TIntermTyped *swapXY = driverUniforms->getSwapXY();
+
+        TIntermTyped *xy        = new TIntermSwizzle(positionSymbol, {0, 1});
+        TIntermTyped *swappedXY = new TIntermSwizzle(positionSymbol->deepCopy(), {1, 0});
+        TIntermTyped *rotatedXY = new TIntermTernary(swapXY, swappedXY, xy);
+
+        // (swapXY ? position.yx : position.xy) * flipXY
+        TIntermTyped *flipXY =
+            driverUniforms->getFlipXY(symbolTable, DriverUniformFlip::PreFragment);
+        rotatedFlippedXY = new TIntermBinary(EOpMul, rotatedXY, flipXY);
+    }
 
     // (gl_Position.z + gl_Position.w) / 2
     TIntermTyped *z = new TIntermSwizzle(positionSymbol->deepCopy(), {2});
@@ -556,52 +596,29 @@ ShaderVariable *FindIOBlockShaderVariable(std::vector<ShaderVariable> *vars,
     return nullptr;
 }
 
-ShaderVariable *FindUniformFieldShaderVariable(std::vector<ShaderVariable> *vars,
-                                               const ImmutableString &name,
-                                               const char *prefix)
+void GetSamplersInStruct(std::vector<ShaderVariable> *fields, TVector<ShaderVariable *> *samplers)
 {
-    for (ShaderVariable &var : *vars)
+    for (ShaderVariable &var : *fields)
     {
-        // The name of the sampler is derived from the uniform name + fields
-        // that reach the uniform, concatenated with '_' per RewriteStructSamplers.
-        std::string varName = prefix;
-        varName += '_';
-        varName += var.name;
-
-        if (name == varName)
+        if (gl::IsSamplerType(var.type))
         {
-            return &var;
+            samplers->push_back(&var);
         }
-
-        ShaderVariable *field = FindUniformFieldShaderVariable(&var.fields, name, varName.c_str());
-        if (field != nullptr)
+        else
         {
-            return field;
+            GetSamplersInStruct(&var.fields, samplers);
         }
     }
-    return nullptr;
 }
 
-ShaderVariable *FindUniformShaderVariable(std::vector<ShaderVariable> *vars,
-                                          const ImmutableString &name)
+TVector<ShaderVariable *> GetSamplersInStructs(std::vector<ShaderVariable> *vars)
 {
+    TVector<ShaderVariable *> samplers;
     for (ShaderVariable &var : *vars)
     {
-        if (name == var.name)
-        {
-            return &var;
-        }
-
-        // Note: samplers in structs are moved out.  Such samplers will be found in the fields of
-        // the struct uniform.
-        ShaderVariable *field = FindUniformFieldShaderVariable(&var.fields, name, var.name.c_str());
-        if (field != nullptr)
-        {
-            return field;
-        }
+        GetSamplersInStruct(&var.fields, &samplers);
     }
-    UNREACHABLE();
-    return nullptr;
+    return samplers;
 }
 
 void SetSpirvIdInFields(uint32_t id, std::vector<ShaderVariable> *fields)
@@ -611,6 +628,18 @@ void SetSpirvIdInFields(uint32_t id, std::vector<ShaderVariable> *fields)
         field.id = id;
         SetSpirvIdInFields(id, &field.fields);
     }
+}
+
+bool IsOnlyOpaqueType(const ShaderVariable &uniform)
+{
+    if (uniform.fields.empty())
+    {
+        return gl::IsOpaqueType(uniform.type);
+    }
+
+    // The parser places sampler types in the end of the struct, so if there are any non-opaque
+    // fields in the uniform, at least the first field must be non-opaque.
+    return IsOnlyOpaqueType(uniform.fields[0]);
 }
 }  // anonymous namespace
 
@@ -628,9 +657,9 @@ bool TranslatorSPIRV::translateImpl(TIntermBlock *root,
     int aggregateTypesUsedForUniforms = 0;
     int r32fImageCount                = 0;
     int atomicCounterCount            = 0;
-    for (const auto &uniform : getUniforms())
+    for (const ShaderVariable &uniform : getUniforms())
     {
-        if (!uniform.isBuiltIn() && uniform.active && !gl::IsOpaqueType(uniform.type))
+        if (!uniform.isBuiltIn() && uniform.active && !IsOnlyOpaqueType(uniform))
         {
             ++defaultUniformCount;
         }
@@ -651,18 +680,18 @@ bool TranslatorSPIRV::translateImpl(TIntermBlock *root,
         }
     }
 
-    // If there are any function calls that take array-of-array of opaque uniform parameters, or
-    // other opaque uniforms that need special handling in Vulkan, such as atomic counters,
-    // monomorphize the functions by removing said parameters and replacing them in the function
-    // body with the call arguments.
-    //
-    // This has a few benefits:
-    //
-    // - It dramatically simplifies future transformations w.r.t to samplers in structs, array of
-    //   arrays of opaque types, atomic counters etc.
-    // - Avoids the need for shader*ArrayDynamicIndexing Vulkan features.
     if (!compileOptions.useIR)
     {
+        // If there are any function calls that take array-of-array of opaque uniform parameters, or
+        // other opaque uniforms that need special handling in Vulkan, such as atomic counters,
+        // monomorphize the functions by removing said parameters and replacing them in the function
+        // body with the call arguments.
+        //
+        // This has a few benefits:
+        //
+        // - It dramatically simplifies future transformations w.r.t to samplers in structs, array
+        //   of arrays of opaque types, atomic counters etc.
+        // - Avoids the need for shader*ArrayDynamicIndexing Vulkan features.
         UnsupportedFunctionArgsBitSet args{UnsupportedFunctionArgs::StructContainingSamplers,
                                            UnsupportedFunctionArgs::ArrayOfArrayOfSamplerOrImage,
                                            UnsupportedFunctionArgs::AtomicCounter,
@@ -671,35 +700,37 @@ bool TranslatorSPIRV::translateImpl(TIntermBlock *root,
         {
             return false;
         }
-    }
 
-    if (aggregateTypesUsedForUniforms > 0)
-    {
-        if (!SeparateStructFromUniformDeclarations(this, root, &getSymbolTable()))
+        if (aggregateTypesUsedForUniforms > 0)
+        {
+            if (!RewriteStructSamplers(this, root, &getSymbolTable()))
+            {
+                return false;
+            }
+        }
+
+        // Replace array of array of opaque uniforms with a flattened array.  This is run after
+        // MonomorphizeUnsupportedFunctions and RewriteStructSamplers so that it's not possible for
+        // an array of array of opaque type to be partially subscripted and passed to a function.
+        if (!RewriteArrayOfArrayOfOpaqueUniforms(this, root, &getSymbolTable()))
         {
             return false;
         }
 
-        int removedUniformsCount;
-
-        if (!RewriteStructSamplers(this, root, &getSymbolTable(), &removedUniformsCount))
+        if (getShaderType() == GL_COMPUTE_SHADER)
         {
-            return false;
+            driverUniforms->addComputeDriverUniformsToShader(root, &getSymbolTable());
         }
-        defaultUniformCount -= removedUniformsCount;
+        else
+        {
+            driverUniforms->addGraphicsDriverUniformsToShader(root, &getSymbolTable());
+        }
     }
-
-    // Replace array of array of opaque uniforms with a flattened array.  This is run after
-    // MonomorphizeUnsupportedFunctions and RewriteStructSamplers so that it's not possible for an
-    // array of array of opaque type to be partially subscripted and passed to a function.
-    if (!RewriteArrayOfArrayOfOpaqueUniforms(this, root, &getSymbolTable()))
+    else
     {
-        return false;
-    }
-
-    if (!FlagSamplersForTexelFetch(this, root, &getSymbolTable(), &mUniforms))
-    {
-        return false;
+        // The driver uniforms have been added in IR.  Discover it for the AST transformations that
+        // have not been ported yet.
+        driverUniforms->findDeclarationAddedByIR(root);
     }
 
     gl::ShaderType packedShaderType = gl::FromGLenum<gl::ShaderType>(getShaderType());
@@ -718,25 +749,18 @@ bool TranslatorSPIRV::translateImpl(TIntermBlock *root,
                       vk::spirv::kIdDefaultUniformsBlock);
     }
 
-    if (getShaderType() == GL_COMPUTE_SHADER)
-    {
-        driverUniforms->addComputeDriverUniformsToShader(root, &getSymbolTable());
-    }
-    else
-    {
-        driverUniforms->addGraphicsDriverUniformsToShader(root, &getSymbolTable());
-    }
-
     assignSpirvId(
         driverUniforms->getDriverUniformsVariable()->getType().getInterfaceBlock()->uniqueId(),
         vk::spirv::kIdDriverUniformsBlock);
 
-    if (getShaderType() == GL_VERTEX_SHADER)
+    if (!compileOptions.useIR)
     {
-        if (!ShaderBuiltinsWorkaround(this, root, driverUniforms, &getSymbolTable(),
-                                      compileOptions))
+        if (getShaderType() == GL_VERTEX_SHADER)
         {
-            return false;
+            if (!ShaderBuiltinsWorkaround(this, root, driverUniforms, &getSymbolTable()))
+            {
+                return false;
+            }
         }
     }
 
@@ -1161,8 +1185,9 @@ bool TranslatorSPIRV::translate(TIntermBlock *root,
     mUniqueToSpirvIdMap.clear();
     mFirstUnusedSpirvId = 0;
 
-    DriverUniform driverUniforms(DriverUniformMode::InterfaceBlock);
-    DriverUniformExtended driverUniformsExt(DriverUniformMode::InterfaceBlock);
+    DriverUniform driverUniforms(DriverUniformMode::InterfaceBlock, SH_SPIRV_VULKAN_OUTPUT);
+    DriverUniformExtended driverUniformsExt(DriverUniformMode::InterfaceBlock,
+                                            SH_SPIRV_VULKAN_OUTPUT);
 
     const bool useExtendedDriverUniforms = compileOptions.addVulkanXfbEmulationSupportCode;
 
@@ -1223,6 +1248,12 @@ void TranslatorSPIRV::assignSpirvIds(TIntermBlock *root)
     // ids for shader variables form a minimal contiguous range.  The Vulkan backend takes advantage
     // of this fact for optimal hashing.
     mFirstUnusedSpirvId = vk::spirv::kIdFirstUnreserved;
+
+    // Extracted samplers are given generic names and cannot be looked up.  They are given IDs in
+    // sequence based on declaration order, which also means they cannot be dead-code eliminated or
+    // reordered by any transformation
+    TVector<ShaderVariable *> extractedSamplers = GetSamplersInStructs(&mUniforms);
+    uint32_t nextExtractedSampler               = 0;
 
     for (TIntermNode *node : *root->getSequence())
     {
@@ -1291,8 +1322,22 @@ void TranslatorSPIRV::assignSpirvIds(TIntermBlock *root)
         }
         else if (qualifier == EvqUniform)
         {
-            ShaderVariable *uniform = FindUniformShaderVariable(&mUniforms, symbol->getName());
-            variableId              = &uniform->id;
+            // The translator never adds any samplers that are not declared in the shader.  As such,
+            // the only |AngleInternal| samplers are those that are extracted from uniforms.
+            if (IsSampler(type.getBasicType()) &&
+                symbol->variable().symbolType() == SymbolType::AngleInternal)
+            {
+                // Since the samplers are declared in the shader in the same order as they are
+                // collected in reflection info, pick the next |ShaderVariable| for these samplers.
+                ASSERT(nextExtractedSampler < extractedSamplers.size());
+                variableId = &extractedSamplers[nextExtractedSampler]->id;
+                ++nextExtractedSampler;
+            }
+            else
+            {
+                ShaderVariable *uniform = FindShaderVariable(&mUniforms, symbol->getName());
+                variableId              = &uniform->id;
+            }
         }
         else if (qualifier == EvqAttribute || qualifier == EvqVertexIn)
         {

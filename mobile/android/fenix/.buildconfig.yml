@@ -18,6 +18,7 @@ projects:
     - components:compose-base
     - components:compose-browser-toolbar
     - components:compose-cfr
+    - components:compose-draggable
     - components:compose-menu
     - components:concept-accelerometer
     - components:concept-ai-controls
@@ -88,6 +89,7 @@ projects:
     - components:lib-crash
     - components:lib-crash-sentry
     - components:lib-dataprotect
+    - components:lib-installation-blockstore
     - components:lib-integrity-googleplay
     - components:lib-llm-mlpa
     - components:lib-password-parser-csv

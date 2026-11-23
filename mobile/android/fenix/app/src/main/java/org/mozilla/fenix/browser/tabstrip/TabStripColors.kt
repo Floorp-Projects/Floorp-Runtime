@@ -9,24 +9,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.res.colorResource
-import mozilla.components.compose.browser.toolbar.store.BrowserToolbarState
-import org.mozilla.fenix.R
-import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
-import org.mozilla.fenix.theme.FirefoxTheme
-import org.mozilla.fenix.utils.Settings
-import org.mozilla.fenix.wallpapers.Wallpaper
+import org.mozilla.fenix.wallpapers.WallpaperTheme
 
 /**
  * Represents the colors for the tab strip.
  *
  * @property backgroundBrush The brush used to paint the tab strip background. Use [SolidColor] with a transparent color
- *   to let edge-to-edge wallpapers show through, or a gradient brush for the standard tab strip background.
+ *   to let edge-to-edge wallpapers show through.
  * @property tabItemBackgroundColors The background colors of the tab strip items.
+ * @property tabItemContentColors The colors of the tab strip item titles.
+ * @property closeButtonColors The colors of the tab strip item close buttons.
+ * @property addTabButtonColor The color of the add tab button.
  */
 data class TabStripColors(
     val backgroundBrush: Brush,
     val tabItemBackgroundColors: TabColors,
+    val tabItemContentColors: TabColors,
+    val closeButtonColors: TabColors,
+    val addTabButtonColor: Color,
 ) {
 
     /**
@@ -53,52 +53,59 @@ data class TabStripColors(
         /**
          * Builds a [TabStripColors] instance based on the provided parameters.
          *
-         * @param toolbarState The current state of the browser toolbar.
-         * @param browsingModeManager The browsing mode manager.
-         * @param settings The application settings.
-         * @return
+         * @param isOverEdgeToEdgeWallpaper Whether the tab strip is drawn directly over a universal edge-to-edge
+         *   wallpaper.
          */
         @Composable
-        internal fun build(
-            toolbarState: BrowserToolbarState?,
-            browsingModeManager: BrowsingModeManager,
-            settings: Settings,
-        ): TabStripColors {
-            val isPrivate = browsingModeManager.mode.isPrivate
-            val isEdgeToEdgeBackgroundEnabled =
-                settings.enableHomepageEdgeToEdgeBackgroundFeature &&
-                    settings.currentWallpaperName == Wallpaper.EDGE_TO_EDGE
-            val isSearching = toolbarState?.let {
-                it.isEditMode() && it.editState.query.current.isNotEmpty()
-            }
-            val shouldUseEdgeToEdgeColors = isEdgeToEdgeBackgroundEnabled && !isPrivate && isSearching == false
-
-            return if (shouldUseEdgeToEdgeColors) {
-                TabStripColors(
-                    backgroundBrush = SolidColor(colorResource(R.color.homepage_tab_edge_to_edge_toolbar_background)),
-                    tabItemBackgroundColors =
-                        TabColors(
-                            activeColor =
-                                colorResource(R.color.homepage_tab_edge_to_edge_tab_strip_item_background_active),
-                            inactiveColor =
-                                colorResource(R.color.homepage_tab_edge_to_edge_tab_strip_item_background_inactive),
-                        ),
-                )
-            } else {
-                default()
-            }
-        }
+        internal fun build(isOverEdgeToEdgeWallpaper: Boolean): TabStripColors =
+            if (isOverEdgeToEdgeWallpaper) edgeToEdgeWallpaper() else default()
 
         /** Returns the default [TabStripColors] instance. */
         @Composable
         fun default() =
             TabStripColors(
-                backgroundBrush = FirefoxTheme.gradients.accentSubtle.brush,
+                backgroundBrush = SolidColor(MaterialTheme.colorScheme.surface),
                 tabItemBackgroundColors =
                     TabColors(
                         activeColor = MaterialTheme.colorScheme.surface,
                         inactiveColor = Color.Transparent,
                     ),
+                tabItemContentColors = defaultTabItemContentColors(),
+                closeButtonColors = defaultCloseButtonColors(),
+                addTabButtonColor = MaterialTheme.colorScheme.onSurface,
+            )
+
+        /**
+         * Returns the [TabStripColors] used when the tab strip is drawn directly over a universal edge-to-edge
+         * wallpaper: no background of its own, and the content that sits directly on the wallpaper (and the toolbar
+         * scrim, for wallpapers with an image) tinted with the wallpaper text color.
+         */
+        @Composable
+        private fun edgeToEdgeWallpaper(): TabStripColors {
+            val default = default()
+            val onWallpaper = WallpaperTheme.onWallpaper
+            return default.copy(
+                backgroundBrush = SolidColor(Color.Transparent),
+                tabItemContentColors =
+                    TabColors(activeColor = MaterialTheme.colorScheme.onSurface, inactiveColor = onWallpaper),
+                closeButtonColors =
+                    TabColors(activeColor = MaterialTheme.colorScheme.onSurface, inactiveColor = onWallpaper),
+                addTabButtonColor = onWallpaper,
+            )
+        }
+
+        @Composable
+        private fun defaultTabItemContentColors() =
+            TabColors(
+                activeColor = MaterialTheme.colorScheme.onSurface,
+                inactiveColor = MaterialTheme.colorScheme.onSurface,
+            )
+
+        @Composable
+        private fun defaultCloseButtonColors() =
+            TabColors(
+                activeColor = MaterialTheme.colorScheme.onSurface,
+                inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
     }
 }

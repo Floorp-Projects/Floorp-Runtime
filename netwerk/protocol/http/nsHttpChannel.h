@@ -96,7 +96,6 @@ class nsHttpChannel final : public HttpBaseChannel,
   // nsIHttpAuthenticableChannel. We can't use
   // NS_DECL_NSIHTTPAUTHENTICABLECHANNEL because it duplicates cancel() and
   // others.
-  NS_IMETHOD GetIsSSL(bool* aIsSSL) override;
   NS_IMETHOD GetProxyMethodIsConnect(bool* aProxyMethodIsConnect) override;
   NS_IMETHOD GetServerResponseHeader(
       nsACString& aServerResponseHeader) override;
@@ -217,8 +216,6 @@ class nsHttpChannel final : public HttpBaseChannel,
   void SetWarningReporter(HttpChannelSecurityWarningReporter* aReporter);
   HttpChannelSecurityWarningReporter* GetWarningReporter();
 
-  bool DataSentToChildProcess() { return LoadDataSentToChildProcess(); }
-
   enum class SnifferType { Media, Image };
   void DisableIsOpaqueResponseAllowedAfterSniffCheck(SnifferType aType);
 
@@ -316,6 +313,10 @@ class nsHttpChannel final : public HttpBaseChannel,
   // (including DNS prefetch and speculative connection.)
   void MaybeResolveProxyAndBeginConnect();
   void MaybeStartDNSPrefetch();
+
+  // Whether the browsing context this load is performed by, or associated
+  // with, is forced offline (BrowsingContext.forceOffline).
+  bool IsForcedOffline() const;
 
   // Based on the proxy configuration determine the strategy for resolving the
   // end server host name.
@@ -442,6 +443,10 @@ class nsHttpChannel final : public HttpBaseChannel,
   void UpdateInhibitPersistentCachingFlag();
   bool ParseDictionary(nsICacheEntry* aEntry, nsHttpResponseHead* aResponseHead,
                        bool aModified);
+  // RFC 9842 section 9.3: dictionaries may only be registered from, and used
+  // for, responses that are readable by the requesting context.
+  // aCheckResponse also runs the CORS check on the received response.
+  bool IsReadableForDictionaries(bool aCheckResponse);
   [[nodiscard]] nsresult AddCacheEntryHeaders(nsICacheEntry* entry,
                                               bool aModified);
   [[nodiscard]] nsresult UpdateCacheEntryHeaders(nsICacheEntry* entry,
@@ -553,6 +558,10 @@ class nsHttpChannel final : public HttpBaseChannel,
   [[nodiscard]] nsresult SetupByteRangeRequest(int64_t partialLen);
   void UntieByteRangeRequest();
   void UntieValidationRequest();
+  // Drop everything OnCacheEntryCheck armed on this channel (conditional or
+  // byte-range headers, the cached response head, the cache input stream and
+  // the alt-data type) once the entry it examined is not going to be used.
+  void DiscardCacheEntryCheckState();
   [[nodiscard]] nsresult OpenCacheInputStream(nsICacheEntry* cacheEntry,
                                               bool startBuffering);
 
@@ -627,7 +636,7 @@ class nsHttpChannel final : public HttpBaseChannel,
   RefPtr<HttpTransactionShell> mTransaction;
   RefPtr<HttpTransactionShell> mTransactionSticky;
 
-  uint64_t mLogicalOffset{0};
+  Atomic<uint64_t, Relaxed> mLogicalOffset{0};
 
   // cache specific data
   nsCOMPtr<nsICacheEntry> mCacheEntry;
@@ -747,10 +756,6 @@ class nsHttpChannel final : public HttpBaseChannel,
     // True only when we are between Resume and async fire of mCallOnResume.
     // Used to suspend any newly created pumps in mCallOnResume handler.
     (uint32_t, AsyncResumePending, 1),
-
-    // True if the data will be sent from the socket process to the
-    // content process directly.
-    (uint32_t, DataSentToChildProcess, 1),
 
     (uint32_t, UseHTTPSSVC, 1),
     (uint32_t, WaitHTTPSSVCRecord, 1)
@@ -879,8 +884,18 @@ class nsHttpChannel final : public HttpBaseChannel,
   // Backstop timer armed while parked in AwaitingCacheCallbacks(); if the
   // cache entry callback never arrives we give up and race to the network.
   nsCOMPtr<nsITimer> mCacheWaitTimer;
+  // Serializes OnCacheEntryCheck, which the cache may run on its I/O thread,
+  // with the main-thread backstop timeout and cancel.  OnCacheEntryCheck holds
+  // it for its whole run, so the timeout either fires before the check (which
+  // then sees mCacheWaitTimedOut and declines) or after it has completely armed
+  // the cached state (which the timeout then discards); never in between.
+  // Likewise a cancel sets mCanceled under it, so no check writes the cached
+  // state while the abort path reads it.
+  Mutex mCacheWaitLock{"nsHttpChannel::mCacheWaitLock"};
   // Set once the cache-wait backstop has fired and we've forced the network,
-  // so a late OnCacheEntryAvailable callback is ignored.
+  // so a late OnCacheEntryCheck or OnCacheEntryAvailable callback is declined.
+  // Written on the main thread under mCacheWaitLock; OnCacheEntryCheck reads
+  // it under the lock, main-thread readers need no lock.
   bool mCacheWaitTimedOut{false};
   // Tri-state to track whether anti-tracking classification happened
   // and has completed or not.

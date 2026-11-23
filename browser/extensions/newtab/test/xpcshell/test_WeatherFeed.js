@@ -321,6 +321,48 @@ add_task(async function test_onAction_opt_in_no_location_found() {
   sandbox.restore();
 });
 
+add_task(async function test_fetchLocationAutocomplete_broadcasts_results() {
+  let sandbox = sinon.createSandbox();
+  sandbox.stub(WeatherFeed.prototype, "PersistentCache").returns({
+    set: () => {},
+    get: () => {},
+  });
+
+  let feed = new WeatherFeed();
+  feed.store = {
+    dispatch: sinon.spy(),
+    getState() {
+      return { Weather: { locationSearchString: "Tor" } };
+    },
+  };
+  let autoComplete = sandbox.stub();
+  feed.merino = { autoCompleteWeatherLocation: autoComplete };
+
+  const toronto = { key: "55488", localized_name: "Toronto" };
+  const cases = [
+    { response: { locations: [toronto] }, expected: [toronto] },
+    { response: { locations: [] }, expected: [] },
+    { response: null, expected: [] },
+  ];
+  for (const { response, expected } of cases) {
+    feed.store.dispatch.resetHistory();
+    autoComplete.resolves(response);
+
+    await feed.fetchLocationAutocomplete();
+
+    Assert.deepEqual(
+      feed.store.dispatch.firstCall.args[0],
+      actionCreators.BroadcastToContent({
+        type: actionTypes.WEATHER_LOCATION_SUGGESTIONS_UPDATE,
+        data: expected,
+      }),
+      `Broadcasts ${expected.length} suggestion(s) for ${JSON.stringify(response)}`
+    );
+  }
+
+  sandbox.restore();
+});
+
 // Test fetching weather information using GeolocationUtils.geolocation()
 add_task(async function test_fetch_weather_with_geolocation() {
   const TEST_DATA = [
@@ -496,6 +538,27 @@ add_task(async function test_fetch_weather_optin_gate() {
         "weather.optInAccepted": false,
       },
       shouldFetch: false,
+    },
+    {
+      desc: "nova + widgetWeather trainhop opt-in required, not accepted -> no fetch",
+      values: {
+        "nova.enabled": true,
+        trainhopConfig: { widgetWeather: { weatherOptInEnabled: true } },
+        "weather.optInAccepted": false,
+      },
+      shouldFetch: false,
+    },
+    {
+      desc: "nova + widgetWeather opt-in false overrides legacy weather key -> fetch",
+      values: {
+        "nova.enabled": true,
+        trainhopConfig: {
+          widgetWeather: { weatherOptInEnabled: false },
+          weather: { weatherOptInEnabled: true },
+        },
+        "weather.optInAccepted": false,
+      },
+      shouldFetch: true,
     },
     {
       desc: "nova + opt-in required, accepted -> fetch",
@@ -901,6 +964,36 @@ add_task(async function test_isEnabled_classic_mode() {
   Assert.ok(
     !feed.isEnabled(),
     "isEnabled returns false when showWeather is false in classic mode"
+  );
+
+  sandbox.restore();
+});
+
+add_task(async function test_isEnabled_via_trainhop_namespace() {
+  let sandbox = sinon.createSandbox();
+  sandbox.stub(WeatherFeed.prototype, "PersistentCache").returns({
+    set: () => {},
+    get: () => {},
+  });
+
+  let feed = new WeatherFeed();
+  feed.store = {
+    getState() {
+      return {
+        Prefs: {
+          values: {
+            "nova.enabled": true,
+            "widgets.weather.enabled": true,
+            trainhopConfig: { widgetWeather: { visible: true } },
+          },
+        },
+      };
+    },
+  };
+
+  Assert.ok(
+    feed.isEnabled(),
+    "isEnabled returns true via trainhopConfig.widgetWeather.visible"
   );
 
   sandbox.restore();

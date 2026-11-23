@@ -94,11 +94,6 @@ add_setup(async function setup() {
   await trrServer.start();
   h2Port = trrServer.port();
 
-  if (mozinfo.socketprocess_networking) {
-    Services.dns; // Needed to trigger socket process.
-    await TestUtils.waitForCondition(() => Services.io.socketProcessLaunched);
-  }
-
   Services.prefs.setIntPref("network.trr.mode", Ci.nsIDNSService.MODE_TRRONLY);
 
   let ohttp = Cc["@mozilla.org/network/oblivious-http;1"].getService(
@@ -331,7 +326,10 @@ add_task(test_mode_2);
 
 add_task(test_excluded_domains);
 
-add_task(test_captiveportal_canonicalURL);
+add_task(
+  { skip_if: () => mozinfo.os == "android" },
+  test_captiveportal_canonicalURL
+);
 
 add_task(test_parentalcontrols);
 
@@ -340,7 +338,7 @@ add_task(test_builtin_excluded_domains);
 
 add_task(test_excluded_domains_mode3);
 
-add_task(test25e);
+add_task({ skip_if: () => mozinfo.os == "android" }, test25e);
 
 add_task(test_parentalcontrols_mode3);
 

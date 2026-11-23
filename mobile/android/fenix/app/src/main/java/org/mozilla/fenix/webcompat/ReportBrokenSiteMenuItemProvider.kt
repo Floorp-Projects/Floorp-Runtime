@@ -5,6 +5,7 @@
 package org.mozilla.fenix.webcompat
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -14,6 +15,7 @@ import mozilla.components.browser.state.state.SessionState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.text.Text
 import mozilla.components.compose.menu.data.MenuItem
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.store.MenuEvent
 import mozilla.components.compose.menu.ui.MenuItemIconRes
@@ -55,14 +57,18 @@ class ReportBrokenSiteMenuItemProvider(
     private val fenixBrowserUseCases: FenixBrowserUseCases,
     private val scope: CoroutineScope,
 ) : MenuItemProvider {
-    override val itemFlow: StateFlow<MenuItem?> =
-        browserStore.stateFlow
-            .map { state -> target.browserSessionFrom(state).reportBrokenSiteItem() }
-            .stateIn(
-                scope = scope,
-                started = SharingStarted.Eagerly,
-                initialValue = target.browserSessionFrom(browserStore.state).reportBrokenSiteItem(),
-            )
+    override val itemsFlow: StateFlow<List<MenuItem>> =
+        if (target == MenuTarget.CustomizeMenu) {
+            MutableStateFlow(listOf(DEFAULT_MENU_ITEM))
+        } else {
+            browserStore.stateFlow
+                .map { state -> listOfNotNull(target.browserSessionFrom(state).reportBrokenSiteItem()) }
+                .stateIn(
+                    scope = scope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = listOfNotNull(target.browserSessionFrom(browserStore.state).reportBrokenSiteItem()),
+                )
+        }
 
     override fun handles(event: MenuEvent) = event == MenuAction.Navigate.WebCompatReporter
 
@@ -97,20 +103,26 @@ class ReportBrokenSiteMenuItemProvider(
             )
         }
     }
-}
 
-private fun SessionState?.reportBrokenSiteItem(): MenuItem? {
-    val url = this?.content?.url ?: return null
+    private fun SessionState?.reportBrokenSiteItem(): MenuItem? {
+        val url = this?.content?.url ?: return null
 
-    return StandardMenuItem(
-        title = Text.Resource(R.string.browser_menu_webcompat_reporter_2),
-        icon = MenuItemIconRes(iconsR.drawable.mozac_ic_lightbulb_24),
-        onClickEvent = MenuAction.Navigate.WebCompatReporter,
-        // There is nothing to report about the pages the browser itself shows.
-        state =
-            when (url.isAboutUrl() || url.isContentUrl()) {
-                true -> MenuItemState.DISABLED
-                else -> MenuItemState.DEFAULT
-            },
-    )
+        return DEFAULT_MENU_ITEM.copy(
+            onClickEvent = MenuAction.Navigate.WebCompatReporter,
+            // There is nothing to report about the pages the browser itself shows.
+            state =
+                when (url.isAboutUrl() || url.isContentUrl()) {
+                    true -> MenuItemState.DISABLED
+                    else -> MenuItemState.DEFAULT
+                },
+        )
+    }
+
+    companion object {
+        private val DEFAULT_MENU_ITEM =
+            StandardMenuItem(
+                title = MenuItemTitle(Text.Resource(R.string.browser_menu_webcompat_reporter_2)),
+                icon = MenuItemIconRes(iconsR.drawable.mozac_ic_lightbulb_24),
+            )
+    }
 }

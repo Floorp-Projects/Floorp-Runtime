@@ -148,8 +148,6 @@ def _supports_artifact_build(job, env):
         job.get("index", {}).get("job-name") in ARTIFACT_JOBS
         # If tests aren't packaged, then we are not able to rebuild all the packages
         and env.get("MOZ_AUTOMATION_PACKAGE_TESTS") == "1"
-        # Android shippable artifact builds are not supported
-        and not ("android" in job["name"] and job["attributes"].get("shippable", False))
     )
 
 
@@ -193,6 +191,7 @@ def collapse_unified_builds(config, jobs):
             job.pop("dependencies")
             job["run"] = copy.deepcopy(x64["run"])
             job["fetches"] = copy.deepcopy(x64["fetches"])
+            job["mozconfig"] = copy.deepcopy(x64["mozconfig"])
             job["worker"]["env"].update(copy.deepcopy(x64["worker"]["env"]))
             job["worker"]["max-run-time"] = x64["worker"]["max-run-time"]
 
@@ -293,6 +292,34 @@ def enable_full_crashsymbols(config, jobs):
         else:
             logger.debug("Disabling full symbol generation for %s", job["name"])
             job["attributes"].pop("enable-full-crashsymbols", None)
+        yield job
+
+
+@transforms.add
+def disable_clang_plugins(config, jobs):
+    all_jobs = list(jobs)
+    opt_jobs_platform = {}
+    dbg_build_platforms = set()
+    for job in all_jobs:
+        try:
+            build_platform, build_type = job["name"].split("/")
+        except ValueError:
+            continue
+
+        if build_type == "debug":
+            dbg_build_platforms.add(build_platform)
+
+        if build_type == "opt":
+            opt_jobs_platform[id(job)] = build_platform
+
+    for job in all_jobs:
+        build_platform = opt_jobs_platform.get(id(job), None)
+        # Disable clang plugins for opt configuration when we have a fallback
+        # debug configuration that supposedly have similar coverage.
+        # This saves build time while not reducing coverage too much.
+        if build_platform in dbg_build_platforms:
+            worker_env = job["worker"]["env"]
+            worker_env["DISABLE_CLANG_PLUGIN"] = "1"
         yield job
 
 

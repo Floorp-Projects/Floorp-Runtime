@@ -33,9 +33,7 @@ support-files = [
   "coop_coep.html",
   "coop_coep.html^headers^",
 ]
-# remove this after bug 1628486 is landed
 prefs = [
-  "network.cookie.cookieBehavior=5",
   "gfx.font_rendering.fallback.async=false",
   "browser.sessionstore.closedTabsFromAllWindows=true",
   "browser.sessionstore.closedTabsFromClosedWindows=true",
@@ -53,6 +51,8 @@ prefs = [
 
 ["browser_aboutSessionRestore.js"]
 
+["browser_aboutSessionRestore_telemetry.js"]
+
 ["browser_async_duplicate_tab.js"]
 support-files = ["file_async_duplicate_tab.html"]
 
@@ -66,9 +66,6 @@ run-if = [
 
 ["browser_async_window_flushing.js"]
 https_first_disabled = true
-skip-if = [
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64' && opt", # Bug 1775616
-]
 
 ["browser_attributes.js"]
 
@@ -147,9 +144,6 @@ https_first_disabled = true
 ["browser_formdata.js"]
 
 ["browser_formdata_cc.js"]
-skip-if = [
-  "asan", # test runs too long
-]
 
 ["browser_formdata_face.js"]
 
@@ -183,8 +177,6 @@ skip-if = [
 ["browser_label_and_icon.js"]
 https_first_disabled = true
 skip-if = [
-  "os == 'mac' && os_version == '10.15' && arch == 'x86_64' && opt", # Bug 1638958
-  "os == 'mac' && os_version == '14.70' && arch == 'x86_64' && opt && socketprocess_networking", # Bug 1868915
   "os == 'mac' && os_version == '15.30' && arch == 'aarch64'", # Disabled due to bleedover with other tests when run in regular suites; passes in "failures" jobs
 ]
 
@@ -217,9 +209,6 @@ tags = "openUILinkIn"
 ["browser_pending_tabs.js"]
 
 ["browser_pinned_tabs.js"]
-skip-if = [
-  "ccov", # Bug 1625525
-]
 
 ["browser_policy_container_not_stored.js"]
 
@@ -233,15 +222,9 @@ skip-if = [
 
 ["browser_reopen_all_windows.js"]
 https_first_disabled = true
-skip-if = [
-  "asan", # high memory
-]
 tags = "os_integration"
 
 ["browser_replace_load.js"]
-skip-if = [
-  "true", # Bug 1646894
-]
 
 ["browser_restoreLastActionCorrectOrder.js"]
 
@@ -306,8 +289,6 @@ tags = "os_integration"
 
 ["browser_should_restore_tab.js"]
 skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && debug && socketprocess_networking", # Bug 1848488
-  "os == 'win' && os_version == '11.26100' && arch == 'x86' && debug && verify-standalone",
   "os == 'win' && os_version == '11.26200' && arch == 'x86' && debug && verify-standalone",
 ]
 
@@ -329,11 +310,10 @@ skip-if = [
 ["browser_switch_remoteness.js"]
 
 ["browser_tab_groups_closed.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && debug && socketprocess_networking", # Bug 1934803
-]
 
 ["browser_tab_groups_closed_groups_in_closed_windows.js"]
+
+["browser_tab_groups_closed_groups_source_window.js"]
 
 ["browser_tab_groups_empty.js"]
 
@@ -350,6 +330,8 @@ skip-if = [
 ["browser_tab_groups_restore_simple.js"]
 
 ["browser_tab_groups_restore_to_group.js"]
+
+["browser_tab_groups_restore_unknown_group_id.js"]
 
 ["browser_tab_groups_save_on_removeAllTabsBut.js"]
 
@@ -379,9 +361,6 @@ run-if = [
 https_first_disabled = true
 
 ["browser_undoCloseById.js"]
-skip-if = [
-  "debug",
-]
 
 ["browser_undoCloseById_targetWindow.js"]
 
@@ -391,9 +370,6 @@ run-if = [
 ]
 
 ["browser_upgrade_backup.js"]
-skip-if = [
-  "asan",
-]
 
 ["browser_urlbarSearchMode.js"]
 

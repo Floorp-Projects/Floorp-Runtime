@@ -4,6 +4,8 @@
 
 #include "txNodeSorter.h"
 
+#include <memory>
+
 #include "mozilla/CheckedInt.h"
 #include "mozilla/UniquePtrExtensions.h"
 #include "nsGkAtoms.h"
@@ -15,7 +17,6 @@
 #include "txXPathResultComparator.h"
 
 using mozilla::CheckedUint32;
-using mozilla::MakeUnique;
 using mozilla::MakeUniqueFallible;
 using mozilla::nsRFPService;
 using mozilla::RFPTarget;
@@ -40,7 +41,7 @@ nsresult txNodeSorter::addSortElement(Expr* aSelectExpr, Expr* aLangExpr,
                                       Expr* aDataTypeExpr, Expr* aOrderExpr,
                                       Expr* aCaseOrderExpr,
                                       txIEvalContext* aContext) {
-  UniquePtr<SortKey> key(new SortKey);
+  auto key = std::make_unique<SortKey>();
   nsresult rv = NS_OK;
 
   // Select
@@ -95,8 +96,8 @@ nsresult txNodeSorter::addSortElement(Expr* aSelectExpr, Expr* aLangExpr,
       }
     }
 
-    UniquePtr<txResultStringComparator> comparator =
-        MakeUnique<txResultStringComparator>(ascending, upperFirst);
+    auto comparator =
+        std::make_unique<txResultStringComparator>(ascending, upperFirst);
     rv = comparator->init(
         lang, aContext->getContextNode().OwnerDoc()->ShouldResistFingerprinting(
                   RFPTarget::JSLocale));
@@ -151,7 +152,7 @@ nsresult txNodeSorter::sortNodeSet(txNodeSet* aNodes, txExecutionState* aEs,
     indexes[i] = i;
   }
 
-  auto nodeSetContext = MakeUnique<txNodeSetContext>(aNodes, aEs);
+  auto nodeSetContext = std::make_unique<txNodeSetContext>(aNodes, aEs);
 
   // Sort the indexarray
   SortData sortData{this, nodeSetContext.get(), sortValues.Elements(), NS_OK};

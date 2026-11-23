@@ -5,29 +5,22 @@
 #ifndef _nsWindowWayland_h_
 #define _nsWindowWayland_h_
 
+#include "WaylandVsyncSource.h"
 #include "nsWindow.h"
 
 namespace mozilla::widget {
 
-class nsWindowWayland final : public nsWindow {
+class nsWindowWaylandToplevel;
+class nsWindowWaylandPopup;
+class nsWindowWaylandToplevelGtk;
+class nsWindowWaylandPopupGtk;
+
+// Base WaylandWindow class
+class nsWindowWayland : public nsWindow {
  public:
-  nsWindowWayland();
-
   nsWindowWayland* AsWayland() override { return this; }
-  nsWindow* GetEffectiveParent() const;
-
-  void GetWorkspaceID(nsAString& aWorkspaceID) override;
-  void MoveToWorkspace(const nsAString& aWorkspaceIDStr) override;
-  void RestoreXdgToplevel();
-
-  // Use xdg-activation protocol to transfer focus from gFocusWindow.
-  void TransferFocusTo();
-  void FocusWaylandWindow(const char* aTokenID);
 
   MOZ_CAN_RUN_SCRIPT void WaylandDragWorkaround(GdkEventButton* aEvent);
-
-  void CreateCompositorVsyncDispatcher() override;
-  RefPtr<mozilla::VsyncDispatcher> GetVsyncDispatcher() override;
 
   nsresult SynthesizeNativeMouseMove(
       LayoutDeviceIntPoint aPoint,
@@ -42,35 +35,122 @@ class nsWindowWayland final : public nsWindow {
   void LockNativePointer(NativePointerLockMode aNativePointerLockMode) override;
   void UnlockNativePointer() override;
 
-  LayoutDeviceIntSize GetMoveToRectPopupSize() override;
+  virtual bool ApplyEnterLeaveMutterWorkaround() = 0;
 
-  void NativeMoveResizeWaylandPopup(bool aMove, bool aResize);
-  void NativeMoveResizeWaylandPopupCallback(const GdkRectangle* aFinalSize,
-                                            bool aFlippedX, bool aFlippedY);
-  void CreateNative() override;
-  void DestroyNative() override;
-
-  bool PIPMove();
-  bool PIPResize(GdkWindowEdge aEdge);
-
-  void MaybeCreatePipResources();
-  void ClearPipResources();
-
-  bool ApplyEnterLeaveMutterWorkaround();
-
+  void SetToplevelOpaqueRegion(cairo_region_t* aRegion);
   void ForceToplevelCommit();
+
+  void AppendToLastWindow(nsWindowWayland* aWindow);
+  void RemoveFromList();
+
+  nsWindowWayland* FindLastWindow(nsWindowWayland* aWindow);
+  nsWindowWayland* GetNextWindow() { return mWaylandWindowNext; }
+  nsWindowWayland* GetPrevWindow() { return mWaylandWindowPrev; }
+
+  nsCString GenerateWorkspaceID();
 
  protected:
   virtual ~nsWindowWayland() = default;
 
-  RefPtr<mozilla::widget::WaylandSurface> mSurface;
+  LayoutDeviceIntPoint mNativeLockedPoint;
+  zwp_locked_pointer_v1* mLockedPointer = nullptr;
+  zwp_relative_pointer_v1* mRelativePointer = nullptr;
 
-  /*  Gkt creates popup in two incarnations - wl_subsurface and xdg_popup.
-   *  Kind of popup is choosen before GdkWindow is mapped so we can change
-   *  it only when GdkWindow is hidden.
-   *
-   *  Relevant Gtk code is at gdkwindow-wayland.c
-   *  in should_map_as_popup() and should_map_as_subsurface()
+  RefPtr<GdkWindow> mCommitWindow;
+  static constexpr int sCommitOrigin = -100;
+  int mCommitWindowPosition = sCommitOrigin;
+
+  // Toplevel window (first element) of linked list of Wayland windows.
+  // It's nullptr for toplevel.
+  RefPtr<nsWindowWaylandToplevel> mWaylandToplevel;
+
+  // Linked list of Wayland windows chain, used for popups.
+  // First element in the list is always a toplevel window
+  // (i.e. mWaylandToplevel).
+  RefPtr<nsWindowWayland> mWaylandWindowPrev;
+  RefPtr<nsWindowWayland> mWaylandWindowNext;
+};
+
+class nsWindowWaylandToplevel : public nsWindowWayland {
+ public:
+  nsWindowWaylandToplevel* AsWaylandToplevel() override { return this; }
+  virtual nsWindowWaylandToplevelGtk* AsGtk() { return nullptr; }
+
+  // Use xdg-activation protocol to transfer focus from gFocusWindow.
+  void TransferFocusTo();
+  virtual void FocusWaylandWindow(const char* aTokenID) = 0;
+
+  void GetWorkspaceID(nsAString& aWorkspaceID) override;
+  void MoveToWorkspace(const nsAString& aWorkspaceIDStr) override;
+
+  // aRestoreWindow = true loads mSessionRestoreToken from already saved
+  // toplevel window state; false creates a new restore session.
+  virtual bool CreateRestoreSession(bool aRestoreWindow) = 0;
+
+  void CreateCompositorVsyncDispatcher() override;
+  RefPtr<mozilla::VsyncDispatcher> GetVsyncDispatcher() override;
+
+  bool IsPipWindow() const;
+  virtual bool PIPMove() = 0;
+  virtual bool PIPResize(GdkWindowEdge aEdge) = 0;
+  virtual void ClearPipResources() = 0;
+
+  // The popup chain is rooted at the toplevel window itself, so the first
+  // popup attached to us is simply our next link.
+  nsWindowWaylandPopup* GetFirstPopup() {
+    return mWaylandWindowNext ? mWaylandWindowNext->AsWaylandPopup() : nullptr;
+  }
+
+ protected:
+  virtual ~nsWindowWaylandToplevel();
+
+  void EnableVSyncSource() override;
+  void DisableVSyncSource() override;
+  void WatchHiddenVSyncSource() override;
+
+  void FocusWaylandWindowImpl(const char* aTokenID, wl_surface* aSurface);
+
+  // aRestoreWindow = true loads mSessionRestoreToken from already saved
+  // toplevel window state; false creates a new restore session.
+  bool CreateRestoreSessionImpl(bool aRestoreWindow, xdg_toplevel* aToplevel);
+
+  RefPtr<mozilla::WaylandVsyncSource> mWaylandVsyncSource;
+  RefPtr<mozilla::VsyncDispatcher> mWaylandVsyncDispatcher;
+  xdg_toplevel_session_v1* mSessionRestoreToken = nullptr;
+  nsCString mWorkspaceID;
+};
+
+class nsWindowWaylandPopup : public nsWindowWayland {
+ public:
+  nsWindowWaylandPopup();
+
+  nsWindowWaylandPopup* AsWaylandPopup() override { return this; }
+  virtual nsWindowWaylandPopupGtk* AsGtk() { return nullptr; }
+
+  LayoutDeviceIntSize GetMoveToRectPopupSize() override;
+
+  virtual void NativeMoveResizeWaylandPopup(bool aMove, bool aResize) = 0;
+  virtual void HidePopupWindow(bool aTemporaryHidden,
+                               bool aRemoveFromPopupList) = 0;
+
+  bool IsLastPopup() const { return !mWaylandWindowNext; }
+  nsWindowWaylandPopup* GetNextPopup() const {
+    return mWaylandWindowNext ? mWaylandWindowNext->AsWaylandPopup() : nullptr;
+  }
+  nsWindowWaylandPopup* GetPrevPopup() const {
+    return mWaylandWindowPrev ? mWaylandWindowPrev->AsWaylandPopup() : nullptr;
+  }
+  bool IsPopupClosed() const { return mPopupClosed; }
+  void RemoveClosedPopups();
+
+  void GetLayoutPopupWidgetChain(nsTArray<nsIWidget*>* aLayoutWidgetHierarchy);
+
+  nsWindow* GetEffectiveParent() const;
+
+ protected:
+  virtual ~nsWindowWaylandPopup() = default;
+
+  /*  We create popups in two incarnations - wl_subsurface and xdg_popup.
    *
    *  wl_subsurface:
    *    - can't be positioned by move-to-rect
@@ -82,7 +162,7 @@ class nsWindowWayland final : public nsWindow {
    *    - aligned in popup widget hierarchy, first one is attached to toplevel
    *    - has child (popup) widgets
    *
-   *  Thus we need to map Firefox popup type to desired Gtk one:
+   *  Thus we need to map Firefox popup type to desired one:
    *
    *  wl_subsurface:
    *    - pernament panels
@@ -99,12 +179,6 @@ class nsWindowWayland final : public nsWindow {
   bool mPopupTrackInHierarchy : 1;
   bool mPopupTrackInHierarchyConfigured : 1;
 
-  /* If popup is not positioned explicitly before show on Wayland,
-   * apply usual popup measurement on Show() to make sure
-   * it's placed correctly according to initial position set by Create().
-   */
-  bool mWaylandApplyPopupPositionBeforeShow : 1;
-
   // When popup is anchored, mPopupPosition is relative to its parent popup.
   bool mPopupAnchored : 1;
 
@@ -115,9 +189,8 @@ class nsWindowWayland final : public nsWindow {
   // coordinates reliably.
   bool mPopupMatchesLayout : 1;
 
-  /*  Indicates that popup setup was changed and
-   *  we need to recalculate popup coordinates.
-   */
+  //  Indicates that popup setup was changed and
+  //  we need to recalculate popup coordinates.
   bool mPopupChanged : 1;
 
   // Popup is going to be closed and removed.
@@ -151,12 +224,12 @@ class nsWindowWayland final : public nsWindow {
 
   WaylandPopupMoveToRectParams mPopupMoveToRectParams;
 
+  // When popup is resized by Gtk by move-to-rect callback,
+  // we store final popup size here. Then we use mMoveToRectPopupSize size
+  // in following popup operations unless mLayoutPopupSizeCleared is set.
+  DesktopIntSize mMoveToRectPopupSize;
+
   // Wayland Popup section
-
-  // Gets the offset from this popup's coordinate to our toplevel coordinates.
-  DesktopIntPoint WaylandGetParentPosition() const;
-
-  bool WaylandPopupConfigure();
   bool WaylandPopupIsAnchored();
   bool WaylandPopupIsContextMenu();
   bool WaylandPopupIsPermanent();
@@ -164,95 +237,26 @@ class nsWindowWayland final : public nsWindow {
   bool WaylandPopupIsFirst();
   bool IsWidgetOverflowWindow();
   void RemovePopupFromHierarchyList();
-  void ShowWaylandPopupWindow();
-  void HideWaylandPopupWindow(bool aTemporaryHidden, bool aRemoveFromPopupList);
-  void ShowWaylandToplevelWindow();
-  void HideWaylandToplevelWindow();
   void WaylandPopupHideTooltips();
   void WaylandPopupCloseOrphanedPopups();
-  void AppendPopupToHierarchyList(nsWindowWayland* aToplevelWindow);
-  void WaylandPopupHierarchyHideTemporary();
-  void WaylandPopupHierarchyShowTemporaryHidden();
-  void WaylandPopupHierarchyCalculatePositions();
+  void AppendPopupToHierarchyList(nsWindowWaylandToplevel* aToplevelWindow);
   bool IsInPopupHierarchy();
   void AddWindowToPopupHierarchy();
-  void UpdateWaylandPopupHierarchy();
-  void WaylandPopupHierarchyHideByLayout(
-      nsTArray<nsIWidget*>* aLayoutWidgetHierarchy);
   void WaylandPopupHierarchyValidateByLayout(
       nsTArray<nsIWidget*>* aLayoutWidgetHierarchy);
   void CloseAllPopupsBeforeRemotePopup();
-  void WaylandPopupHideClosedPopups();
-  void WaylandPopupPrepareForMove();
-  void WaylandPopupMoveImpl();
-  void WaylandPopupMovePlain(int aX, int aY);
-  bool WaylandPopupRemoveNegativePosition(int* aX = nullptr, int* aY = nullptr);
-  bool WaylandPopupCheckAndGetAnchor(GdkRectangle* aPopupAnchor,
-                                     GdkPoint* aOffset);
-  bool WaylandPopupAnchorAdjustForParentPopup(GdkRectangle* aPopupAnchor,
-                                              GdkPoint* aOffset);
   bool IsPopupInLayoutPopupChain(nsTArray<nsIWidget*>* aLayoutWidgetHierarchy,
                                  bool aMustMatchParent);
   void WaylandPopupMarkAsClosed();
-  void WaylandPopupRemoveClosedPopups();
-  void WaylandPopupSetDirectPosition();
-  bool WaylandPopupFitsToplevelWindow();
   const WaylandPopupMoveToRectParams WaylandPopupGetPositionFromLayout();
   void WaylandPopupPropagateChangesToLayout(bool aMove, bool aResize);
-  nsWindowWayland* WaylandPopupFindLast(nsWindowWayland* aPopup);
-  GtkWindow* GetCurrentTopmostWindow() const;
   bool IsPopupDirectionRTL();
 
 #ifdef MOZ_LOGGING
-  void LogPopupHierarchy();
   void LogPopupAnchorHints(int aHints);
   void LogPopupGravity(GdkGravity aGravity);
+  static void LogPopupHierarchy(nsWindowWaylandPopup* aFirstPopup);
 #endif
-
-  void ConfigureToplevelWindowNative() override;
-  void OnMapNative() override;
-
-  void NativeShow(bool aAction) override;
-
-  bool WaylandPipEnabled() const;
-
-  void EnableVSyncSource() override;
-  void DisableVSyncSource() override;
-
-  bool CreateRestoreSession(bool aRestoreWindow);
-
-  // Toplevel window (first element) of linked list of Wayland popups. It's null
-  // if we're the toplevel.
-  RefPtr<nsWindowWayland> mWaylandToplevel;
-
-  // Next/Previous popups in Wayland popup hierarchy.
-  RefPtr<nsWindowWayland> mWaylandPopupNext;
-  RefPtr<nsWindowWayland> mWaylandPopupPrev;
-
-  // When popup is resized by Gtk by move-to-rect callback,
-  // we store final popup size here. Then we use mMoveToRectPopupSize size
-  // in following popup operations unless mLayoutPopupSizeCleared is set.
-  DesktopIntSize mMoveToRectPopupSize;
-
-  RefPtr<mozilla::WaylandVsyncSource> mWaylandVsyncSource;
-  RefPtr<mozilla::VsyncDispatcher> mWaylandVsyncDispatcher;
-  LayoutDeviceIntPoint mNativeLockedPoint;
-  xdg_toplevel_session_v1* mSessionRestoreToken = nullptr;
-  nsCString mWorkspaceID;
-
-  gulong mXdgToplevelRealizedID = 0;
-
-  zwp_locked_pointer_v1* mLockedPointer = nullptr;
-  zwp_relative_pointer_v1* mRelativePointer = nullptr;
-  struct {
-    struct xdg_surface* mXdgSurface = nullptr;
-    struct xx_pip_v1* mPipSurface = nullptr;
-    LayoutDeviceIntSize mConfigureSize;
-  } mPipResources;
-
-  RefPtr<GdkWindow> mCommitWindow;
-  static constexpr int sCommitOrigin = -100;
-  int mCommitWindowPosition = sCommitOrigin;
 };
 
 }  // namespace mozilla::widget

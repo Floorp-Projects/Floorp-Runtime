@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <thread>
+#include "freestanding/NativeNtBlockSet.cpp"
 #include "freestanding/SharedSection.cpp"
 #include "mozilla/CmdLineAndEnvUtils.h"
 #include "mozilla/DynamicBlocklist.h"
@@ -69,6 +70,10 @@ class SharedSectionTestHelper {
             sizeof(DllBlockInfo));
   }
   static HANDLE GetSectionHandle() { return SharedSection::sSectionHandle; }
+  static void* GetWriteCopyView() { return SharedSection::sWriteCopyView; }
+  static constexpr size_t GetSharedViewSize() {
+    return SharedSection::kSharedViewSize;
+  }
 };
 }  // namespace mozilla::freestanding
 
@@ -224,16 +229,14 @@ static DynamicBlockList ConvertStaticBlocklistToDynamic(
   }
 
   // Pack all strings in this buffer without null characters
-  UniquePtr<uint8_t[]> stringBuffer =
-      MakeUnique<uint8_t[]>(totalStringLen.value());
+  auto stringBuffer = std::make_unique<uint8_t[]>(totalStringLen.value());
 
   // The string buffer is placed immediately after the array of DllBlockInfo
   const size_t stringBufferOffset = (originalLength + 1) * sizeof(DllBlockInfo);
 
   // Entries in the dynamic blocklist do have to be sorted,
   // unlike in the static blocklist.
-  UniquePtr<DllBlockInfo[]> sortedBlockEntries =
-      MakeUnique<DllBlockInfo[]>(originalLength);
+  auto sortedBlockEntries = std::make_unique<DllBlockInfo[]>(originalLength);
   memcpy(sortedBlockEntries.get(), aBlockEntries,
          sizeof(DllBlockInfo) * originalLength);
   std::sort(sortedBlockEntries.get(), sortedBlockEntries.get() + originalLength,
@@ -302,7 +305,7 @@ static bool TestDependentModules() {
 
   constexpr size_t sizeInBytes =
       SharedSectionTestHelper::GetModulePathArraySize();
-  UniquePtr<uint8_t[]> bufferData = MakeUnique<uint8_t[]>(sizeInBytes);
+  auto bufferData = std::make_unique<uint8_t[]>(sizeInBytes);
   Span<uint8_t> buffer(bufferData, sizeInBytes);
   memset(buffer.data(), 0x88, buffer.size());
 
@@ -438,6 +441,114 @@ static bool TestDynamicBlocklist() {
 
   gSharedSection.Reset();
   return true;
+}
+
+static bool AddToBlockSet(NativeNtBlockSet& aBlockSet,
+                          const UNICODE_STRING& aName, uint64_t aVersion) {
+  MOZ_SEH_TRY {
+    aBlockSet.Add(aName, aVersion);
+    return true;
+  }
+  MOZ_SEH_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
+    printf(
+        "TEST-FAILED | TestCrossProcessWin | "
+        "NativeNtBlockSet::Add accessed invalid memory.\n");
+    return false;
+  }
+}
+
+// aBlockSet is expected to already contain aAllVersionsName from an earlier
+// SharedSection view.
+static bool CheckBlockSetAfterViewReset(
+    NativeNtBlockSet& aBlockSet, const UNICODE_STRING& aVersionedName,
+    uint64_t aVersion, const UNICODE_STRING& aAllVersionsName) {
+  // This maps a new view.
+  const DllBlockInfo* entry = gSharedSection.SearchBlocklist(aVersionedName);
+  if (!entry) {
+    printf(
+        "TEST-FAILED | TestCrossProcessWin | "
+        "No blocklist entry match for %S after Reset.\n",
+        aVersionedName.Buffer);
+    return false;
+  }
+
+  if (!AddToBlockSet(aBlockSet, entry->mName, aVersion) ||
+      !AddToBlockSet(aBlockSet, aAllVersionsName, DllBlockInfo::ALL_VERSIONS)) {
+    return false;
+  }
+
+  WritableBuffer buffer;
+  aBlockSet.Write(buffer);
+
+  const char kExpected[] = "1ccelerator_Test.dll,3.2.1.6;atkdx11disp_Test.dll;";
+  if (buffer.Length() != strlen(kExpected) ||
+      memcmp(buffer.Data(), kExpected, buffer.Length()) != 0) {
+    printf(
+        "TEST-FAILED | TestCrossProcessWin | "
+        "NativeNtBlockSet::Write wrote \"%.*s\" (expected \"%s\").\n",
+        static_cast<int>(buffer.Length()), buffer.Data(), kExpected);
+    return false;
+  }
+
+  return true;
+}
+
+// Entries in NativeNtBlockSet must stay valid after the SharedSection view
+// that the dynamic blocklist entries point into is unmapped (bug 2073733).
+static bool TestBlockSetOutlivesSharedSectionView() {
+  static NativeNtBlockSet sBlockSet;
+  const UNICODE_STRING kAllVersionsName =
+      MOZ_LITERAL_UNICODE_STRING(L"atkdx11disp_Test.dll");
+  const UNICODE_STRING kVersionedName =
+      MOZ_LITERAL_UNICODE_STRING(L"1ccelerator_Test.dll");
+  const uint64_t kVersion = MAKE_VERSION(3, 2, 1, 6);
+
+  LauncherVoidResult result = gSharedSection.Init();
+  if (result.isErr()) {
+    PrintLauncherError(result, "SharedSection::Init failed");
+    return false;
+  }
+
+  result = gSharedSection.SetBlocklist(gShortList, false);
+  if (result.isErr()) {
+    PrintLauncherError(result, "SetBlocklist(gShortList) failed");
+    return false;
+  }
+
+  const DllBlockInfo* entry = gSharedSection.SearchBlocklist(kAllVersionsName);
+  if (!entry) {
+    printf(
+        "TEST-FAILED | TestCrossProcessWin | "
+        "No blocklist entry match for %S.\n",
+        kAllVersionsName.Buffer);
+    return false;
+  }
+  if (!AddToBlockSet(sBlockSet, entry->mName, DllBlockInfo::ALL_VERSIONS)) {
+    return false;
+  }
+
+  // Unmap the view, and reserve its address range so that any access through
+  // a stale pointer into it faults instead of reading whatever gets mapped
+  // there next.
+  void* oldView = SharedSectionTestHelper::GetWriteCopyView();
+  gSharedSection.Reset();
+  void* reserved =
+      ::VirtualAlloc(oldView, SharedSectionTestHelper::GetSharedViewSize(),
+                     MEM_RESERVE, PAGE_NOACCESS);
+  if (!reserved) {
+    printf(
+        "TEST-FAILED | TestCrossProcessWin | "
+        "Failed to reserve the old view - %08lx\n",
+        ::GetLastError());
+    return false;
+  }
+
+  bool success = CheckBlockSetAfterViewReset(sBlockSet, kVersionedName,
+                                             kVersion, kAllVersionsName);
+
+  ::VirtualFree(reserved, 0, MEM_RELEASE);
+  gSharedSection.Reset();
+  return success;
 }
 
 class ChildProcess final {
@@ -628,6 +739,10 @@ int wmain(int argc, wchar_t* argv[]) {
   }
 
   if (!TestDynamicBlocklist()) {
+    return 1;
+  }
+
+  if (!TestBlockSetOutlivesSharedSectionView()) {
     return 1;
   }
 

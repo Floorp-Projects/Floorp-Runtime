@@ -19,8 +19,8 @@ use crate::values::computed::{self, CSSPixelLength, Context, FontSize};
 use crate::values::generics::NonNegative;
 use crate::values::generics::length as generics;
 use crate::values::generics::length::{
-    GenericAnchorSizeFunction, GenericLengthOrNumber, GenericLengthPercentageOrNormal,
-    GenericMargin, GenericMaxSize, GenericSize,
+    GenericAnchorSizeFunction, GenericFitTolerance, GenericLengthOrNumber,
+    GenericLengthPercentageOrNormal, GenericMargin, GenericMaxSize, GenericSize,
 };
 use crate::values::specified::NonNegativeNumber;
 use crate::values::specified::calc::{
@@ -1232,14 +1232,16 @@ impl Length {
         Self::new(NoCalcLength::from_px(px_value))
     }
 
-    /// Get a px value without context.
+    /// Get a px value without context, clamped to a finite value like the
+    /// computed value with a context would be.
     pub fn to_computed_pixel_length_without_context(&self) -> Result<CSSFloat, ()> {
-        match self.0.unpack() {
+        let px = match self.0.unpack() {
             Unpacked::Inline(unit, value) => {
                 NoCalcLength::new(unit, value).to_computed_pixel_length_without_context()
             },
             Unpacked::Boxed(calc) => calc.to_computed_pixel_length_without_context(),
-        }
+        }?;
+        Ok(CSSPixelLength::new(px).finite().px())
     }
 
     /// Get a px value, with an optional GeckoFontMetrics getter to resolve font-relative units.
@@ -1680,6 +1682,9 @@ pub type NonNegativeLengthPercentage = NonNegative<LengthPercentage>;
 /// Either a NonNegativeLengthPercentage or the `normal` keyword.
 pub type NonNegativeLengthPercentageOrNormal =
     GenericLengthPercentageOrNormal<NonNegativeLengthPercentage>;
+
+/// A specified `fit-tolerance` value.
+pub type FitTolerance = GenericFitTolerance<NonNegativeLengthPercentage>;
 
 impl From<NoCalcLength> for NonNegativeLengthPercentage {
     #[inline]

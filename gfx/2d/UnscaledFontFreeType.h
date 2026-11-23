@@ -19,7 +19,14 @@ class UnscaledFontFreeType : public UnscaledFont {
  public:
   MOZ_DECLARE_REFCOUNTED_VIRTUAL_TYPENAME(UnscaledFontFreeType, override)
   explicit UnscaledFontFreeType(const RefPtr<SharedFTFace>& aFace)
-      : mFace(aFace), mIndex(aFace ? aFace->GetFaceIndex() : 0) {}
+      : mFace(aFace) {
+    if (mFace) {
+      if (mFace->GetFilename()) {
+        mFile = mFace->GetFilename();
+      }
+      mIndex = mFace->GetFaceIndex();
+    }
+  }
   explicit UnscaledFontFreeType(const char* aFile, uint32_t aIndex = 0,
                                 RefPtr<SharedFTFace> aFace = nullptr)
       : mFace(std::move(aFace)), mFile(aFile), mIndex(aIndex) {}
@@ -40,6 +47,10 @@ class UnscaledFontFreeType : public UnscaledFont {
   RefPtr<SharedFTFace> InitFace();
 
 #ifdef MOZ_WIDGET_ANDROID
+  static bool ValidateFontDescriptor(const uint8_t* aName, size_t aNameLength,
+                                     std::string& aResultName,
+                                     uint32_t& aIndex);
+
   static already_AddRefed<UnscaledFont> CreateFromFontDescriptor(
       const uint8_t* aData, uint32_t aDataLength, uint32_t aIndex);
 
@@ -57,13 +68,13 @@ class UnscaledFontFreeType : public UnscaledFont {
  protected:
   RefPtr<SharedFTFace> mFace;
   std::string mFile;
-  uint32_t mIndex;
+  uint32_t mIndex = 0;
 
   friend class ScaledFontFreeType;
   friend class ScaledFontFontconfig;
 
   static void GetVariationSettingsFromFace(
-      std::vector<wr::FontVariation>* aVariations, FT_Face aFace);
+      std::vector<wr::FontVariation>* aVariations, SharedFTFace* aFace);
 
   static void ApplyVariationsToFace(const wr::FontVariation* aVariations,
                                     uint32_t aNumVariations, FT_Face aFace);
@@ -83,6 +94,10 @@ class UnscaledFontFontconfig : public UnscaledFontFreeType {
       : UnscaledFontFreeType(std::move(aFile), aIndex, std::move(aFace)) {}
 
   FontType GetType() const override { return FontType::FONTCONFIG; }
+
+  static bool ValidateFontDescriptor(const uint8_t* aName, size_t aNameLength,
+                                     std::string& aResultName,
+                                     uint32_t& aIndex);
 
   static already_AddRefed<UnscaledFont> CreateFromFontDescriptor(
       const uint8_t* aData, uint32_t aDataLength, uint32_t aIndex);

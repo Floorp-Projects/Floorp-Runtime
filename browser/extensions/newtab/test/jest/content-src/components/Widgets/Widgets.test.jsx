@@ -1,9 +1,13 @@
+import { WIDGET_ROW_COMPONENTS } from "content-src/components/Widgets/WidgetsComponentRegistry.jsx";
+import { WidgetLocationContext } from "content-src/components/Widgets/WidgetPlacement";
+import { useContext } from "react";
 import { render, fireEvent, createEvent, act } from "@testing-library/react";
 import { WrapWithProvider } from "test/jest/test-utils";
 import { Provider } from "react-redux";
 import { createStore, combineReducers } from "redux";
 import { INITIAL_STATE, reducers } from "common/Reducers.sys.mjs";
 import { actionTypes as at } from "common/Actions.mjs";
+import { WIDGET_REGISTRY } from "common/WidgetsRegistry.mjs";
 import {
   Widgets,
   resetTimerToDefaults,
@@ -53,12 +57,12 @@ const LEGACY_WEATHER_FORECAST_STATE = {
   },
 };
 
-function renderWidgets(state) {
+function renderWidgets(state, props = {}) {
   const store = createStore(combineReducers(reducers), state);
   jest.spyOn(store, "dispatch");
   const { container } = render(
     <Provider store={store}>
-      <Widgets />
+      <Widgets {...props} />
     </Provider>
   );
   return { container, store };
@@ -74,6 +78,10 @@ const PREF_WIDGETS_PRIVACY_ENABLED = "widgets.privacy.enabled";
 const PREF_WIDGETS_CROSSWORD_ENABLED = "widgets.crossword.enabled";
 const PREF_WIDGETS_STOCKS_ENABLED = "widgets.stocks.enabled";
 const PREF_WIDGETS_RECENT_SEARCHES_ENABLED = "widgets.recentSearches.enabled";
+const PREF_WIDGETS_HOROSCOPES_ENABLED = "widgets.horoscopes.enabled";
+const PREF_WIDGETS_TRAVEL_ENABLED = "widgets.travel.enabled";
+const PREF_WIDGETS_SOLITAIRE_ENABLED = "widgets.solitaire.enabled";
+const PREF_WIDGETS_WREXHAMAFC_ENABLED = "widgets.wrexhamAFC.enabled";
 const PREF_WIDGETS_PICTURE_OF_THE_DAY_ENABLED =
   "widgets.pictureOfTheDay.enabled";
 const PREF_WIDGETS_FEEDBACK_ENABLED = "widgets.feedback.enabled";
@@ -147,6 +155,50 @@ describe("<Widgets>", () => {
     expect(container.querySelector(".crossword")).not.toBeInTheDocument();
   });
 
+  it("renders a framed widget only while the manifest has an entry for it", () => {
+    const prefs = {
+      "nova.enabled": true,
+      [PREF_WIDGETS_ENABLED]: true,
+      [PREF_WIDGETS_CROSSWORD_ENABLED]: true,
+      "widgets.system.crossword.enabled": true,
+    };
+    const url =
+      "https://prod-games-particle.merino.prod.webservices.mozgcp.net/index.html";
+    for (const [FramedWidgets, rendered] of [
+      [{ crossword: { url } }, true],
+      [{}, false],
+    ]) {
+      const { container } = renderWidgets(
+        widgetsState(prefs, { FramedWidgets })
+      );
+      expect(
+        container.querySelector("[data-widget-id='crossword']") !== null
+      ).toBe(rendered);
+    }
+  });
+
+  it("should render <Travel> under Nova when its prefs are enabled", () => {
+    const state = widgetsState(
+      {
+        "nova.enabled": true,
+        [PREF_WIDGETS_ENABLED]: true,
+        [PREF_WIDGETS_TRAVEL_ENABLED]: true,
+        "widgets.system.travel.enabled": true,
+      },
+      {
+        FramedWidgets: {
+          travel: {
+            url: "https://stage-widgets-kayak-travel.merino.nonprod.webservices.mozgcp.net/1.0.202610272219/index.html",
+          },
+        },
+      }
+    );
+    const { container } = renderWidgets(state);
+    expect(
+      container.querySelector("article.travel.widget")
+    ).toBeInTheDocument();
+  });
+
   it("should render and show <FocusTimer> if timer prefs are enabled", () => {
     const state = widgetsState({
       [PREF_WIDGETS_ENABLED]: true,
@@ -160,6 +212,28 @@ describe("<Widgets>", () => {
     );
     expect(container.querySelector(".widgets-container")).toBeInTheDocument();
     expect(container.querySelector(".focus-timer.widget")).toBeInTheDocument();
+  });
+
+  it("should render <Solitaire> if solitaire prefs are enabled", () => {
+    const state = widgetsState(
+      {
+        "nova.enabled": true,
+        [PREF_WIDGETS_ENABLED]: true,
+        [PREF_WIDGETS_SOLITAIRE_ENABLED]: true,
+        "widgets.system.solitaire.enabled": true,
+      },
+      {
+        FramedWidgets: {
+          solitaire: {
+            url: "https://prod-widgets-yahoo-solitaire.merino.prod.webservices.mozgcp.net/1.0.20261030214548/index.html",
+          },
+        },
+      }
+    );
+    const { container } = renderWidgets(state);
+    expect(
+      container.querySelector("article.solitaire.widget")
+    ).toBeInTheDocument();
   });
 
   it("should render nothing when widgetsEnabled is false, even if individual widget prefs are on", () => {
@@ -259,7 +333,7 @@ describe("<Widgets> handleHideAllWidgets", () => {
   }
 
   function expectAllWidgetPrefsDisabled(calls) {
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(12);
     for (const name of [
       PREF_WIDGETS_LISTS_ENABLED,
       PREF_WIDGETS_TIMER_ENABLED,
@@ -269,6 +343,10 @@ describe("<Widgets> handleHideAllWidgets", () => {
       PREF_WIDGETS_STOCKS_ENABLED,
       PREF_WIDGETS_PICTURE_OF_THE_DAY_ENABLED,
       PREF_WIDGETS_RECENT_SEARCHES_ENABLED,
+      PREF_WIDGETS_HOROSCOPES_ENABLED,
+      PREF_WIDGETS_TRAVEL_ENABLED,
+      PREF_WIDGETS_SOLITAIRE_ENABLED,
+      PREF_WIDGETS_WREXHAMAFC_ENABLED,
     ]) {
       const call = calls.find(action => action.data?.name === name);
       expect(call).toBeDefined();
@@ -808,6 +886,82 @@ describe("<Widgets> handleToggleMaximize", () => {
       ).toBeDefined();
     });
 
+    it.each([
+      [undefined, "widget_container"],
+      ["home", "home_space"],
+      ["library", "widget_space"],
+    ])(
+      "should tell its widgets where they render (placement %s: %s)",
+      (placement, location) => {
+        const original = WIDGET_ROW_COMPONENTS.lists;
+        WIDGET_ROW_COMPONENTS.lists = function Probe() {
+          return (
+            <div
+              className="location-probe"
+              data-location={useContext(WidgetLocationContext) ?? ""}
+            />
+          );
+        };
+        try {
+          const { container } = renderWidgets(novaState(), { placement });
+          expect(
+            container.querySelector(".location-probe").dataset.location
+          ).toBe(location);
+        } finally {
+          WIDGET_ROW_COMPONENTS.lists = original;
+        }
+      }
+    );
+
+    it("should only empty the Home list when hiding all on Home", () => {
+      const { container, store } = renderWidgets(novaState(), {
+        placement: "home",
+      });
+
+      fireEvent.click(
+        container.querySelector(
+          "panel-item[data-l10n-id='newtab-widget-section-menu-hide-all']"
+        )
+      );
+
+      const setPrefCalls = actionsFrom(store).filter(
+        action => action?.type === at.SET_PREF
+      );
+      expect(setPrefCalls.map(action => action.data)).toEqual([
+        { name: "widgets.home", value: "[]" },
+      ]);
+      const actions = actionsFrom(store);
+      expect(
+        actions.find(action => action.type === at.WIDGETS_CONTAINER_ACTION).data
+          .action_type
+      ).toBe("remove_all_from_home");
+      expect(
+        actions.some(
+          action =>
+            action.type === at.WIDGETS_HIDE_ALL ||
+            action.type === at.WIDGETS_ENABLED
+        )
+      ).toBe(false);
+    });
+
+    it("should turn widgets off when hiding all in the widget library", () => {
+      const { container, store } = renderWidgets(novaState(), {
+        placement: "library",
+      });
+
+      fireEvent.click(
+        container.querySelector(
+          "panel-item[data-l10n-id='newtab-widget-section-menu-hide-all']"
+        )
+      );
+
+      const names = actionsFrom(store)
+        .filter(action => action?.type === at.SET_PREF)
+        .map(action => action.data.name);
+      expect(names).toContain(PREF_WIDGETS_LISTS_ENABLED);
+      expect(names).not.toContain("widgets.home");
+    });
+
     it("should dispatch Learn more actions from the Nova header menu", () => {
       const { container, store } = renderWidgets(novaState());
 
@@ -950,6 +1104,7 @@ function makeNovaWidgetState(widgets, extraPrefs = {}) {
     ...INITIAL_STATE.Prefs.values,
     "nova.enabled": true,
     "widgets.enabled": true,
+    region: "US",
     // Permissive defaults that let the weather widget pass its
     // `weatherData.initialized && showWeather && systemShowWeather`
     // gate when it's enabled by the test. Harmless when it isn't.
@@ -1007,6 +1162,48 @@ function makeNovaWidgetState(widgets, extraPrefs = {}) {
     Weather: { ...INITIAL_STATE.Weather, initialized: true },
   };
 }
+
+describe("<Widgets> sidebar widget leaves the row", () => {
+  const PRIVACY_SIDEBAR = {
+    "widgets.privacy.enabled": true,
+    "widgets.system.privacy.enabled": true,
+    "widgets.privacy.size": "small",
+    trainhopConfig: { widgets: { privacySidebar: true } },
+  };
+
+  function rowWidgetIds(container) {
+    return [
+      ...container.querySelectorAll(".widget-wrapper[data-widget-id]"),
+    ].map(el => el.getAttribute("data-widget-id"));
+  }
+
+  it("keeps small weather out of the row", () => {
+    const state = makeNovaWidgetState([
+      ["lists", "medium"],
+      ["weather", "small"],
+    ]);
+    const { container } = renderWidgets(state);
+    expect(rowWidgetIds(container)).toEqual(["lists"]);
+  });
+
+  it("keeps privacy out of the row when trainhop places it in the sidebar", () => {
+    const state = makeNovaWidgetState([["lists", "medium"]], PRIVACY_SIDEBAR);
+    const { container } = renderWidgets(state);
+    expect(rowWidgetIds(container)).toEqual(["lists"]);
+  });
+
+  it("puts the widget that loses the single sidebar slot in the row", () => {
+    const state = makeNovaWidgetState(
+      [
+        ["lists", "medium"],
+        ["weather", "small"],
+      ],
+      PRIVACY_SIDEBAR
+    );
+    const { container } = renderWidgets(state);
+    expect(rowWidgetIds(container)).toEqual(["lists", "privacy"]);
+  });
+});
 
 describe("<Widgets> overflow detection", () => {
   function getSectionContainer(container) {
@@ -1077,6 +1274,199 @@ describe("<Widgets> overflow detection", () => {
     // Sizes don't affect the count.
     expect(section.hasAttribute("data-overflow-3")).toBe(true);
     expect(section.hasAttribute("data-overflow-4")).toBe(false);
+  });
+});
+
+describe("<Widgets> card display size", () => {
+  const MENU_WIDGET = {
+    id: "menuWidget",
+    enabledPref: "widgets.menuWidget.enabled",
+    sizePref: "widgets.menuWidget.size",
+    systemEnabledPref: "widgets.system.menuWidget.enabled",
+    defaultSize: "medium",
+    validSizes: ["medium", "large"],
+    src: "https://example.com/widget.html",
+    card: "FramedWidgetCard",
+    menu: [
+      {
+        type: "choice",
+        id: "view",
+        l10nId: "menu-widget-view",
+        pref: "widgets.menuWidget.view",
+        options: [
+          { value: "day", l10nId: "menu-widget-view-day" },
+          { value: "week", l10nId: "menu-widget-view-week", size: "large" },
+        ],
+      },
+    ],
+  };
+
+  beforeAll(() => {
+    WIDGET_REGISTRY.push(MENU_WIDGET);
+  });
+
+  afterAll(() => {
+    WIDGET_REGISTRY.splice(WIDGET_REGISTRY.indexOf(MENU_WIDGET), 1);
+  });
+
+  function renderMenuWidget(view) {
+    const { container } = renderWidgets(
+      makeNovaWidgetState([["lists", "medium"]], {
+        "widgets.menuWidget.enabled": true,
+        "widgets.system.menuWidget.enabled": true,
+        "widgets.system.maximized": true,
+        "widgets.menuWidget.view": view,
+      })
+    );
+    return {
+      cell: container.querySelector('[data-widget-id="menuWidget"]'),
+      card: container.querySelector('moz-widget[widget-id="menuWidget"]'),
+    };
+  }
+
+  it("draws the card and its cell at the size its chosen option needs", () => {
+    const { cell, card } = renderMenuWidget("week");
+    expect(cell).toHaveClass("large-widget");
+    expect(card.getAttribute("size")).toBe("large");
+  });
+
+  it('draws a card: "FramedWidgetCard" entry with its menu items', () => {
+    const { card } = renderMenuWidget("day");
+    expect(
+      card.querySelector('panel-item[submenu="menuWidget-view-submenu"]')
+    ).not.toBeNull();
+  });
+
+  it("draws them at the widget's size otherwise", () => {
+    const { cell, card } = renderMenuWidget("day");
+    expect(cell).toHaveClass("medium-widget");
+    expect(card.getAttribute("size")).toBe("medium");
+  });
+});
+
+describe("<Widgets> extension widget", () => {
+  const EXTENSION_ID = "fixture-widget@mozilla.org";
+  const EXTENSION_SRC = "moz-extension://uuid/widget.html";
+  const EXTENSION_WIDGET = {
+    id: "extensionWidget",
+    enabledPref: "widgets.extensionWidget.enabled",
+    sizePref: "widgets.extensionWidget.size",
+    systemEnabledPref: "widgets.system.extensionWidget.enabled",
+    defaultSize: "large",
+    extensionID: EXTENSION_ID,
+  };
+  const EXTENSION_WIDGETS = {
+    [EXTENSION_ID]: {
+      src: EXTENSION_SRC,
+      name: "Tally",
+      telemetryName: EXTENSION_ID,
+      validSizes: ["medium", "large"],
+    },
+  };
+
+  beforeAll(() => {
+    WIDGET_REGISTRY.push(EXTENSION_WIDGET);
+  });
+
+  afterAll(() => {
+    WIDGET_REGISTRY.splice(WIDGET_REGISTRY.indexOf(EXTENSION_WIDGET), 1);
+  });
+
+  function extensionWidgetState(extensionWidgets) {
+    return {
+      ...makeNovaWidgetState([["lists", "medium"]], {
+        "widgets.extensionWidget.enabled": true,
+        "widgets.system.extensionWidget.enabled": true,
+      }),
+      ExtensionWidgets: extensionWidgets,
+    };
+  }
+
+  it("renders a padded moz-widget card carrying its extension's widget src, size and name", () => {
+    const { container } = renderWidgets(
+      extensionWidgetState(EXTENSION_WIDGETS)
+    );
+    const card = container.querySelector(
+      'moz-widget[widget-id="extensionWidget"]'
+    );
+    expect(card.getAttribute("src")).toBe(EXTENSION_SRC);
+    expect(card.getAttribute("size")).toBe("large");
+    expect(card.hasAttribute("padded")).toBe(true);
+    const header = card.querySelector('moz-widget-header[slot="header"]');
+    expect(header.getAttribute("title")).toBe("Tally");
+  });
+
+  it("hides the widget under its extension's telemetry name", () => {
+    const { container, store } = renderWidgets(
+      extensionWidgetState(EXTENSION_WIDGETS)
+    );
+    fireEvent.click(
+      container.querySelector(
+        'panel-item[data-l10n-id="newtab-widget-section-menu-hide-all"]'
+      )
+    );
+    const hideAll = actionsFrom(store).find(
+      action => action.type === at.WIDGETS_HIDE_ALL
+    );
+    expect(hideAll.data.targets).toContainEqual({
+      enabledPref: "widgets.extensionWidget.enabled",
+      telemetryName: EXTENSION_ID,
+      active: true,
+    });
+  });
+
+  it("renders nothing while ExtensionWidgets has no entry for its extension", () => {
+    const { container } = renderWidgets(extensionWidgetState({}));
+    expect(
+      container.querySelector('[data-widget-id="extensionWidget"]')
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("<Widgets> on a profile with no resolved region", () => {
+  const REVEALED_BY_ROLLOUT = {
+    region: "",
+    "widgets.lists.enabled": true,
+    "widgets.focusTimer.enabled": true,
+    "widgets.clocks.enabled": true,
+    trainhopConfig: {
+      widgets: {
+        enabled: true,
+        listsEnabled: true,
+        timerEnabled: true,
+        clocksEnabled: true,
+      },
+    },
+  };
+
+  it("renders none of the widgets the rollout reveals", () => {
+    const { container } = renderWidgets(
+      makeNovaWidgetState([], REVEALED_BY_ROLLOUT)
+    );
+    expect(
+      container.querySelector('[data-widget-id="lists"]')
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-widget-id="focusTimer"]')
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-widget-id="clocks"]')
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders them once a region resolves", () => {
+    const { container } = renderWidgets(
+      makeNovaWidgetState([], { ...REVEALED_BY_ROLLOUT, region: "FR" })
+    );
+    expect(
+      container.querySelector('[data-widget-id="lists"]')
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-widget-id="focusTimer"]')
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-widget-id="clocks"]')
+    ).toBeInTheDocument();
   });
 });
 
@@ -1469,6 +1859,38 @@ describe("<Widgets> maximize toggle size sync", () => {
     expect(weatherSets).toHaveLength(0);
   });
 
+  it("resizes a small widget that lost the sidebar slot", () => {
+    const state = makeNovaWidgetState(
+      [
+        ["clocks", "medium"],
+        ["weather", "small"],
+      ],
+      {
+        ...MAXIMIZABLE,
+        "widgets.privacy.enabled": true,
+        "widgets.system.privacy.enabled": true,
+        "widgets.privacy.size": "small",
+        trainhopConfig: { widgets: { privacySidebar: true } },
+      }
+    );
+    const { container, store } = renderWidgets(state);
+
+    clickMaximize(container);
+
+    const sets = sizePrefSets(store);
+    expect(sets).toContainEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: "widgets.privacy.size",
+          value: "large",
+        }),
+      })
+    );
+    expect(
+      sets.filter(action => action.data.name === "widgets.weather.size")
+    ).toHaveLength(0);
+  });
+
   it("resizes weather when it is in the row (not small)", () => {
     const state = makeNovaWidgetState(
       [
@@ -1618,7 +2040,7 @@ describe("<Widgets> auto-minimize layout", () => {
   });
 
   it("collapses the section after the configured delay", () => {
-    const { container, store } = renderWidgets(
+    const { container } = renderWidgets(
       makeState({
         "pageLayouts.variant": "auto-minimize-widgets",
         "pageLayouts.autoMinimizeDelayMs": 3000,
@@ -1638,13 +2060,6 @@ describe("<Widgets> auto-minimize layout", () => {
     expect(widgetsContainer(container)).toHaveAttribute(
       "data-section-collapsed"
     );
-    expect(containerActions(store)).toEqual([
-      {
-        action_type: "auto_minimize",
-        action_value: "collapse_section",
-        widget_size: "medium",
-      },
-    ]);
   });
 
   it("prefers the trainhopConfig delay over the pref", () => {
@@ -1757,7 +2172,6 @@ describe("<Widgets> auto-minimize layout", () => {
     act(() => {
       jest.advanceTimersByTime(100);
     });
-    expect(containerActions(store)).toHaveLength(1);
 
     // Any PREF_CHANGED hands the component a fresh prefs object.
     act(() => {
@@ -1770,11 +2184,6 @@ describe("<Widgets> auto-minimize layout", () => {
       jest.advanceTimersByTime(60000);
     });
 
-    expect(
-      containerActions(store).filter(
-        data => data.action_value === "collapse_section"
-      )
-    ).toHaveLength(1);
     expect(widgetsContainer(container)).toHaveAttribute(
       "data-section-collapsed"
     );

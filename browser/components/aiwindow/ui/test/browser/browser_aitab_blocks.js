@@ -121,8 +121,8 @@ add_task(async function test_header_reference_count_label() {
     const header = element.wrappedJSObject;
 
     for (const [count, expected] of [
-      [1, "1 Tag"],
-      [3, "3 Tags"],
+      [1, "1 source"],
+      [3, "3 sources"],
     ]) {
       header.references = Cu.cloneInto(
         Array.from({ length: count }, (_, i) => ({
@@ -228,6 +228,40 @@ add_task(async function test_list_layout() {
       list.getAttribute("layout"),
       "row",
       "The layout reflects to the attribute the stylesheet selects on"
+    );
+  });
+});
+
+add_task(async function test_list_styles() {
+  await withAITabDocument(async () => {
+    await content.customElements.whenDefined("aitab-list");
+    const element = content.document.createElement("aitab-list");
+    content.document.body.append(element);
+    const list = element.wrappedJSObject;
+    list.groups = Cu.cloneInto(
+      [
+        { heading: "Food", items: [{ text: "Omicho" }, { text: "Curry" }] },
+        { heading: "Sights", items: [{ text: "Kenroku-en" }] },
+      ],
+      content
+    );
+    await list.updateComplete;
+
+    const root = list.shadowRoot;
+    const item = content.getComputedStyle(
+      root.querySelector(".aitab-list-item")
+    );
+    Assert.equal(item.paddingBlockStart, "12px", "Items have 12px above");
+    Assert.equal(item.paddingBlockEnd, "14px", "Items have 14px below");
+
+    const groups = content.getComputedStyle(
+      root.querySelector(".aitab-list-groups")
+    );
+    Assert.equal(groups.rowGap, "36px", "Stacked groups are 36px apart");
+    Assert.equal(
+      groups.columnGap,
+      "36px",
+      "Side by side groups are 36px apart"
     );
   });
 });
@@ -397,7 +431,7 @@ add_task(async function test_highlights_source_chips() {
       await highlights.updateComplete;
 
       const chips = [...highlights.shadowRoot.querySelectorAll("li")].map(row =>
-        [...row.querySelectorAll("ai-website-chip")].map(chip => ({
+        [...row.querySelectorAll("smartwindow-chip")].map(chip => ({
           label: chip.label,
           href: chip.href,
           icon: chip.iconSrc,
@@ -473,6 +507,10 @@ add_task(async function test_text_block_content() {
         !block.shadowRoot.querySelector(".aitab-text-block-p"),
         "No paragraph is rendered before there are any"
       );
+      Assert.ok(
+        !block.shadowRoot.querySelector("h2"),
+        "No empty heading is rendered without a heading"
+      );
 
       block.heading = heading;
       block.paragraphs = Cu.cloneInto(paragraphs, content);
@@ -532,7 +570,7 @@ add_task(async function test_text_block_references() {
         "Each reference becomes a chip, labelled by its href when untitled"
       );
 
-      // ai-website-chip is shared with chat and defaults to chat's event
+      // smartwindow-chip is shared with chat and defaults to chat's event
       // name, so without this the AITab actor would never hear about a click.
       Assert.ok(
         chips.every(chip => chip.openLinkEvent == "AITab:OpenLink"),

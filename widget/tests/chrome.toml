@@ -4,6 +4,7 @@ support-files = [
   "clipboard_helper.js",
 ]
 tags = "os_integration"
+prefs = ["clipboard.readCrossOriginCustomFormats.enabled=true"]
 
 ["test_alwaysontop_focus.xhtml"]
 
@@ -40,9 +41,6 @@ run-if = [
 ]
 
 ["test_bug517396.xhtml"]
-skip-if = [
-  "os == 'win' && standalone", # Bug 2026600
-]
 
 ["test_bug522217.xhtml"]
 tags = "fullscreen"
@@ -219,6 +217,11 @@ run-if = [
 ]
 support-files = ["native_menus_window.xhtml"]
 
+["test_nested_native_loop_wakeup_mac.html"]
+run-if = [
+  "os == 'mac'", # Cocoa widget test
+]
+
 ["test_panel_mouse_coords.xhtml"]
 
 ["test_platform_colors.xhtml"]
@@ -270,6 +273,9 @@ skip-if = [
 
 ["test_wheeltransaction.xhtml"]
 support-files = ["window_wheeltransaction.xhtml"]
+
+["test_window_size_constraints.xhtml"]
+support-files = ["window_size_constraints.xhtml"]
 
 # Windows
 # taskbar_previews.xhtml

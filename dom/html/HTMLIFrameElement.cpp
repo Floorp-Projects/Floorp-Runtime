@@ -92,6 +92,9 @@ bool HTMLIFrameElement::ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,
     if (aAttribute == nsGkAtoms::frameborder) {
       return ParseFrameborderValue(aValue, aResult);
     }
+    if (aAttribute == nsGkAtoms::referrerpolicy) {
+      return ParseReferrerAttribute(aValue, aResult);
+    }
     if (aAttribute == nsGkAtoms::scrolling) {
       return ParseScrollingValue(aValue, aResult);
     }
@@ -399,6 +402,8 @@ void HTMLIFrameElement::SetSrcdoc(const TrustedHTMLOrString& aSrcdoc,
                                   nsIPrincipal* aSubjectPrincipal,
                                   ErrorResult& aError) {
   constexpr nsLiteralString sink = u"HTMLIFrameElement srcdoc"_ns;
+  // Bug 2072122: Trusted Types readiness experiment only, to be removed.
+  OwnerDoc()->RecordTrustedTypesHTMLSink(aSrcdoc.IsTrustedHTML());
 
   Maybe<nsAutoString> compliantStringHolder;
   const nsAString* compliantString =

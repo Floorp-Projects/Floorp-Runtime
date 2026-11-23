@@ -29,6 +29,7 @@ struct NavigationUpdateCurrentEntryOptions;
 struct NavigationReloadOptions;
 struct NavigationResult;
 class PreviousSessionHistoryInfo;
+class ViewTransition;
 
 class SessionHistoryInfo;
 
@@ -164,9 +165,9 @@ class Navigation final : public DOMEventTargetHelper {
 
   // Wrapper algorithms for firing the navigate event.
   // https://html.spec.whatwg.org/#navigate-event-firing
-  MOZ_CAN_RUN_SCRIPT bool FireTraverseNavigateEvent(
-      JSContext* aCx, nsDocShellLoadState* aLoadState,
-      Maybe<UserNavigationInvolvement> aUserInvolvement);
+  MOZ_CAN_RUN_SCRIPT FinalStatus
+  FireTraverseNavigateEvent(JSContext* aCx, nsDocShellLoadState* aLoadState,
+                            Maybe<UserNavigationInvolvement> aUserInvolvement);
 
   MOZ_CAN_RUN_SCRIPT bool FirePushReplaceReloadNavigateEvent(
       JSContext* aCx, NavigationType aNavigationType, nsIURI* aDestinationURL,
@@ -191,6 +192,11 @@ class Navigation final : public DOMEventTargetHelper {
   MOZ_CAN_RUN_SCRIPT
   void InnerInformAboutAbortingNavigation(JSContext* aCx);
 
+  // Drops the ongoing navigate event and API method tracker without aborting
+  // them, for when a history step moves away from this document. An
+  // intercepted navigate event is kept, since its handlers still finish it.
+  void ClearOngoingNavigationForHistoryStep();
+
   MOZ_CAN_RUN_SCRIPT
   void AbortOngoingNavigation(
       JSContext* aCx, JS::Handle<JS::Value> aError = JS::UndefinedHandleValue);
@@ -205,6 +211,13 @@ class Navigation final : public DOMEventTargetHelper {
   void CreateNavigationActivationFrom(
       const Maybe<PreviousSessionHistoryInfo>& aPreviousEntryForActivation,
       Maybe<NavigationType> aNavigationType);
+
+  // https://html.spec.whatwg.org/#fire-the-pageswap-event
+  // aCanHaveActivation is false when the activation must be null, for example
+  // for a cross-origin navigation.
+  MOZ_CAN_RUN_SCRIPT void FirePageSwapEvent(
+      const SessionHistoryInfo* aTargetSHInfo, NavigationType aType,
+      bool aCanHaveActivation, ViewTransition* aViewTransition);
 
   void SetSerializedStateIntoOngoingAPIMethodTracker(
       nsIStructuredCloneContainer* aSerializedState);
@@ -228,7 +241,7 @@ class Navigation final : public DOMEventTargetHelper {
                           const ErrorEventInit& aEventInitDict);
 
   // https://html.spec.whatwg.org/#inner-navigate-event-firing-algorithm
-  MOZ_CAN_RUN_SCRIPT bool InnerFireNavigateEvent(
+  MOZ_CAN_RUN_SCRIPT FinalStatus InnerFireNavigateEvent(
       JSContext* aCx, NavigationType aNavigationType,
       NavigationDestination* aDestination,
       UserNavigationInvolvement aUserInvolvement, Element* aSourceElement,

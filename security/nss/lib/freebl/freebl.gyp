@@ -35,8 +35,8 @@
             '__SSSE3__',
           ],
         }],
-        [ 'OS=="linux" or OS=="android" or OS=="dragonfly" or OS=="freebsd" or \
-           OS=="netbsd" or OS=="openbsd"', {
+        [ '(OS=="linux" or OS=="android" or OS=="dragonfly" or OS=="freebsd" or \
+            OS=="netbsd" or OS=="openbsd") and target_arch=="x64"', {
           'cflags': [
             '-mpclmul',
             '-maes',
@@ -44,7 +44,7 @@
           ],
         }],
         # macOS build doesn't use cflags.
-        [ 'OS=="mac" or OS=="ios"', {
+        [ '(OS=="mac" or OS=="ios") and target_arch=="x64"', {
           'xcode_settings': {
             'OTHER_CFLAGS': [
               '-mssse3',
@@ -56,6 +56,21 @@
             ],
           },
         }],
+        # MSVC needs no flags for these intrinsics; clang-cl does.
+        [ 'OS=="win" and clang_cl==1 and target_arch=="x64"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': [
+                '-mssse3',
+                '-msse4.1',
+                '-msse4.2',
+                '-mpclmul',
+                '-maes',
+                '-mavx',
+              ],
+            },
+          },
+        }],
         [ 'target_arch=="arm"', {
           # Gecko doesn't support non-NEON platform on Android, but tier-3
           # platform such as Linux/arm will need it
@@ -64,6 +79,15 @@
           ],
         }],
         [ 'target_arch=="x64"', {
+          'sources': [
+            'verified/Hacl_Poly1305_128.c',
+            'verified/Hacl_Chacha20_Vec128.c',
+            'verified/Hacl_Chacha20Poly1305_128.c',
+          ],
+        }],
+        # HACL's Vec128 uses baseline NEON only, which is mandatory on aarch64,
+        # so these need no -march of their own.
+        [ 'target_arch=="arm64" or target_arch=="aarch64"', {
           'sources': [
             'verified/Hacl_Poly1305_128.c',
             'verified/Hacl_Chacha20_Vec128.c',
@@ -102,8 +126,8 @@
             '__SSSE3__',
           ],
         }],
-        [ 'OS=="linux" or OS=="android" or OS=="dragonfly" or OS=="freebsd" or \
-           OS=="netbsd" or OS=="openbsd"', {
+        [ '(OS=="linux" or OS=="android" or OS=="dragonfly" or OS=="freebsd" or \
+            OS=="netbsd" or OS=="openbsd") and target_arch=="x64"', {
           'cflags': [
             '-mpclmul',
             '-maes',
@@ -123,6 +147,21 @@
               '-mavx',
               '-mavx2',
             ],
+          },
+        }],
+        [ 'OS=="win" and clang_cl==1 and target_arch=="x64"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': [
+                '-mssse3',
+                '-msse4.1',
+                '-msse4.2',
+                '-mpclmul',
+                '-maes',
+                '-mavx',
+                '-mavx2',
+              ],
+            },
           },
         }],
         [ 'target_arch=="arm"', {
@@ -169,6 +208,17 @@
               '-mssse3',
               '-msse4.1'
             ],
+          },
+        }],
+        [ 'OS=="win" and clang_cl==1', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': [
+                '-msha',
+                '-mssse3',
+                '-msse4.1'
+              ],
+            },
           },
         }]
       ]
@@ -301,6 +351,15 @@
           ],
           'cflags_mozilla': [
             '-march=armv8-a+crypto'
+          ],
+          'conditions': [
+            [ 'OS=="win" and clang_cl==1', {
+              'msvs_settings': {
+                'VCCLCompilerTool': {
+                  'AdditionalOptions': [ '-march=armv8-a+crypto' ],
+                },
+              },
+            }],
           ],
         }]
       ]
@@ -737,6 +796,14 @@
           'HACL_CAN_COMPILE_VEC128',
           'HACL_CAN_COMPILE_VEC256',
           'HACL_CAN_COMPILE_INTRINSICS',
+        ],
+      }],
+      # On arm64, enable HACL Vec128 (NEON). HACL_CAN_COMPILE_INTRINSICS gates
+      # x86 _addcarry_u64/_subborrow_u64 in lib_intrinsics.h; do not define it
+      # here or P-curve sources will pull in <x86intrin.h>.
+      ['target_arch=="arm64" or target_arch=="aarch64"', {
+        'defines':[
+          'HACL_CAN_COMPILE_VEC128',
         ],
       }],
       # MSVC has no __int128 type. Use emulated int128 and leave

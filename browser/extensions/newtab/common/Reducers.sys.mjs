@@ -142,6 +142,8 @@ export const INITIAL_STATE = {
     inferredInterests: {},
     coarseInferredInterests: {},
     coarsePrivateInferredInterests: {},
+    locationPrivateInferredInterests: null,
+    shouldUseLocationVector: false,
     debugFeatures: null,
     inferredTelemetrySettingsOverrides: {},
   },
@@ -217,6 +219,7 @@ export const INITIAL_STATE = {
     author: "",
     licenseLabel: "",
     licenseUrl: "",
+    previous: null,
     error: null,
   },
   ListsWidget: {
@@ -255,6 +258,7 @@ export const INITIAL_STATE = {
   ExternalComponents: {
     components: [],
   },
+  ExtensionWidgets: {},
   PrivacyWidget: {
     initialized: false,
     // Count of trackers blocked today, fetched by PrivacyFeed.
@@ -307,6 +311,13 @@ export const INITIAL_STATE = {
      */
     engineName: "",
   },
+  Travel: {
+    initialized: false,
+    results: [],
+  },
+  // Framed widget documents from the Merino framed widgets manifest, keyed by
+  // widget id: { url, status }. See resolveWidgetFrame.
+  FramedWidgets: {},
 };
 
 function App(prevState = INITIAL_STATE.App, action) {
@@ -743,6 +754,9 @@ function InferredPersonalization(
         coarseInferredInterests: action.data.coarseInferredInterests,
         coarsePrivateInferredInterests:
           action.data.coarsePrivateInferredInterests,
+        locationPrivateInferredInterests:
+          action.data.locationPrivateInferredInterests ?? null,
+        shouldUseLocationVector: action.data.shouldUseLocationVector ?? false,
         inferredTelemetrySettingsOverrides:
           action.data.inferredTelemetrySettingsOverrides,
         lastUpdated: action.data.lastUpdated,
@@ -1253,6 +1267,7 @@ const PictureOfTheDay = (prevState = INITIAL_STATE.PictureOfTheDay, action) => {
         author: action.data.author ?? "",
         licenseLabel: action.data.licenseLabel ?? "",
         licenseUrl: action.data.licenseUrl ?? "",
+        previous: action.data.previous ?? null,
         lastUpdated: action.data.lastUpdated ?? null,
         error: action.data.error ?? null,
         initialized: true,
@@ -1285,6 +1300,28 @@ function RecentSearches(prevState = INITIAL_STATE.RecentSearches, action) {
         ...prevState,
         ...action.data,
         initialized: prevState.initialized || "searches" in action.data,
+      };
+    default:
+      return prevState;
+  }
+}
+
+function FramedWidgets(prevState = INITIAL_STATE.FramedWidgets, action) {
+  switch (action.type) {
+    case at.FRAMED_WIDGETS_UPDATE:
+      return action.data;
+    default:
+      return prevState;
+  }
+}
+
+function Travel(prevState = INITIAL_STATE.Travel, action) {
+  switch (action.type) {
+    case at.WIDGETS_TRAVEL_UPDATE:
+      return {
+        ...prevState,
+        ...action.data,
+        initialized: true,
       };
     default:
       return prevState;
@@ -1460,6 +1497,15 @@ function ExternalComponents(
   }
 }
 
+function ExtensionWidgets(prevState = INITIAL_STATE.ExtensionWidgets, action) {
+  switch (action.type) {
+    case at.WIDGETS_EXTENSIONS_UPDATE:
+      return action.data;
+    default:
+      return prevState;
+  }
+}
+
 export const reducers = {
   TopSites,
   App,
@@ -1481,7 +1527,10 @@ export const reducers = {
   Weather,
   Stocks,
   ExternalComponents,
+  ExtensionWidgets,
   PrivacyWidget,
   PictureOfTheDay,
   RecentSearches,
+  Travel,
+  FramedWidgets,
 };

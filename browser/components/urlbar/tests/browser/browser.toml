@@ -164,6 +164,8 @@ support-files = ["redirect_to.sjs"]
 
 ["browser_urlbar_modifiedClick.js"]
 
+["browser_urlbar_typingRace.js"]
+
 ["browser_waitForLoadStartOrTimeout.js"]
 https_first_disabled = true
 

@@ -7,7 +7,7 @@ const { FormHistory } = ChromeUtils.importESModule(
   "resource://gre/modules/FormHistory.sys.mjs"
 );
 
-let rootDir = do_get_file("chromefiles/", true);
+let rootDir = do_get_tempdir();
 
 add_setup(async function setup_fakePaths() {
   let pathId;
@@ -54,6 +54,10 @@ async function testFormdata(migratorKey, subDirs) {
     createAncestor: true,
     ignoreExisting: true,
   });
+  await IOUtils.writeJSON(
+    PathUtils.join(target.parent.path, "Local State"),
+    []
+  );
 
   target.append("Web Data");
   await IOUtils.remove(target.path, { ignoreAbsent: true });
@@ -85,10 +89,20 @@ async function testFormdata(migratorKey, subDirs) {
   // Sanity check for the source.
   Assert.ok(await migrator.isSourceAvailable());
 
-  await promiseMigration(migrator, MigrationUtils.resourceTypes.FORMDATA, {
-    id: "Default",
-    name: "Person 1",
-  });
+  let availableQuantity = await promiseMigration(
+    migrator,
+    MigrationUtils.resourceTypes.FORMDATA,
+    {
+      id: "Default",
+      name: "Person 1",
+    }
+  );
+  Assert.equal(availableQuantity, 10, "Available form data reported.");
+  Assert.equal(
+    MigrationUtils.getImportedCount("formdata"),
+    10,
+    "Migrated form data counted."
+  );
 
   for (let i = 0; i < 10; i++) {
     let results = await FormHistory.search(["fieldname", "value"], {

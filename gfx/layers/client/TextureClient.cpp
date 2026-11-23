@@ -123,6 +123,8 @@ class TextureChild final : public PTextureChild {
   ~TextureChild() {
     // We should have deallocated mTextureData in ActorDestroy
     MOZ_ASSERT(!mTextureData);
+    // Protect access to mTextureClient with the same lock used to clear it.
+    MutexAutoLock lock(mClientLock);
     MOZ_ASSERT_IF(!mOwnerCalledDestroy, !mTextureClient);
   }
 
@@ -225,7 +227,9 @@ class TextureChild final : public PTextureChild {
   RefPtr<CompositableForwarder> mCompositableForwarder;
   RefPtr<TextureForwarder> mTextureForwarder;
 
-  TextureClient* mTextureClient;
+  // Protect the weak TextureClient pointer and TryAddRef() against detach.
+  mutable Mutex mClientLock{"TextureChild::mClientLock"};
+  TextureClient* mTextureClient MOZ_GUARDED_BY(mClientLock);
   TextureData* mTextureData;
   Atomic<bool> mDestroyed;
   bool mOwnsTextureData;
@@ -266,13 +270,6 @@ static TextureType ChooseTextureType(gfx::SurfaceFormat aFormat,
   }
 #endif
 
-#ifdef MOZ_WIDGET_ANDROID
-  if (StaticPrefs::gfx_use_surfacetexture_textures_AtStartup() &&
-      !aKnowsCompositor->UsingSoftwareWebRender()) {
-    return TextureType::AndroidNativeWindow;
-  }
-#endif
-
   return TextureType::Unknown;
 }
 
@@ -297,10 +294,6 @@ TextureData* TextureData::Create(TextureType aTextureType,
 #ifdef XP_MACOSX
     case TextureType::MacIOSurface:
       return MacIOSurfaceTextureData::Create(aSize, aFormat, aBackendType);
-#endif
-#ifdef MOZ_WIDGET_ANDROID
-    case TextureType::AndroidNativeWindow:
-      return AndroidNativeWindowTextureData::Create(aSize, aFormat);
 #endif
     default:
       return nullptr;
@@ -380,6 +373,11 @@ static void DestroyTextureData(TextureData* aTextureData,
 
 void TextureChild::ActorDestroy(ActorDestroyReason why) {
   AUTO_PROFILER_LABEL("TextureChild::ActorDestroy", GRAPHICS);
+
+  {
+    MutexAutoLock lock(mClientLock);
+    mTextureClient = nullptr;
+  }
 
   if (mTextureData) {
     DestroyTextureData(mTextureData, GetAllocator(), mOwnsTextureData);
@@ -496,18 +494,37 @@ void TextureClient::Destroy() {
   // Async paints should have been flushed by now.
   MOZ_RELEASE_ASSERT(mPaintThreadRefs == 0);
 
-  // LockActor() only acquires the actor lock for ImageBridge textures.
-  // If an ImageBridge texture is already locked, reuse that lock; this assumes
-  // Destroy() is called on the thread that acquired it. For other textures,
-  // mIsLocked does not imply that the actor lock is held, so acquire it here.
-  if (mActor && (!mIsLocked || !mActor->mUsesImageBridge)) {
-    mActor->Lock();
+  // Protect mActor and mActorDestroying with the same mutex used by
+  // LockActor() and InitIPDLActor().
+  // This does not synchronize TextureData destruction with drawing operations.
+  RefPtr<TextureChild> actor;
+  bool actorLockAcquired = false;
+  {
+    MutexAutoLock lock(mMutex);
+    if (mActorDestroying) {
+      return;
+    }
+    mActorDestroying = true;
+    actor = std::move(mActor);
+  }
+  // Acquire the actor lock only for non-ImageBridge textures. For ImageBridge,
+  // leave any LockActor()/UnlockActor() pair to the thread that acquired it.
+  // Concurrent drawing and Destroy(), or Destroy() during such a pair, are
+  // outside the synchronization provided here.
+  if (actor && !actor->mUsesImageBridge) {
+    actor->Lock();
+    actorLockAcquired = true;
   }
 
-  mBorrowedDrawTarget = nullptr;
+  if (mBorrowedDrawTarget) {
+    if (mData) {
+      mData->ReturnDrawTarget(mBorrowedDrawTarget.forget());
+    } else {
+      mBorrowedDrawTarget->DetachAllSnapshots();
+      mBorrowedDrawTarget = nullptr;
+    }
+  }
   mBorrowedSnapshot = false;
-
-  RefPtr<TextureChild> actor = std::move(mActor);
 
   RefPtr<TextureReadLock> readLock;
   {
@@ -515,9 +532,19 @@ void TextureClient::Destroy() {
     readLock = std::move(mReadLock);
   }
 
-  if (actor && !actor->mDestroyed.compareExchange(false, true)) {
-    actor->Unlock();
-    actor = nullptr;
+  if (actor) {
+    bool alreadyDestroyed;
+    {
+      MutexAutoLock lock(actor->mClientLock);
+      alreadyDestroyed = !actor->mDestroyed.compareExchange(false, true);
+      actor->mTextureClient = nullptr;
+    }
+    if (alreadyDestroyed) {
+      if (actorLockAcquired) {
+        actor->Unlock();
+      }
+      actor = nullptr;
+    }
   }
 
   TextureData* data;
@@ -542,7 +569,7 @@ void TextureClient::Destroy() {
     // Release the lock before calling DeallocateTextureClient because the
     // latter may wait for the main thread which could create a dead-lock.
 
-    if (params.actor) {
+    if (actorLockAcquired && params.actor) {
       params.actor->Unlock();
     }
 
@@ -551,14 +578,40 @@ void TextureClient::Destroy() {
 }
 
 void TextureClient::LockActor() const {
-  if (mActor && mActor->mUsesImageBridge) {
-    mActor->Lock();
+  RefPtr<TextureChild> actor;
+  {
+    MutexAutoLock lock(mMutex);
+    MOZ_ASSERT(!mActorForUnlock);
+    if (!mActorDestroying && mActor && mActor->mUsesImageBridge) {
+      actor = mActor;
+    }
+  }
+  if (actor) {
+    // Keep this actor for the matching UnlockActor() call on this thread.
+    actor->Lock();
+    bool detached;
+    {
+      MutexAutoLock lock(mMutex);
+      detached = mActorDestroying || mActor != actor;
+      if (!detached) {
+        MOZ_ASSERT(!mActorForUnlock);
+        mActorForUnlock = actor;
+      }
+    }
+    if (detached) {
+      actor->Unlock();
+    }
   }
 }
 
 void TextureClient::UnlockActor() const {
-  if (mActor && mActor->mUsesImageBridge) {
-    mActor->Unlock();
+  RefPtr<TextureChild> actor;
+  {
+    MutexAutoLock lock(mMutex);
+    actor = std::move(mActorForUnlock);
+  }
+  if (actor) {
+    actor->Unlock();
   }
 }
 
@@ -981,6 +1034,35 @@ void TextureData::ReturnSnapshot(
   RefPtr<gfx::SourceSurface> snapshot(aSnapshot);
 }
 
+already_AddRefed<gfx::SourceSurface> TextureClient::GetBufferSnapshot() {
+  MutexAutoLock lock(mMutex);
+  if (!mData) {
+    return nullptr;
+  }
+  auto* bufferData = mData->AsBufferTextureData();
+  if (!bufferData) {
+    return nullptr;
+  }
+
+  RefPtr<gfx::DrawTarget> drawTarget = bufferData->BorrowDrawTarget();
+  if (!drawTarget) {
+    return nullptr;
+  }
+  RefPtr<gfx::SourceSurface> surface = drawTarget->Snapshot();
+  if (!surface) {
+    return nullptr;
+  }
+
+  static gfx::UserDataKey sShmemHolderKey;
+  RefPtr<ShmemHolder> shmemHolder = bufferData->GetShmemHolder();
+  if (shmemHolder && !surface->GetUserData(&sShmemHolderKey)) {
+    surface->AddUserData(
+        &sShmemHolderKey, shmemHolder.forget().take(),
+        [](void* aData) { static_cast<ShmemHolder*>(aData)->Release(); });
+  }
+  return surface.forget();
+}
+
 void TextureClient::ReturnSnapshot(
     already_AddRefed<gfx::SourceSurface> aSnapshot) {
   RefPtr<gfx::SourceSurface> snapshot = aSnapshot;
@@ -1044,22 +1126,12 @@ already_AddRefed<TextureClient> TextureClient::AsTextureClient(
 
   TextureChild* tc = static_cast<TextureChild*>(actor);
 
-  tc->Lock();
-
-  // Since TextureClient may be destroyed asynchronously with respect to its
-  // IPDL actor, we must acquire a live reference within the actor's lock. The
-  // mDestroyed bit tells us whether the TextureClient has disconnected from
-  // its actor.
-  if (tc->mDestroyed) {
-    tc->Unlock();
+  // Serialize weak-reference acquisition with TextureClient::Destroy().
+  MutexAutoLock lock(tc->mClientLock);
+  if (tc->mDestroyed || !tc->mTextureClient) {
     return nullptr;
   }
-
-  RefPtr<TextureClient> texture;
-  if (tc->mTextureClient) {
-    texture = tc->mTextureClient->TryAddRef();
-  }
-  tc->Unlock();
+  RefPtr<TextureClient> texture = tc->mTextureClient->TryAddRef();
 
   return texture.forget();
 }
@@ -1220,19 +1292,42 @@ bool TextureClient::InitIPDLActor(CompositableForwarder* aForwarder) {
     return false;
   }
 
-  mActor = actor.forget().downcast<TextureChild>();
-  mActor->mCompositableForwarder = aForwarder;
-  mActor->mTextureForwarder = textureFwd;
-  mActor->mUsesImageBridge = textureFwd->UsesImageBridge();
-  mActor->mTextureClient = this;
-
-  // If the TextureClient is already locked, we have to lock TextureChild's
-  // mutex since it will be unlocked in TextureClient::Unlock.
-  if (mIsLocked) {
-    LockActor();
+  // Initialize the new actor before assigning it to mActor.
+  RefPtr<TextureChild> newActor = actor.forget().downcast<TextureChild>();
+  newActor->mCompositableForwarder = aForwarder;
+  newActor->mTextureForwarder = textureFwd;
+  newActor->mUsesImageBridge = textureFwd->UsesImageBridge();
+  {
+    MutexAutoLock lock(newActor->mClientLock);
+    newActor->mTextureClient = this;
   }
 
-  return mActor->CanSend();
+  // Assign the initialized actor to mActor only if the client is active.
+  // Assigning the actor to mActor does not acquire its lock.
+  bool destroyNewActor = false;
+  {
+    MutexAutoLock lock(mMutex);
+    if (mActorDestroying) {
+      destroyNewActor = true;
+    } else {
+      mActor = newActor;
+    }
+  }
+  if (destroyNewActor) {
+    // The actor was not assigned to mActor; clear its client association and
+    // dispose of it through the normal allocator path.
+    {
+      MutexAutoLock lock(newActor->mClientLock);
+      newActor->mTextureClient = nullptr;
+      newActor->mDestroyed = true;
+    }
+    TextureDeallocParams params;
+    params.actor = std::move(newActor);
+    params.allocator = mAllocator;
+    DeallocateTextureClient(params);
+    return false;
+  }
+  return newActor->CanSend();
 }
 
 bool TextureClient::InitIPDLActor(KnowsCompositor* aKnowsCompositor,
@@ -1290,18 +1385,41 @@ bool TextureClient::InitIPDLActor(KnowsCompositor* aKnowsCompositor,
     return false;
   }
 
-  mActor = actor.forget().downcast<TextureChild>();
-  mActor->mTextureForwarder = textureFwd;
-  mActor->mUsesImageBridge = textureFwd->UsesImageBridge();
-  mActor->mTextureClient = this;
-
-  // If the TextureClient is already locked, we have to lock TextureChild's
-  // mutex since it will be unlocked in TextureClient::Unlock.
-  if (mIsLocked) {
-    LockActor();
+  // Initialize the new actor before assigning it to mActor.
+  RefPtr<TextureChild> newActor = actor.forget().downcast<TextureChild>();
+  newActor->mTextureForwarder = textureFwd;
+  newActor->mUsesImageBridge = textureFwd->UsesImageBridge();
+  {
+    MutexAutoLock lock(newActor->mClientLock);
+    newActor->mTextureClient = this;
   }
 
-  return mActor->CanSend();
+  // Assign the initialized actor to mActor only if the client is active.
+  // Assigning the actor to mActor does not acquire its lock.
+  bool destroyNewActor = false;
+  {
+    MutexAutoLock lock(mMutex);
+    if (mActorDestroying) {
+      destroyNewActor = true;
+    } else {
+      mActor = newActor;
+    }
+  }
+  if (destroyNewActor) {
+    // The actor was not assigned to mActor; clear its client association and
+    // dispose of it through the normal allocator path.
+    {
+      MutexAutoLock lock(newActor->mClientLock);
+      newActor->mTextureClient = nullptr;
+      newActor->mDestroyed = true;
+    }
+    TextureDeallocParams params;
+    params.actor = std::move(newActor);
+    params.allocator = mAllocator;
+    DeallocateTextureClient(params);
+    return false;
+  }
+  return newActor->CanSend();
 }
 
 PTextureChild* TextureClient::GetIPDLActor() { return mActor; }
@@ -1868,6 +1986,11 @@ bool UpdateYCbCrTextureClient(TextureClient* aTexture,
   MOZ_ASSERT(aTexture->IsValid());
   MOZ_ASSERT(aData.mCbSkip == aData.mCrSkip);
 
+  const auto sizes = aData.GetPlaneSizes();
+  if (!sizes) {
+    return false;
+  }
+
   MappedYCbCrTextureData mapped;
   if (!aTexture->BorrowMappedYCbCrData(mapped)) {
     NS_WARNING("Failed to extract YCbCr info!");
@@ -1878,17 +2001,17 @@ bool UpdateYCbCrTextureClient(TextureClient* aTexture,
       BytesPerPixel(SurfaceFormatForColorDepth(aData.mColorDepth));
   MappedYCbCrTextureData srcData;
   srcData.y.data = aData.mYChannel;
-  srcData.y.size = aData.YDataSize();
+  srcData.y.size = sizes->mY;
   srcData.y.stride = aData.mYStride;
   srcData.y.skip = aData.mYSkip;
   srcData.y.bytesPerPixel = bytesPerPixel;
   srcData.cb.data = aData.mCbChannel;
-  srcData.cb.size = aData.CbCrDataSize();
+  srcData.cb.size = sizes->mCbCr;
   srcData.cb.stride = aData.mCbCrStride;
   srcData.cb.skip = aData.mCbSkip;
   srcData.cb.bytesPerPixel = bytesPerPixel;
   srcData.cr.data = aData.mCrChannel;
-  srcData.cr.size = aData.CbCrDataSize();
+  srcData.cr.size = sizes->mCbCr;
   srcData.cr.stride = aData.mCbCrStride;
   srcData.cr.skip = aData.mCrSkip;
   srcData.cr.bytesPerPixel = bytesPerPixel;

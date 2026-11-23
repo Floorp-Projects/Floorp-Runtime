@@ -13,6 +13,7 @@
 
 // Global includes
 #include <cstdint>
+#include <memory>
 #include <new>
 #include <utility>
 
@@ -24,12 +25,12 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticPrefs_dom.h"
-#include "mozilla/UniquePtr.h"
 #include "mozilla/dom/BindingDeclarations.h"
 #include "mozilla/dom/LSValue.h"
 #include "mozilla/dom/PBackgroundLSDatabase.h"
 #include "mozilla/dom/PBackgroundLSSharedTypes.h"
 #include "mozilla/dom/PBackgroundLSSnapshot.h"
+#include "mozilla/dom/quota/Assertions.h"
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
 #include "nsBaseHashtable.h"
@@ -227,9 +228,9 @@ nsresult LSSnapshot::Init(const nsAString& aKey,
 #endif
 
   if (mHasOtherProcessObservers) {
-    mWriteAndNotifyInfos = MakeUnique<nsTArray<LSWriteAndNotifyInfo>>();
+    mWriteAndNotifyInfos = std::make_unique<nsTArray<LSWriteAndNotifyInfo>>();
   } else {
-    mWriteOptimizer = MakeUnique<SnapshotWriteOptimizer>();
+    mWriteOptimizer = std::make_unique<SnapshotWriteOptimizer>();
   }
 
   if (!mExplicit) {
@@ -398,14 +399,7 @@ nsresult LSSnapshot::SetItem(const nsAString& aKey, const nsAString& aValue,
       QM_TRY(MOZ_TO_RESULT(UpdateUsage(delta)), QM_PROPAGATE, QM_NO_CLEANUP,
              ([]() {
                static uint32_t counter = 0u;
-               // To not flood the product maintenance diagnostics,
-               // this predicate qualifies an error by returning true
-               // only when counter and 1 + counter bits are like
-               // 0111... and 1000... , i.e. when counter is one less
-               // than a power of two.
-               const bool result = 0u == (counter & (1u + counter));
-               ++counter;
-               return result;
+               return quota::ThrottleCounter(counter);
              }));
     }
 

@@ -340,7 +340,8 @@ class MOZ_STACK_CLASS AutoClonedRangeArray {
     mDirection = nsDirection::eDirNext;
   }
 
-  void RemoveCollapsedRanges();
+  enum class PreservePrimaryRangeIfAllRangesCollapsed : bool { No, Yes };
+  void RemoveCollapsedRanges(PreservePrimaryRangeIfAllRangesCollapsed);
 
   /**
    * If the points are same (i.e., mean a collapsed range) and in an empty block
@@ -634,6 +635,24 @@ class MOZ_STACK_CLASS AutoClonedSelectionRangeArray final
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<nsIEditor::EDirection, nsresult>
   ExtendAnchorFocusRangeFor(const EditorBase& aEditorBase,
                             nsIEditor::EDirection aDirectionAndAmount);
+
+  /**
+   * MaybeExtendAnchorFocusRangeToDeleteAdjacentWhiteSpace() extends the
+   * anchor-focus range to delete one visible white-space next to a word which
+   * was selected by double-click, matching WebKit's macOS smart delete.
+   * Prefer preceding white-space, otherwise delete following white-space
+   * without crossing a paragraph boundary.  Do not extend a range which
+   * already starts or ends with visible white-space.
+   * Enabled by `editor.word_select.delete_space_after_doubleclick_selection`.
+   *
+   *   "one [two] three" -> "one[ two] three" -> "one three"
+   *   "[one] two"       -> "[one ]two"       -> "two"
+   *   "one [two]"       -> "one[ two]"       -> "one"
+   *   "one ,[two] three" -> "one ,[two ]three" -> "one ,three"
+   *   "one [two ]three" -> unchanged         -> "one three"
+   */
+  void MaybeExtendAnchorFocusRangeToDeleteAdjacentWhiteSpace(
+      const EditorBase& aEditorBase);
 
  private:
   void SetNewCaretAssociationHint(

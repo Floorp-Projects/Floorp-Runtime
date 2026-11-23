@@ -4,6 +4,7 @@
 
 package org.mozilla.fenix.components.usecases
 
+import mozilla.components.browser.state.search.SearchAccessPoint
 import mozilla.components.browser.state.search.SearchEngine
 import mozilla.components.browser.state.state.SessionState
 import mozilla.components.concept.base.profiler.Profiler
@@ -46,6 +47,8 @@ class FenixBrowserUseCases(
      * @param flags Flags that will be used when loading the URL (not applied to searches).
      * @param historyMetadata The [HistoryMetadataKey] of the new tab in case this tab was opened from history.
      * @param additionalHeaders The extra headers to use when loading the URL.
+     * @param accessPoint The search access point the search is performed from, which selects the partner code to put in
+     *   the search URL. Only applies when a search is performed.
      */
     @Suppress("CognitiveComplexMethod")
     fun loadUrlOrSearch(
@@ -57,16 +60,19 @@ class FenixBrowserUseCases(
         flags: EngineSession.LoadUrlFlags = EngineSession.LoadUrlFlags.none(),
         historyMetadata: HistoryMetadataKey? = null,
         additionalHeaders: Map<String, String>? = null,
+        accessPoint: String = SearchAccessPoint.DEFAULT,
     ) {
         val startTime = profiler?.getProfilerTime()
 
         // In situations where we want to perform a search but have no search engine (e.g. the user
         // has removed all of them, or we couldn't load any) we will pass searchTermOrURL to Gecko
         // and let it try to load whatever was entered.
-        if (searchEngine == null || (!forceSearch && searchTermOrURL.isUrl())) {
+        val isNavigation = !forceSearch && searchTermOrURL.isUrl()
+        if (searchEngine == null || isNavigation) {
+            val url = if (isNavigation) searchTermOrURL.toNormalizedUrl() else searchTermOrURL
             if (newTab) {
                 tabsUseCases.addTab.invoke(
-                    url = searchTermOrURL.toNormalizedUrl(),
+                    url = url,
                     flags = flags,
                     private = private,
                     historyMetadata = historyMetadata,
@@ -74,7 +80,7 @@ class FenixBrowserUseCases(
                 )
             } else {
                 loadUrlUseCase.invoke(
-                    url = searchTermOrURL.toNormalizedUrl(),
+                    url = url,
                     flags = flags,
                     originalInput = searchTermOrURL,
                 )
@@ -94,6 +100,7 @@ class FenixBrowserUseCases(
                     searchEngine = searchEngine,
                     flags = flags,
                     additionalHeaders = additionalHeaders,
+                    accessPoint = accessPoint,
                 )
             } else {
                 searchUseCases.defaultSearch.invoke(
@@ -101,6 +108,7 @@ class FenixBrowserUseCases(
                     searchEngine = searchEngine,
                     flags = flags,
                     additionalHeaders = additionalHeaders,
+                    accessPoint = accessPoint,
                 )
             }
         }

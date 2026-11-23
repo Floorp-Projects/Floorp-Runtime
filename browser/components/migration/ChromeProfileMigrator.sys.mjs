@@ -17,7 +17,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   ChromeMigrationUtils:
     "moz-src:///browser/components/migration/ChromeMigrationUtils.sys.mjs",
-  FormHistory: "resource://gre/modules/FormHistory.sys.mjs",
+  FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   Qihoo360seMigrationUtils:
@@ -73,6 +73,18 @@ function convertBookmarks(items, bookmarkURLAccumulator, errorAccumulator) {
   return itemsToInsert;
 }
 
+function countBookmarks(items) {
+  let count = 0;
+  for (let item of items) {
+    if (item.type == "url") {
+      count++;
+    } else if (item.type == "folder") {
+      count += 1 + countBookmarks(item.children ?? []);
+    }
+  }
+  return count;
+}
+
 /**
  * Chrome profile migrator. This can also be used as a parent class for
  * migrators for browsers that are variants of Chrome.
@@ -95,6 +107,22 @@ export class ChromeProfileMigrator extends MigratorBase {
    */
   #dataPathRemappings = new Map();
 
+  /**
+   * True once the user has selected a folder in the file picker opened by
+   * getPermissions. Reset if that folder did not give access and the user
+   * then cancels the file picker.
+   *
+   * @type {boolean}
+   */
+  #hasUserSelectedDataFolder = false;
+
+  #shouldAvoidReadingData() {
+    return (
+      !this.#hasUserSelectedDataFolder &&
+      MigratorBase.needsFolderSelectionToReadData()
+    );
+  }
+
   static get key() {
     return "chrome";
   }
@@ -115,6 +143,10 @@ export class ChromeProfileMigrator extends MigratorBase {
     let dataPath = await this._getChromeUserDataPathIfExists();
     if (!dataPath) {
       return true;
+    }
+
+    if (this.#shouldAvoidReadingData()) {
+      return false;
     }
 
     let localStatePath = PathUtils.join(dataPath, "Local State");
@@ -142,6 +174,11 @@ export class ChromeProfileMigrator extends MigratorBase {
       let fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
       fp.init(win?.browsingContext, "", Ci.nsIFilePicker.modeGetFolder);
       fp.filterIndex = 1;
+      // Folders such as ~/Library are hidden in the file picker, so open it
+      // in the folder that the user needs to select.
+      if (originalDataPath) {
+        fp.displayDirectory = new lazy.FileUtils.File(originalDataPath);
+      }
       // Now wait for the filepicker to open and close. If the user picks
       // the local state folder, the OS should grant us read access to everything
       // inside, so we don't need to check or do anything else with what's
@@ -149,9 +186,13 @@ export class ChromeProfileMigrator extends MigratorBase {
       let result = await new Promise(resolve => fp.open(resolve));
       // Bail if the user cancels the dialog:
       if (result == Ci.nsIFilePicker.returnCancel) {
+        this.#hasUserSelectedDataFolder = false;
         return false;
       }
 
+      this.#hasUserSelectedDataFolder = true;
+      // Resources looked up before the folder was selected may be empty.
+      this._resourcesByProfile = null;
       let file = fp.file;
       if (file && file.path != originalDataPath) {
         this.#dataPathRemappings.set(originalDataPath, file.path);
@@ -307,7 +348,7 @@ export class ChromeProfileMigrator extends MigratorBase {
     }
 
     let chromeUserDataPath = await this._getChromeUserDataPathIfExists();
-    if (!chromeUserDataPath) {
+    if (!chromeUserDataPath || this.#shouldAvoidReadingData()) {
       return [];
     }
 
@@ -425,6 +466,7 @@ export class ChromeProfileMigrator extends MigratorBase {
         if (!rows) {
           return;
         }
+        this.available = rows.length;
 
         // If there are no relevant rows, return before initializing crypto and
         // thus prompting for Keychain access on macOS.
@@ -601,6 +643,7 @@ export class ChromeProfileMigrator extends MigratorBase {
 
     return {
       type: MigrationUtils.resourceTypes.PAYMENT_METHODS,
+      available: rows.length,
 
       async migrate(aCallback) {
         let loginCrypto;
@@ -727,7 +770,7 @@ async function GetBookmarksResource(aProfileFolder, aBrowserKey) {
     type: MigrationUtils.resourceTypes.BOOKMARKS,
 
     migrate(aCallback) {
-      return (async function () {
+      return (async () => {
         let gotErrors = false;
         let errorGatherer = function () {
           gotErrors = true;
@@ -785,6 +828,10 @@ async function GetBookmarksResource(aProfileFolder, aBrowserKey) {
             bookmarkJSONs.map(json => json.roots.synced?.children)
           ),
         };
+        this.available = Object.values(mergedRoots).reduce(
+          (sum, children) => sum + countBookmarks(children),
+          0
+        );
 
         // Import each Chrome bookmark root into its corresponding Gecko folder.
         for (let [rootName, parentGuid] of [
@@ -855,28 +902,58 @@ async function GetHistoryResource(aProfileFolder) {
     "Chrome history",
     countQuery
   );
-  if (!countRows[0].getResultByName("COUNT(*)")) {
+  let available = countRows[0].getResultByName("COUNT(*)");
+  if (!available) {
     return null;
   }
   return {
     type: MigrationUtils.resourceTypes.HISTORY,
+    available,
 
     migrate(aCallback) {
       (async function () {
-        const LIMIT = Services.prefs.getIntPref(
+        const TOTAL_LIMIT = Services.prefs.getIntPref(
           "browser.migrate.chrome.history.limit"
         );
+        // Places only samples the most recent places.frecency.pages.numSampledVisits
+        // visits for frecency, so importing more wouldn't change it.
+        const VISIT_LIMIT = Math.max(
+          1,
+          Math.min(
+            Services.prefs.getIntPref(
+              "browser.migrate.chrome.history.visit.limit"
+            ),
+            Services.prefs.getIntPref("places.frecency.pages.numSampledVisits")
+          )
+        );
 
-        let query =
-          "SELECT url, title, last_visit_time, typed_count FROM urls WHERE hidden = 0";
-        let maxAge = lazy.ChromeMigrationUtils.dateToChromeTime(
+        const maxAge = lazy.ChromeMigrationUtils.dateToChromeTime(
           Date.now() - MigrationUtils.HISTORY_MAX_AGE_IN_MILLISECONDS
         );
-        query += " AND last_visit_time > " + maxAge;
-
-        if (LIMIT) {
-          query += " ORDER BY last_visit_time DESC LIMIT " + LIMIT;
-        }
+        const limitClause = TOTAL_LIMIT ? `LIMIT ${TOTAL_LIMIT}` : "";
+        // AUTO_SUBFRAME (3) visits are skipped: they map to EMBED, which Places
+        // doesn't write to the database. MANUAL_SUBFRAME (4) and RELOAD (8)
+        // visits are ranked last so they only fill slots not taken by visits
+        // that count towards frecency.
+        let query = `WITH pages AS (
+  SELECT id, url, title, last_visit_time, typed_count
+  FROM urls
+  WHERE hidden = 0 AND last_visit_time > ${maxAge}
+  ORDER BY last_visit_time DESC
+  ${limitClause}
+)
+SELECT p.id, p.url, p.title, p.last_visit_time, p.typed_count,
+       v.visit_time, v.transition
+FROM pages p
+LEFT JOIN visits v ON v.id IN (
+  SELECT id FROM visits
+  WHERE url = p.id
+  AND visit_time > ${maxAge}
+  AND (transition & 0xFF) != 3
+  ORDER BY (transition & 0xFF) IN (4, 8), visit_time DESC
+  LIMIT ${VISIT_LIMIT}
+)
+ORDER BY p.last_visit_time DESC`;
 
         let rows;
         try {
@@ -891,34 +968,37 @@ async function GetHistoryResource(aProfileFolder) {
           }
         }
 
-        let pageInfos = [];
+        let pageInfosById = new Map();
         let fallbackVisitDate = new Date();
         for (let row of rows) {
           try {
-            // if having typed_count, we changes transition type to typed.
-            let transition = lazy.PlacesUtils.history.TRANSITIONS.LINK;
-            if (row.getResultByName("typed_count") > 0) {
-              transition = lazy.PlacesUtils.history.TRANSITIONS.TYPED;
+            let id = row.getResultByName("id");
+            let pageInfo = pageInfosById.get(id);
+            if (!pageInfo) {
+              pageInfo = {
+                title: row.getResultByName("title"),
+                url: new URL(row.getResultByName("url")),
+                visits: [],
+              };
+              pageInfosById.set(id, pageInfo);
             }
-
-            pageInfos.push({
-              title: row.getResultByName("title"),
-              url: new URL(row.getResultByName("url")),
-              visits: [
-                {
-                  transition,
-                  date: lazy.ChromeMigrationUtils.chromeTimeToDate(
-                    row.getResultByName("last_visit_time"),
-                    fallbackVisitDate
-                  ),
-                },
-              ],
+            let visitTime = row.getResultByName("visit_time");
+            pageInfo.visits.push({
+              transition: lazy.ChromeMigrationUtils.chromeTransitionToPlaces(
+                row.getResultByName("transition"),
+                row.getResultByName("typed_count")
+              ),
+              date: lazy.ChromeMigrationUtils.chromeTimeToDate(
+                visitTime ?? row.getResultByName("last_visit_time"),
+                fallbackVisitDate
+              ),
             });
           } catch (e) {
             console.error(e);
           }
         }
 
+        let pageInfos = [...pageInfosById.values()];
         if (pageInfos.length) {
           await MigrationUtils.insertVisitsWrapper(pageInfos);
         }
@@ -957,11 +1037,13 @@ async function GetFormdataResource(aProfileFolder) {
     "Chrome formdata",
     countQuery
   );
-  if (!countRows[0].getResultByName("COUNT(*)")) {
+  let available = countRows[0].getResultByName("COUNT(*)");
+  if (!available) {
     return null;
   }
   return {
     type: MigrationUtils.resourceTypes.FORMDATA,
+    available,
 
     async migrate(aCallback) {
       let query =
@@ -1001,7 +1083,7 @@ async function GetFormdataResource(aProfileFolder) {
       }
 
       try {
-        await lazy.FormHistory.update(addOps);
+        await MigrationUtils.insertFormHistoryWrapper(addOps);
       } catch (e) {
         console.error(e);
         aCallback(false);
@@ -1029,6 +1111,7 @@ async function GetExtensionsResource(aProfileId, aBrowserKey = "chrome") {
 
   return {
     type: MigrationUtils.resourceTypes.EXTENSIONS,
+    available: extensions.length,
     async migrate(callback) {
       let ids = extensions.map(extension => extension.id);
       let [progressValue, importedExtensions] =

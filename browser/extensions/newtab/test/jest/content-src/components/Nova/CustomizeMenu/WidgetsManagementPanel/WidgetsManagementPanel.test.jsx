@@ -9,7 +9,7 @@ import { INITIAL_STATE, reducers } from "common/Reducers.sys.mjs";
 import { WIDGET_REGISTRY } from "common/WidgetsRegistry.mjs";
 import { WidgetsManagementPanel } from "content-src/components/Nova/CustomizeMenu/WidgetsManagementPanel/WidgetsManagementPanel";
 
-// The nine active widgets in registry order, kept as literals so a renamed
+// The active widgets in registry order, kept as literals so a renamed
 // string, id or telemetry source fails here. The rendered order is pinned by
 // EN_US_ORDER and the other order constants below.
 const WIDGETS = [
@@ -85,6 +85,38 @@ const WIDGETS = [
     preference: "widgets.recentSearches.enabled",
     widgetSize: "medium",
   },
+  {
+    id: "horoscopes",
+    l10nId: "newtab-custom-widget-horoscopes-toggle",
+    source: "WIDGET_HOROSCOPES",
+    widget_name: "horoscopes",
+    preference: "widgets.horoscopes.enabled",
+    widgetSize: "medium",
+  },
+  {
+    id: "travel",
+    l10nId: "newtab-custom-widget-travel-toggle",
+    source: "WIDGET_TRAVEL",
+    widget_name: "travel",
+    preference: "widgets.travel.enabled",
+    widgetSize: "medium",
+  },
+  {
+    id: "solitaire",
+    l10nId: "newtab-custom-widget-solitaire-toggle",
+    source: "WIDGET_SOLITAIRE",
+    widget_name: "solitaire",
+    preference: "widgets.solitaire.enabled",
+    widgetSize: "medium",
+  },
+  {
+    id: "wrexhamAFC",
+    l10nId: "newtab-custom-widget-wrexhamafc",
+    source: "WIDGET_WREXHAMAFC",
+    widget_name: "wrexhamafc",
+    preference: "widgets.wrexhamAFC.enabled",
+    widgetSize: "medium",
+  },
 ];
 
 // The minimum entry the panel renders from; the registry helpers tolerate the
@@ -104,36 +136,46 @@ const FIXTURE_WIDGET = {
 const PANEL_LABELS = {
   "newtab-custom-widget-clock-toggle": "Clock",
   "newtab-custom-widget-crossword-toggle": "Crossword",
+  "newtab-custom-widget-horoscopes-toggle": "Horoscopes",
   "newtab-custom-widget-lists-toggle": "Lists",
   "newtab-custom-widget-picture-toggle": "Picture of the day",
   "newtab-custom-widget-privacy-toggle": "Privacy",
   "newtab-custom-widget-search-toggle": "Search",
+  "newtab-custom-widget-solitaire-toggle": "Solitaire",
   "newtab-custom-widget-stocks-toggle2": "Finance",
   "newtab-custom-widget-timer-toggle": "Timer",
+  "newtab-custom-widget-travel-toggle": "Travel",
   "newtab-custom-widget-weather-toggle": "Weather",
+  "newtab-custom-widget-wrexhamafc": "Wrexham AFC",
   "newtab-custom-widget-fixture-toggle": "Fixture widget",
 };
 
 // The German, Greek and Japanese labels are Firefox's own translations, apart
-// from the fixture widget's and the Japanese Search label. The Finance fixtures
-// reuse the Stocks translations as stand-ins until the renamed message is
-// translated.
+// from the fixture widget's, the Japanese Search label, and the Horoscopes,
+// Travel and Solitaire labels, which have no translations yet. The Finance fixtures reuse the Stocks
+// translations as stand-ins until the renamed message is translated. Wrexham AFC
+// is a preview string, so it is English in every locale.
 // Übersicht sorts before Uhr only under locale-aware collation; a code point
 // comparison would put it after Wetter.
 const GERMAN_PANEL_LABELS = {
   "newtab-custom-widget-stocks-toggle2": "Aktien",
   "newtab-custom-widget-picture-toggle": "Bild des Tages",
   "newtab-custom-widget-privacy-toggle": "Datenschutz",
+  "newtab-custom-widget-horoscopes-toggle": "Horoskope",
   "newtab-custom-widget-crossword-toggle": "Kreuzworträtsel",
   "newtab-custom-widget-lists-toggle": "Listen",
+  "newtab-custom-widget-travel-toggle": "Reisen",
+  "newtab-custom-widget-solitaire-toggle": "Solitär",
   "newtab-custom-widget-search-toggle": "Suche",
   "newtab-custom-widget-timer-toggle": "Timer",
   "newtab-custom-widget-fixture-toggle": "Übersicht",
   "newtab-custom-widget-clock-toggle": "Uhr",
   "newtab-custom-widget-weather-toggle": "Wetter",
+  "newtab-custom-widget-wrexhamafc": "Wrexham AFC",
 };
 
 const GREEK_PANEL_LABELS = {
+  "newtab-custom-widget-wrexhamafc": "Wrexham AFC",
   "newtab-custom-widget-search-toggle": "Αναζήτηση",
   "newtab-custom-widget-timer-toggle": "Αντίστροφη μέτρηση",
   "newtab-custom-widget-privacy-toggle": "Απόρρητο",
@@ -141,17 +183,24 @@ const GREEK_PANEL_LABELS = {
   "newtab-custom-widget-weather-toggle": "Καιρός",
   "newtab-custom-widget-lists-toggle": "Λίστες",
   "newtab-custom-widget-stocks-toggle2": "Μετοχές",
+  "newtab-custom-widget-solitaire-toggle": "Πασιέντζα",
   "newtab-custom-widget-clock-toggle": "Ρολόι",
   "newtab-custom-widget-crossword-toggle": "Σταυρόλεξο",
+  "newtab-custom-widget-travel-toggle": "Ταξίδια",
+  "newtab-custom-widget-horoscopes-toggle": "Ωροσκόπια",
 };
 
 // Latin letters sort before kana and kana before kanji under the default
 // collation; the kanji follow radical and stroke order.
 const JAPANESE_PANEL_LABELS = {
   "newtab-custom-widget-lists-toggle": "ToDo リスト",
+  "newtab-custom-widget-wrexhamafc": "Wrexham AFC",
   "newtab-custom-widget-crossword-toggle": "クロスワードパズル",
+  "newtab-custom-widget-solitaire-toggle": "ソリティア",
   "newtab-custom-widget-timer-toggle": "タイマー",
+  "newtab-custom-widget-travel-toggle": "トラベル",
   "newtab-custom-widget-privacy-toggle": "プライバシー",
+  "newtab-custom-widget-horoscopes-toggle": "ホロスコープ",
   "newtab-custom-widget-picture-toggle": "今日の一枚",
   "newtab-custom-widget-search-toggle": "最近の検索",
   "newtab-custom-widget-weather-toggle": "天気予報",
@@ -164,12 +213,16 @@ const EN_US_ORDER = [
   "clocks",
   "crossword",
   "stocks",
+  "horoscopes",
   "lists",
   "pictureOfTheDay",
   "privacy",
   "recentSearches",
+  "solitaire",
   "focusTimer",
+  "travel",
   "weather",
+  "wrexhamAFC",
 ];
 
 // "Finance" sorts before "Fixture widget".
@@ -178,28 +231,37 @@ const EN_US_ORDER_WITH_FIXTURE = [
   "crossword",
   "stocks",
   "fixtureWidget",
+  "horoscopes",
   "lists",
   "pictureOfTheDay",
   "privacy",
   "recentSearches",
+  "solitaire",
   "focusTimer",
+  "travel",
   "weather",
+  "wrexhamAFC",
 ];
 
 const GERMAN_ORDER = [
   "stocks",
   "pictureOfTheDay",
   "privacy",
+  "horoscopes",
   "crossword",
   "lists",
+  "travel",
+  "solitaire",
   "recentSearches",
   "focusTimer",
   "fixtureWidget",
   "clocks",
   "weather",
+  "wrexhamAFC",
 ];
 
 const GREEK_ORDER = [
+  "wrexhamAFC",
   "recentSearches",
   "focusTimer",
   "privacy",
@@ -207,15 +269,22 @@ const GREEK_ORDER = [
   "weather",
   "lists",
   "stocks",
+  "solitaire",
   "clocks",
   "crossword",
+  "travel",
+  "horoscopes",
 ];
 
 const JAPANESE_ORDER = [
   "lists",
+  "wrexhamAFC",
   "crossword",
+  "solitaire",
   "focusTimer",
+  "travel",
   "privacy",
+  "horoscopes",
   "pictureOfTheDay",
   "recentSearches",
   "weather",
@@ -230,11 +299,15 @@ const TIMER_ID_SORT_ORDER = [
   "crossword",
   "stocks",
   "focusTimer",
+  "horoscopes",
   "lists",
   "pictureOfTheDay",
   "privacy",
   "recentSearches",
+  "solitaire",
+  "travel",
   "weather",
+  "wrexhamAFC",
 ];
 
 // The order when every widget sorts under its own id.
@@ -242,12 +315,16 @@ const ID_ORDER = [
   "clocks",
   "crossword",
   "focusTimer",
+  "horoscopes",
   "lists",
   "pictureOfTheDay",
   "privacy",
   "recentSearches",
+  "solitaire",
   "stocks",
+  "travel",
   "weather",
+  "wrexhamAFC",
 ];
 
 describe("<WidgetsManagementPanel>", () => {
@@ -275,9 +352,10 @@ describe("<WidgetsManagementPanel>", () => {
     return { ...prefs, ...extra };
   }
 
-  async function renderPanel(overrides = {}, prefValues = {}) {
+  async function renderPanel(overrides = {}, prefValues = {}, state = {}) {
     const store = createStore(combineReducers(reducers), {
       ...INITIAL_STATE,
+      ...state,
       Prefs: {
         ...INITIAL_STATE.Prefs,
         values: { ...INITIAL_STATE.Prefs.values, ...prefValues },
@@ -350,6 +428,72 @@ describe("<WidgetsManagementPanel>", () => {
     expect(container.querySelector("moz-box-button")).toBeInTheDocument();
   });
 
+  describe("while the user places widgets on Home", () => {
+    const placement = homeWidgets => ({
+      "pageLayouts.variant": "spaces-thematic-v1",
+      trainhopConfig: {
+        spaces: {
+          order: ["home", "widgets"],
+          default: "home",
+          widgetLibrary: "widgets",
+          spaces: {
+            home: { label: "Home", widgets: ["pictureOfTheDay"] },
+            widgets: { label: "Widgets" },
+          },
+        },
+      },
+      "widgets.home": homeWidgets,
+      "widgets.enabled": true,
+      "widgets.crossword.enabled": true,
+      "widgets.lists.enabled": true,
+    });
+    const homeWrites = store =>
+      store.dispatch.mock.calls
+        .map(([action]) => action)
+        .filter(action => action.data?.name === "widgets.home")
+        .map(action => action.data.value);
+
+    it("keeps the toggles as on/off", async () => {
+      const { container } = await renderPanel(
+        {},
+        allWidgetsVisible({
+          ...placement('["crossword"]'),
+          "widgets.clocks.enabled": false,
+        })
+      );
+      expect(container.querySelector("#lists-toggle")).toHaveAttribute(
+        "pressed"
+      );
+      expect(container.querySelector("#clocks-toggle")).not.toHaveAttribute(
+        "pressed"
+      );
+    });
+
+    // Otherwise a turned-off widget would hold one of Home's two slots.
+    it("unpins a pinned widget it turns off", async () => {
+      const { container, store } = await renderPanel(
+        {},
+        allWidgetsVisible(placement('["crossword"]'))
+      );
+      fireToggle(container.querySelector("#crossword-toggle"), false);
+      expect(props.setPref).toHaveBeenCalledWith(
+        "widgets.crossword.enabled",
+        false
+      );
+      expect(homeWrites(store)).toEqual(["[]"]);
+    });
+
+    it("leaves the Home list alone for widgets that aren't pinned", async () => {
+      const { container, store } = await renderPanel(
+        {},
+        allWidgetsVisible(placement('["crossword"]'))
+      );
+      fireToggle(container.querySelector("#lists-toggle"), false);
+      fireToggle(container.querySelector("#clocks-toggle"), true);
+      expect(homeWrites(store)).toEqual([]);
+    });
+  });
+
   it("calls togglePanel when the manage widgets button is clicked", async () => {
     const { container } = await renderPanel({ showPanel: false });
     fireEvent.click(container.querySelector("moz-box-button"));
@@ -390,6 +534,20 @@ describe("<WidgetsManagementPanel>", () => {
       const { container } = await renderPanel({}, allWidgetsVisible());
       expect(toggleIds(container)).toEqual(
         EN_US_ORDER.map(id => `${id}-toggle`)
+      );
+    });
+
+    it("disables the toggle of a widget whose pref is locked", async () => {
+      const { container } = await renderPanel(
+        {},
+        allWidgetsVisible({ lockedPrefs: ["widgets.lists.enabled"] })
+      );
+
+      expect(container.querySelector("#lists-toggle")).toHaveAttribute(
+        "disabled"
+      );
+      expect(container.querySelector("#clocks-toggle")).not.toHaveAttribute(
+        "disabled"
       );
     });
 
@@ -460,6 +618,24 @@ describe("<WidgetsManagementPanel>", () => {
       );
       expect(toggleIds(container)).toEqual(
         EN_US_ORDER_WITH_FIXTURE.map(id => `${id}-toggle`)
+      );
+    });
+
+    it("labels an extension widget's toggle with its extension's name", async () => {
+      withFixtureWidget({
+        extensionID: "fixture-widget@mozilla.org",
+        customizeL10nId: undefined,
+      });
+
+      const { container } = await renderPanel({}, allWidgetsVisible(), {
+        ExtensionWidgets: {
+          "fixture-widget@mozilla.org": { src: "", name: "Tally" },
+        },
+      });
+
+      expect(container.querySelector("#fixtureWidget-toggle")).toHaveAttribute(
+        "label",
+        "Tally"
       );
     });
 
@@ -547,7 +723,7 @@ describe("<WidgetsManagementPanel>", () => {
       expect(toggleIds(container)).toEqual(
         GREEK_ORDER.map(id => `${id}-toggle`)
       );
-      expect(toggleIds(container).indexOf("weather-toggle")).toBe(4);
+      expect(toggleIds(container).indexOf("weather-toggle")).toBe(5);
     });
 
     it("orders the toggles by Japanese label, Latin before kana before kanji", async () => {
@@ -569,10 +745,14 @@ describe("<WidgetsManagementPanel>", () => {
       const { container } = await renderPanel({}, prefs);
 
       expect(toggleIds(container)).toEqual([
+        "horoscopes-toggle",
         "pictureOfTheDay-toggle",
         "recentSearches-toggle",
+        "solitaire-toggle",
         "focusTimer-toggle",
+        "travel-toggle",
         "weather-toggle",
+        "wrexhamAFC-toggle",
       ]);
     });
 

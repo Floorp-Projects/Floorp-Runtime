@@ -38,8 +38,7 @@ static mozilla::LazyLogModule sScrollBarLog("apz.scrollbar");
 // Creates a new scrollbar frame and returns it
 //
 nsIFrame* NS_NewScrollbarFrame(PresShell* aPresShell, ComputedStyle* aStyle) {
-  return new (aPresShell)
-      nsScrollbarFrame(aStyle, aPresShell->GetPresContext());
+  return new nsScrollbarFrame(aStyle, aPresShell->GetPresContext());
 }
 
 NS_IMPL_FRAMEARENA_HELPERS(nsScrollbarFrame)
@@ -49,6 +48,9 @@ NS_QUERYFRAME_HEAD(nsScrollbarFrame)
   NS_QUERYFRAME_ENTRY(nsIAnonymousContentCreator)
 NS_QUERYFRAME_TAIL_INHERITING(nsContainerFrame)
 
+nsScrollbarFrame::nsScrollbarFrame(ComputedStyle* aStyle,
+                                   nsPresContext* aPresContext)
+    : nsContainerFrame(aStyle, aPresContext, kClassID) {}
 void nsScrollbarFrame::Init(nsIContent* aContent, nsContainerFrame* aParent,
                             nsIFrame* aPrevInFlow) {
   nsContainerFrame::Init(aContent, aParent, aPrevInFlow);
@@ -92,11 +94,11 @@ void nsScrollbarFrame::InvalidateForHoverChange(bool aIsNowHovered) {
 }
 
 void nsScrollbarFrame::ActivityChanged(bool aIsNowActive) {
-  if (ScrollContainerFrame* sc = do_QueryFrame(GetParent())) {
+  if (nsIScrollbarMediator* mediator = GetScrollbarMediator()) {
     if (aIsNowActive) {
-      sc->ScrollbarActivityStarted();
+      mediator->ScrollbarActivityStarted();
     } else {
-      sc->ScrollbarActivityStopped();
+      mediator->ScrollbarActivityStopped();
     }
   }
 }
@@ -405,8 +407,9 @@ static already_AddRefed<Element> MakeScrollbarButton(
   RefPtr<Element> e;
   NS_TrustedNewXULElement(getter_AddRefs(e), do_AddRef(aNodeInfo));
   e->SetAttr(kNameSpaceID_None, nsGkAtoms::sbattr,
-             kSbattrValues[aDown][aBottom], false);
-  e->SetAttr(kNameSpaceID_None, nsGkAtoms::type, kTypeValues[aDown], false);
+             kSbattrValues[aDown][aBottom], false, dom::IsKnownNewAttr::Yes);
+  e->SetAttr(kNameSpaceID_None, nsGkAtoms::type, kTypeValues[aDown], false,
+             dom::IsKnownNewAttr::Yes);
   return e.forget();
 }
 

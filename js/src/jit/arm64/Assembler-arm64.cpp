@@ -203,17 +203,20 @@ void Assembler::executableCopy(uint8_t* buffer) {
 }
 
 BufferOffset Assembler::immPool(ARMRegister dest, uint8_t* value,
-                                vixl::LoadLiteralOp op, const LiteralDoc& doc) {
+                                vixl::LoadLiteralOp op, PoolEntryKind kind,
+                                const LiteralDoc& doc) {
   uint32_t inst = op | Rt(dest);
   const size_t numInst = 1;
   const unsigned sizeOfPoolEntryInBytes = 4;
   const unsigned numPoolEntries = sizeof(value) / sizeOfPoolEntryInBytes;
   return allocLiteralLoadEntry(numInst, numPoolEntries, (uint8_t*)&inst, value,
-                               doc);
+                               kind, doc);
 }
 
-BufferOffset Assembler::immPool64(ARMRegister dest, uint64_t value) {
-  return immPool(dest, (uint8_t*)&value, vixl::LDR_x_lit, LiteralDoc(value));
+BufferOffset Assembler::immPool64(ARMRegister dest, uint64_t value,
+                                  PoolEntryKind kind) {
+  return immPool(dest, (uint8_t*)&value, vixl::LDR_x_lit, kind,
+                 LiteralDoc(value));
 }
 
 BufferOffset Assembler::fImmPool(ARMFPRegister dest, uint8_t* value,
@@ -224,7 +227,7 @@ BufferOffset Assembler::fImmPool(ARMFPRegister dest, uint8_t* value,
   const unsigned sizeOfPoolEntryInBits = 32;
   const unsigned numPoolEntries = dest.size() / sizeOfPoolEntryInBits;
   return allocLiteralLoadEntry(numInst, numPoolEntries, (uint8_t*)&inst, value,
-                               doc);
+                               PoolEntryKind::Constant, doc);
 }
 
 BufferOffset Assembler::fImmPool64(ARMFPRegister dest, double value) {
@@ -316,8 +319,7 @@ void Assembler::addPendingJump(BufferOffset src, ImmPtr target,
   // This jump is not patchable at runtime. Extended jump table entry
   // requirements cannot be known until finalization, so to be safe, give each
   // jump and entry. This also causes GC tracing of the target.
-  enoughMemory_ &=
-      pendingJumps_.append(RelativePatch(src, target.value, reloc));
+  enoughMemory_ &= pendingJumps_.emplaceBack(src, target.value, reloc);
 }
 
 void Assembler::PatchWrite_NearCall(CodeLocationLabel start,
@@ -538,7 +540,7 @@ void Assembler::TraceDataRelocations(JSTracer* trc, JitCode* code,
     Instruction* load = (Instruction*)&buffer[offset];
 
     // The only valid traceable operation is a 64-bit load to an ARMRegister.
-    // Refer to movePatchablePtr() for generation.
+    // Refer to movePatchableGCPtr() for generation.
     MOZ_ASSERT(load->Mask(vixl::LoadLiteralMask) == vixl::LDR_x_lit);
 
     uintptr_t* literalAddr = load->LiteralAddress<uintptr_t*>();

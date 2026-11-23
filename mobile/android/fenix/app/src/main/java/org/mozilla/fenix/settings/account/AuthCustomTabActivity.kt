@@ -7,12 +7,12 @@ package org.mozilla.fenix.settings.account
 import mozilla.components.concept.sync.AccountObserver
 import mozilla.components.concept.sync.AuthType
 import mozilla.components.concept.sync.OAuthAccount
-import mozilla.components.feature.ipprotection.IPProtectionFxaAuthFlow.Companion.INTENT_ON_COMPLETE
 import mozilla.components.feature.ipprotection.auth.fxa.IPProtectionActivityAuthFlowObserver
+import mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow.Companion.INTENT_ON_COMPLETE
 import org.mozilla.fenix.customtabs.ExternalAppBrowserActivity
 import org.mozilla.fenix.ext.components
 
-/** A special custom tab for signing into a Firefox Account. The activity is closed once the user is signed in. */
+/** A special custom tab for signing in to a Firefox Account. The activity is closed once the user is signed in. */
 class AuthCustomTabActivity : ExternalAppBrowserActivity() {
 
     private val ipProtectionActivityAuthFlowObserver =

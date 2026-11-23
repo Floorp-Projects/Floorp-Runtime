@@ -24,6 +24,8 @@ mod blob;
 #[cfg(target_os = "windows")]
 mod composite;
 mod egl;
+#[cfg(not(target_os = "windows"))]
+mod null_compositor;
 mod parse_function;
 mod perf;
 mod png;
@@ -39,6 +41,8 @@ mod yaml_helper;
 
 #[cfg(target_os = "windows")]
 use composite::WrCompositor;
+#[cfg(not(target_os = "windows"))]
+use null_compositor::NullLayerCompositor;
 use gleam::gl;
 #[cfg(feature = "software")]
 use gleam::gl::Gl;
@@ -65,7 +69,7 @@ use std::rc::Rc;
 #[cfg(feature = "software")]
 use std::slice;
 use std::sync::mpsc::{channel, Sender, Receiver};
-use webrender::{DebugFlags, LayerCompositor};
+use webrender::{DebugFlags, Compositor};
 use webrender::api::*;
 use webrender::render_api::*;
 use webrender::api::units::*;
@@ -350,13 +354,13 @@ impl WindowWrapper {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn create_compositor(&self) -> Option<Box<dyn LayerCompositor>> {
-        Some(Box::new(WrCompositor::new(self)) as Box<dyn LayerCompositor>)
+    pub fn create_compositor(&self) -> Option<Box<dyn Compositor>> {
+        Some(Box::new(WrCompositor::new(self)) as Box<dyn Compositor>)
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn create_compositor(&self) -> Option<Box<dyn LayerCompositor>> {
-        None
+    pub fn create_compositor(&self) -> Option<Box<dyn Compositor>> {
+        Some(Box::new(NullLayerCompositor) as Box<dyn Compositor>)
     }
 }
 
@@ -1442,6 +1446,12 @@ fn run_headless(args: clap::ArgMatches) -> i32 {
         (None, None)
     };
 
+    let layer_compositor = if app.using_compositor {
+        window.create_compositor()
+    } else {
+        None
+    };
+
     let dim = window.get_inner_size();
     let mut wrench = Wrench::new(
         &mut window,
@@ -1458,7 +1468,7 @@ fn run_headless(args: clap::ArgMatches) -> i32 {
         app.precache,
         app.dump_shader_source.clone(),
         notifier,
-        None,
+        layer_compositor,
         app.compositor_clips,
     );
 

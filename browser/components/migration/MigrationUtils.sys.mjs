@@ -9,6 +9,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   AMBrowserExtensionsImport: "resource://gre/modules/AddonManager.sys.mjs",
+  FormHistory: "resource://gre/modules/FormHistory.sys.mjs",
   LoginHelper: "resource://gre/modules/LoginHelper.sys.mjs",
   PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
@@ -602,6 +603,9 @@ class MigrationUtils {
    *   True if this is a startup migration.
    * @param {boolean} [aOptions.skipSourceSelection=undefined]
    *   True if the source selection page of the wizard should be skipped.
+   * @param {boolean} [aOptions.tabModal=undefined]
+   *   True if the wizard should open as a dialog over the current tab
+   *   instead of in about:preferences.
    * @param {string} [aOptions.profileId]
    *   An identifier for the profile to use when migrating.
    * @returns {Promise<undefined>}
@@ -666,15 +670,33 @@ class MigrationUtils {
       return Promise.resolve();
     }
 
+    if (aOptions.tabModal) {
+      if (aOpener?.gBrowser) {
+        aOpener.gBrowser.getTabDialogBox(aOpener.gBrowser.selectedBrowser).open(
+          "chrome://browser/content/migration/migration-dialog-window.html",
+          {
+            features: "resizable=no",
+            modalType: Ci.nsIPrompt.MODAL_TYPE_CONTENT,
+          },
+          { options: aOptions }
+        );
+      } else {
+        openStandaloneWindow(false /* blocking */);
+      }
+      return Promise.resolve();
+    }
+
     if (aOpener?.openPreferences) {
       if (aOptions.entrypoint == this.MIGRATION_ENTRYPOINTS.NEWTAB) {
         if (aboutWelcomeBehavior == "autoclose") {
+          this.#pendingPreferencesEntrypoint = entrypoint;
           return aOpener.openPreferences("general-migrate-autoclose");
         } else if (aboutWelcomeBehavior == "standalone") {
           openStandaloneWindow(false /* blocking */);
           return Promise.resolve();
         }
       }
+      this.#pendingPreferencesEntrypoint = entrypoint;
       return aOpener.openPreferences("general-migrate");
     }
 
@@ -798,7 +820,28 @@ class MigrationUtils {
     history: 0,
     cards: 0,
     extensions: 0,
+    formdata: 0,
   };
+
+  /**
+   * The entrypoint passed to showMigrationWizard when it last opened
+   * about:preferences, until consumed by consumePendingPreferencesEntrypoint.
+   *
+   * @type {string|null}
+   */
+  #pendingPreferencesEntrypoint = null;
+
+  /**
+   * Returns and clears the entrypoint stored by showMigrationWizard when it
+   * opened the wizard in about:preferences.
+   *
+   * @returns {string|null}
+   */
+  consumePendingPreferencesEntrypoint() {
+    let entrypoint = this.#pendingPreferencesEntrypoint;
+    this.#pendingPreferencesEntrypoint = null;
+    return entrypoint;
+  }
 
   getImportedCount(type) {
     if (!this._importQuantities.hasOwnProperty(type)) {
@@ -867,16 +910,19 @@ class MigrationUtils {
         }
       }
     }
-    this._importQuantities.history += pageInfos.length;
     if (gKeepUndoData) {
       this.#updateHistoryUndo(pageInfos);
     }
-    return lazy.PlacesUtils.history.insertMany(pageInfos);
+    return lazy.PlacesUtils.history.insertMany(pageInfos, () => {
+      this._importQuantities.history++;
+    });
   }
 
   async insertLoginsWrapper(logins) {
-    this._importQuantities.logins += logins.length;
     let inserted = await lazy.LoginHelper.maybeImportLogins(logins);
+    this._importQuantities.logins += inserted.filter(
+      entry => entry.result == "added"
+    ).length;
     // Note that this means that if we import a login that has a newer password
     // than we know about, we will update the login, and an undo of the import
     // will not revert this. This seems preferable over removing the login
@@ -955,7 +1001,6 @@ class MigrationUtils {
   }
 
   async insertCreditCardsWrapper(cards) {
-    this._importQuantities.cards += cards.length;
     let { formAutofillStorage } = ChromeUtils.importESModule(
       "resource://autofill/FormAutofillStorage.sys.mjs"
     );
@@ -964,10 +1009,16 @@ class MigrationUtils {
     for (let card of cards) {
       try {
         await formAutofillStorage.creditCards.add(card);
+        this._importQuantities.cards++;
       } catch (e) {
         console.error("Failed to insert credit card due to error: ", e, card);
       }
     }
+  }
+
+  async insertFormHistoryWrapper(addOps) {
+    await lazy.FormHistory.update(addOps);
+    this._importQuantities.formdata += addOps.length;
   }
 
   /**
@@ -1159,6 +1210,9 @@ class MigrationUtils {
 
     /** Migration is being started from about:firefoxview */
     FIREFOX_VIEW: "firefox_view",
+
+    /** Migration is being started from the wizard embedded in about:welcome */
+    ABOUTWELCOME: "aboutwelcome",
   });
 
   /**

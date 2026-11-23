@@ -66,6 +66,9 @@ class ContentClassifierRequest {
   bool mPrivateBrowsing = false;
   bool mValid = false;
   bool mIsNonRecommendedAddon = false;
+  // Image or media load, which url-classifier's fingerprinting features skip.
+  bool mPassiveContent = false;
+  bool mAddonMayLoad = false;
 
  public:
   bool Valid() const { return mValid; }
@@ -73,6 +76,8 @@ class ContentClassifierRequest {
   bool ThirdParty() const { return mThirdParty; }
   bool PrivateBrowsing() const { return mPrivateBrowsing; }
   bool IsNonRecommendedAddon() const { return mIsNonRecommendedAddon; }
+  bool IsPassiveContent() const { return mPassiveContent; }
+  bool AddonMayLoad() const { return mAddonMayLoad; }
 
   explicit ContentClassifierRequest(nsIChannel* aChannel);
 

@@ -57,9 +57,12 @@ CARGO_CONFIG_KEYS = {
     "CARGO_PROFILE_DEV_OPT_LEVEL": _as_str,
     "CARGO_PROFILE_RELEASE_OPT_LEVEL": _as_str,
     "CC_KNOWN_WRAPPER_CUSTOM": _as_str,
+    "DLL_PREFIX": _as_str,
+    "DLL_SUFFIX": _as_str,
     "GLEAN_PARSER_VENV": _as_str,
     "HOST_AR": _as_str,
     "IPHONEOS_SDK_DIR": _as_str,
+    "MOZ_ASAN": _bool,
     "MOZ_CARGO_BUILD_STD_ARGS": _as_list,
     "MOZ_CARGO_CC": _as_list,
     "MOZ_CARGO_CC_ENV_SUFFIX": _as_str,
@@ -70,6 +73,7 @@ CARGO_CONFIG_KEYS = {
     "MOZ_CARGO_CXXFLAGS_BASE": _as_list,
     "MOZ_CARGO_CXXFLAGS_FILTER": _as_list,
     "MOZ_CARGO_DEFAULT_PROFILE_ARGS": _as_list,
+    "MOZ_CARGO_DEFAULT_PROFILE_DIR": _as_str,
     "MOZ_CARGO_FROZEN_ARGS": _as_list,
     "MOZ_CARGO_HOST_CC": _as_list,
     "MOZ_CARGO_HOST_CC_ENV_SUFFIX": _as_str,
@@ -98,6 +102,8 @@ CARGO_CONFIG_KEYS = {
     "MOZ_LIBCLANG_PATH": _as_str,
     "MOZ_LTO_LDFLAGS": _as_list,
     "MOZ_LTO_OBJECT_PATH": _bool,
+    "MOZ_LTO_RUST_CROSS": _bool,
+    "MOZ_PROFILE_GENERATE": _bool,
     "MOZ_RUSTC_BOOTSTRAP_DEFAULT": _as_str,
     "MOZ_RUSTC_BOOTSTRAP_FORCE": _as_str,
     "MOZ_RUSTC_WRAPPER": _as_str,
@@ -110,6 +116,9 @@ CARGO_CONFIG_KEYS = {
     "MOZ_RUST_DEFAULT_FLAGS": _as_list,
     "MOZ_RUST_LIBRARY_RUSTCFLAGS": _as_list,
     "MOZ_RUST_SANITIZER_OPTION_VARS": _as_list,
+    "MOZ_TSAN": _bool,
+    "MOZ_UBSAN": _bool,
+    "OS_ARCH": _as_str,
     "PKG_CONFIG": _as_str,
     "PKG_CONFIG_LIBDIR": _as_str,
     "PKG_CONFIG_PATH": _as_str,
@@ -147,8 +156,8 @@ class CargoCommand:
     ``rustflags`` and ``rustc_flags`` hold the edge's own additions to
     ``RUSTFLAGS`` and to the flags after ``--``. ``lto`` is whether a library
     uses link time optimization in a build that enables it for Rust libraries.
-    ``outputs`` are the program files Cargo leaves in its target directory,
-    relative to the object directory.
+    ``outputs`` are the library or program files Cargo leaves in its target
+    directory, relative to the object directory.
     """
 
     kind: str
@@ -178,6 +187,10 @@ class CargoCommand:
                 setattr(self, field.name, tuple(getattr(self, field.name)))
 
 
+# Space separated names of the `RUST_TESTS` crates `./mach rusttests` runs.
+TEST_SELECTION_ENV = "MOZ_RUST_TEST_SELECTION"
+
+
 @dataclass
 class CargoInvocation:
     """State that varies per Cargo run and belongs to neither an edge nor configure.
@@ -193,6 +206,7 @@ class CargoInvocation:
     cargo_rustcflags: tuple = ()
     cargo_extra_flags: tuple = ()
     rustc_bootstrap: str = ""
+    test_crates: tuple = ()
 
     @classmethod
     def from_environ(cls, environ):
@@ -206,6 +220,7 @@ class CargoInvocation:
             cargo_rustcflags=tuple(_as_args(environ.get("CARGO_RUSTCFLAGS"))),
             cargo_extra_flags=tuple(_as_args(environ.get("CARGO_EXTRA_FLAGS"))),
             rustc_bootstrap=environ.get("RUSTC_BOOTSTRAP") or "",
+            test_crates=tuple((environ.get(TEST_SELECTION_ENV) or "").split()),
         )
 
 
@@ -367,8 +382,7 @@ def _cargo_build_flags(cmd, substs, invocation, single_job=False):
     flags = substs.get("CARGOFLAGS")
 
     if cmd.cargo_profile_suffix:
-        prefix = substs.get("MOZ_CARGO_PROFILE_PREFIX")
-        flags += ["--profile", f"{prefix}-{cmd.cargo_profile_suffix}"]
+        flags += ["--profile", cargo_profile_dir(cmd, substs)]
     else:
         flags += substs.get("MOZ_CARGO_DEFAULT_PROFILE_ARGS")
 
@@ -394,6 +408,14 @@ def _cargo_build_flags(cmd, substs, invocation, single_job=False):
     flags += substs.get("MOZ_CARGO_BUILD_STD_ARGS")
 
     return flags
+
+
+def cargo_profile_dir(cmd, substs):
+    """The directory Cargo writes the edge's profile into, under the target triple."""
+    substs = _cargo_config(substs)
+    if cmd.cargo_profile_suffix:
+        return f"{substs.get('MOZ_CARGO_PROFILE_PREFIX')}-{cmd.cargo_profile_suffix}"
+    return substs.get("MOZ_CARGO_DEFAULT_PROFILE_DIR")
 
 
 def applies_library_lto(kind, lto, substs):
@@ -474,6 +496,18 @@ def compose_env(
 ):
     substs = _cargo_config(substs)
     env = dict(environ)
+
+    library_search_path = {
+        "Linux": ("LD_LIBRARY_PATH", ":"),
+        "WINNT": ("PATH", ";"),
+    }.get(substs.get("OS_ARCH"))
+    if cmd.kind == "test" and library_search_path:
+        # Find native libraries without depending on Cargo's output layout.
+        var, separator = library_search_path
+        libpath = f"{topobjdir}/dist/bin"
+        if existing := env.get(var):
+            libpath += f"{separator}{existing}"
+        env[var] = libpath
 
     # Set both host and target tool variables for every edge. Only Cargo's
     # --target argument is edge specific.
@@ -601,13 +635,21 @@ def compose_env(
     return env
 
 
-def _features_arg(cmd):
-    feat = ",".join([*cmd.features, "mozilla-central-workspace-hack"])
-    return ["--features", feat]
+def _features_arg(cmd, workspace_hack=True):
+    features = list(cmd.features)
+    if workspace_hack:
+        features.append("mozilla-central-workspace-hack")
+    return ["--features", ",".join(features)] if features else []
 
 
 def compose_cargo_build_edge_argv(
-    cmd, substs, invocation, timings=False, keep_going=False, single_job=False
+    cmd,
+    substs,
+    invocation,
+    timings=False,
+    keep_going=False,
+    single_job=False,
+    workspace_hack=True,
 ):
     substs = _cargo_config(substs)
     cargo = substs.get("CARGO")
@@ -622,7 +664,7 @@ def compose_cargo_build_edge_argv(
         # Don't stop at the first failure. We want to list all failures together.
         argv.append("--no-fail-fast")
         argv.extend(_subcommand_args(cmd))
-        argv.extend(_features_arg(cmd))
+        argv.extend(_features_arg(cmd, workspace_hack))
         argv.extend(build_flags)
         argv.extend(extra)
         return argv

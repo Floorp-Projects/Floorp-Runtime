@@ -43,13 +43,15 @@ enum class CopyResult
     NOT_RECREATED,
 };
 
+constexpr size_t kConstantBufferOffsetAlignment = 256;
+
 void CalculateConstantBufferParams(GLintptr offset,
                                    GLsizeiptr size,
                                    UINT *outFirstConstant,
                                    UINT *outNumConstants)
 {
     // The offset must be aligned to 256 bytes (should have been enforced by glBindBufferRange).
-    ASSERT(offset % 256 == 0);
+    ASSERT(offset % kConstantBufferOffsetAlignment == 0);
 
     // firstConstant and numConstants are expressed in constants of 16-bytes. Furthermore they must
     // be a multiple of 16 constants.
@@ -57,7 +59,9 @@ void CalculateConstantBufferParams(GLintptr offset,
 
     // The GL size is not required to be aligned to a 256 bytes boundary.
     // Round the size up to a 256 bytes boundary then express the results in constants of 16-bytes.
-    *outNumConstants = static_cast<UINT>(rx::roundUpPow2(size, static_cast<GLsizeiptr>(256)) / 16);
+    *outNumConstants = static_cast<UINT>(
+        rx::roundUpPow2(size, static_cast<GLsizeiptr>(kConstantBufferOffsetAlignment)) / 16);
+    ASSERT(*outNumConstants <= D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT);
 
     // Since the size is rounded up, firstConstant + numConstants may be bigger than the actual size
     // of the buffer. This behaviour is explictly allowed according to the documentation on
@@ -415,18 +419,17 @@ angle::Result Buffer11::setSubData(const gl::Context *context,
                 size <= static_cast<UINT>(mRenderer->getNativeCaps().maxUniformBlockSize) &&
                 !mRenderer->getFeatures().useSystemMemoryForConstantBuffers.enabled)
             {
-                BufferStorage *latestStorage = nullptr;
-                ANGLE_TRY(getLatestBufferStorage(context, &latestStorage, feedback));
-                if (latestStorage && (latestStorage->getUsage() == BUFFER_USAGE_STRUCTURED))
-                {
-                    ANGLE_TRY(
-                        getBufferStorage(context, BUFFER_USAGE_STRUCTURED, &writeBuffer, feedback));
-                }
-                else
-                {
-                    ANGLE_TRY(
-                        getBufferStorage(context, BUFFER_USAGE_UNIFORM, &writeBuffer, feedback));
-                }
+                // Always use BUFFER_USAGE_UNIFORM here. StructuredBufferStorage requires a
+                // shader-dependent structureByteStride at draw time, lives exclusively in
+                // mStructuredBufferRangeStoragesCache, and is always synced downstream from
+                // mLatestBufferStorage (SYSTEM_MEMORY, STAGING, or UNIFORM) in
+                // getStructuredBufferRangeSRV. Because onCopyStorage only updates
+                // mLatestBufferStorage to lower BufferUsage enum values and onStorageUpdate is
+                // never called on range-cache entries, mLatestBufferStorage can never be
+                // BUFFER_USAGE_STRUCTURED.
+                ASSERT(!mLatestBufferStorage ||
+                       mLatestBufferStorage->getUsage() != BUFFER_USAGE_STRUCTURED);
+                ANGLE_TRY(getBufferStorage(context, BUFFER_USAGE_UNIFORM, &writeBuffer, feedback));
             }
             else
             {
@@ -476,8 +479,15 @@ angle::Result Buffer11::copySubData(const gl::Context *context,
 
     BufferStorage *copyDest = nullptr;
     ANGLE_TRY(getLatestBufferStorage(context, &copyDest, feedback));
+    // copyDest comes from mLatestBufferStorage, which only tracks canonical storages in
+    // mBufferStorages and can never be a BUFFER_USAGE_STRUCTURED range-cache entry.
+    ASSERT(!copyDest || copyDest->getUsage() != BUFFER_USAGE_STRUCTURED);
 
-    if (!copyDest)
+    // BUFFER_USAGE_UNIFORM uses D3D11_USAGE_DYNAMIC + D3D11_BIND_CONSTANT_BUFFER, which maps with
+    // D3D11_MAP_WRITE_DISCARD (discarding the entire buffer on partial CPU writes) and cannot
+    // preserve existing data when copyFromStorage uses the CPU setData path. Route through
+    // BUFFER_USAGE_STAGING so existing bytes outside [destOffset, destOffset + size) are preserved.
+    if (!copyDest || copyDest->getUsage() == BUFFER_USAGE_UNIFORM)
     {
         ANGLE_TRY(getStagingStorage(context, &copyDest));
     }
@@ -727,17 +737,25 @@ angle::Result Buffer11::getConstantBufferRange(const gl::Context *context,
                                                UINT *numConstantsOut,
                                                BufferFeedback *feedback)
 {
+    const GLsizeiptr maxUniformBlockSize =
+        static_cast<GLsizeiptr>(mRenderer->getNativeCaps().maxUniformBlockSize);
+    // D3D11 constant buffer bindings are limited to D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT
+    // (maxUniformBlockSize bytes). Passing a larger count to *SetConstantBuffers1 causes the D3D11
+    // runtime to drop the call, leaving the previously bound constant buffer in the slot.
+    const GLsizeiptr clampedSize = std::min(size, maxUniformBlockSize);
+
     NativeStorage *bufferStorage = nullptr;
-    if ((offset == 0 &&
-         size < static_cast<GLsizeiptr>(mRenderer->getNativeCaps().maxUniformBlockSize)) ||
-        mRenderer->getRenderer11DeviceCaps().supportsConstantBufferOffsets)
+    if ((offset == 0 && size < maxUniformBlockSize) ||
+        (mRenderer->getRenderer11DeviceCaps().supportsConstantBufferOffsets &&
+         static_cast<size_t>(offset) < mSize))
     {
         ANGLE_TRY(getBufferStorage(context, BUFFER_USAGE_UNIFORM, &bufferStorage, feedback));
-        CalculateConstantBufferParams(offset, size, firstConstantOut, numConstantsOut);
+        CalculateConstantBufferParams(offset, clampedSize, firstConstantOut, numConstantsOut);
     }
     else
     {
-        ANGLE_TRY(getConstantBufferRangeStorage(context, offset, size, &bufferStorage, feedback));
+        ANGLE_TRY(
+            getConstantBufferRangeStorage(context, offset, clampedSize, &bufferStorage, feedback));
         *firstConstantOut = 0;
         *numConstantsOut  = 0;
     }
@@ -793,6 +811,11 @@ angle::Result Buffer11::packPixels(const gl::Context *context,
     ANGLE_TRY(packStorage->packPixels(context, readAttachment, params));
     onStorageUpdate(packStorage);
 
+    // Pixel pack writes new data into this buffer. If the buffer is also bound as a vertex or
+    // index buffer, we must invalidate any cached static translated vertex/index buffers and set
+    // feedback->bufferStateChanged so bound VertexArrays re-sync on the next draw.
+    invalidateStaticData(context, feedback);
+
     return angle::Result::Continue;
 }
 
@@ -816,6 +839,9 @@ angle::Result Buffer11::getBufferStorage(const gl::Context *context,
                                          BufferFeedback *feedback)
 {
     ASSERT(0 <= usage && usage < BUFFER_USAGE_COUNT);
+    // Structured buffers require a shader-dependent structureByteStride (via
+    // resizeStructuredBuffer) and are managed exclusively in mStructuredBufferRangeStoragesCache.
+    ASSERT(usage != BUFFER_USAGE_STRUCTURED);
     BufferStorage *&newStorage = mBufferStorages[usage];
 
     if (!newStorage)
@@ -869,7 +895,8 @@ angle::Result Buffer11::getConstantBufferRangeStorage(const gl::Context *context
     {
         // Keep the cacheEntry in a limited scope because it may be invalidated later in the code if
         // we need to reclaim some space.
-        BufferCacheEntry *cacheEntry = &mConstantBufferRangeStoragesCache[offset];
+        ConstantBufferKey constantBufferKey(offset, size);
+        BufferCacheEntry *cacheEntry = &mConstantBufferRangeStoragesCache[constantBufferKey];
 
         if (!cacheEntry->storage)
         {
@@ -887,7 +914,9 @@ angle::Result Buffer11::getConstantBufferRangeStorage(const gl::Context *context
     {
         size_t maximumAllowedAdditionalSize = 2 * getSize();
 
-        size_t sizeDelta = size - newStorage->getSize();
+        const size_t alignedSize =
+            rx::roundUpPow2(static_cast<size_t>(size), static_cast<size_t>(16));
+        size_t sizeDelta = alignedSize - newStorage->getSize();
 
         while (mConstantBufferStorageAdditionalSize + sizeDelta > maximumAllowedAdditionalSize)
         {
@@ -916,6 +945,10 @@ angle::Result Buffer11::getConstantBufferRangeStorage(const gl::Context *context
         ANGLE_TRY(newStorage->resize(context, size, false, feedback));
         mConstantBufferStorageAdditionalSize += sizeDelta;
 
+        // Zero-initialize the newly resized range storage in case mLatestBufferStorage is null or
+        // empty (where updateBufferStorage returns early without calling copyFromStorage).
+        ANGLE_TRY(newStorage->setData(context, nullptr, 0, 0));
+
         // We don't copy the old data when resizing the constant buffer because the data may be
         // out-of-date therefore we reset the data revision and let updateBufferStorage() handle the
         // copy.
@@ -940,7 +973,7 @@ angle::Result Buffer11::getStructuredBufferRangeSRV(const gl::Context *context,
     {
         // Keep the cacheEntry in a limited scope because it may be invalidated later in the code if
         // we need to reclaim some space.
-        StructuredBufferKey structuredBufferKey = StructuredBufferKey(offset, structureByteStride);
+        StructuredBufferKey structuredBufferKey(offset, size, structureByteStride);
         BufferCacheEntry *cacheEntry = &mStructuredBufferRangeStoragesCache[structuredBufferKey];
 
         if (!cacheEntry->storage)
@@ -1018,7 +1051,27 @@ angle::Result Buffer11::updateBufferStorage(const gl::Context *context,
 
     if (!latestBuffer)
     {
-        onStorageUpdate(storage);
+        // updateBufferStorage is called by getBufferStorage (for canonical full-buffer storages in
+        // mBufferStorages) as well as getConstantBufferRangeStorage and
+        // getStructuredBufferRangeSRV (for sub-range cache entries stored in
+        // mConstantBufferRangeStoragesCache and mStructuredBufferRangeStoragesCache).
+        //
+        // When mLatestBufferStorage is nullptr (e.g., after glBufferData with data == nullptr), we
+        // must only promote |storage| to mLatestBufferStorage if:
+        // 1. mBufferStorages[storage->getUsage()] == storage: |storage| is a canonical storage in
+        //    mBufferStorages and not a range-cache entry (range-cache entries only cover a
+        //    sub-range, can be freed by LRU eviction without checking mLatestBufferStorage, and
+        //    StructuredBufferStorage cannot be resized via NativeStorage::resize).
+        // 2. storage->getSize() >= mSize: |storage| covers the full buffer size. For
+        //    BUFFER_USAGE_UNIFORM on D3D11.0 devices (!supportsConstantBufferOffsets),
+        //    FillBufferDesc clamps ByteWidth to maxUniformBlockSize. If
+        //    mSize > maxUniformBlockSize, a clamped uniform storage has getSize() < mSize and would
+        //    cause getLatestBufferStorage to repeatedly reallocate the buffer on every call while
+        //    truncating data above maxUniformBlockSize.
+        if (mBufferStorages[storage->getUsage()] == storage && storage->getSize() >= mSize)
+        {
+            onStorageUpdate(storage);
+        }
         return angle::Result::Continue;
     }
 
@@ -1122,6 +1175,12 @@ void Buffer11::onCopyStorage(BufferStorage *dest, BufferStorage *source)
 
 void Buffer11::onStorageUpdate(BufferStorage *updatedStorage)
 {
+    // StructuredBufferStorage instances live exclusively in mStructuredBufferRangeStoragesCache as
+    // downstream range caches (which may only cover a sub-range of the buffer and can be evicted by
+    // LRU). They cannot be read back or copied from (copyFromStorage only supports
+    // SystemMemoryStorage and NativeStorage sources), so they must never become
+    // mLatestBufferStorage.
+    ASSERT(updatedStorage->getUsage() != BUFFER_USAGE_STRUCTURED);
     updatedStorage->setDataRevision(updatedStorage->getDataRevision() + 1);
     mLatestBufferStorage = updatedStorage;
 }
@@ -1140,12 +1199,37 @@ angle::Result Buffer11::BufferStorage::setData(const gl::Context *context,
 
     // Uniform storage can have a different internal size than the buffer size. Ensure we don't
     // overflow.
-    size_t mapSize = std::min(size, mBufferSize - offset);
+    const size_t copySize = std::min(size, mBufferSize - offset);
+
+    // Uniform and structured buffers are D3D11_USAGE_DYNAMIC and mapped with
+    // D3D11_MAP_WRITE_DISCARD, which discards the entire buffer and returns fresh uninitialized
+    // memory. Therefore, when copySize < mBufferSize (e.g., due to constant buffer alignment
+    // padding or a range binding extending past the source buffer), we must map up to the
+    // end of the buffer and zero-fill the remaining tail bytes. Non-discard storages
+    // (SYSTEM_MEMORY, STAGING, PIXEL_PACK) preserve untouched bytes and only map copySize bytes.
+    const bool zeroTail  = (mUsage == BUFFER_USAGE_UNIFORM || mUsage == BUFFER_USAGE_STRUCTURED);
+    const size_t mapSize = zeroTail ? (mBufferSize - offset) : copySize;
+    if (mapSize == 0)
+    {
+        return angle::Result::Continue;
+    }
 
     uint8_t *writePointer = nullptr;
     ANGLE_TRY(map(context, offset, mapSize, GL_MAP_WRITE_BIT, &writePointer));
 
-    memcpy(writePointer, data, mapSize);
+    if (copySize > 0)
+    {
+        memcpy(writePointer, data, copySize);
+    }
+
+    if (zeroTail)
+    {
+        ASSERT(offset == 0);
+        if (copySize < mapSize)
+        {
+            memset(writePointer + copySize, 0, mapSize - copySize);
+        }
+    }
 
     unmap();
 
@@ -1199,24 +1283,43 @@ angle::Result Buffer11::NativeStorage::copyFromStorage(const gl::Context *contex
         *resultOut = CopyResult::NOT_RECREATED;
     }
 
-    size_t clampedSize = size;
-    if (mUsage == BUFFER_USAGE_UNIFORM)
-    {
-        clampedSize = std::min(clampedSize, mBufferSize - destOffset);
-    }
+    // Clamp the copy size to both the available source bytes and destination capacity:
+    // - sourceOffset + size can exceed source->getSize() when a shader uniform/structured block or
+    //   glBindBufferRange window is larger than the source storage.
+    // - destOffset + size can exceed mBufferSize when BUFFER_USAGE_UNIFORM is capped at
+    //   maxUniformBlockSize in FillBufferDesc.
+    size_t sourceAvailable =
+        (sourceOffset < source->getSize()) ? (source->getSize() - sourceOffset) : 0;
+    size_t destAvailable = (destOffset < mBufferSize) ? (mBufferSize - destOffset) : 0;
+    size_t clampedSize   = std::min({size, sourceAvailable, destAvailable});
 
     if (clampedSize == 0)
     {
+        // If no source bytes are available (e.g., sourceOffset >= source->getSize()), uniform and
+        // structured buffers must still be zero-filled via setData so the shader does not read
+        // uninitialized D3D11 memory.
+        if (mUsage == BUFFER_USAGE_UNIFORM || mUsage == BUFFER_USAGE_STRUCTURED)
+        {
+            ANGLE_TRY(setData(context, nullptr, destOffset, 0));
+        }
         return angle::Result::Continue;
     }
 
+    // Route uniform and structured buffers with clampedSize < mBufferSize through CPU map + setData
+    // instead of GPU CopySubresourceRegion. CopySubresourceRegion can only copy clampedSize bytes
+    // from the source buffer (since srcBox must fit within source), which would leave the remaining
+    // [clampedSize, mBufferSize) tail bytes uninitialized in a newly allocated or previously
+    // discarded buffer. setData maps with D3D11_MAP_WRITE_DISCARD and zero-fills the tail.
     if (source->getUsage() == BUFFER_USAGE_PIXEL_PACK ||
-        source->getUsage() == BUFFER_USAGE_SYSTEM_MEMORY)
+        source->getUsage() == BUFFER_USAGE_SYSTEM_MEMORY ||
+        ((mUsage == BUFFER_USAGE_UNIFORM || mUsage == BUFFER_USAGE_STRUCTURED) &&
+         clampedSize < mBufferSize))
     {
         ASSERT(source->isCPUAccessible(GL_MAP_READ_BIT) && isCPUAccessible(GL_MAP_WRITE_BIT));
 
-        // Uniform buffers must be mapped with write/discard.
-        ASSERT(!(preserveData && mUsage == BUFFER_USAGE_UNIFORM));
+        // Uniform and structured buffers must be mapped with write/discard.
+        ASSERT(!(preserveData &&
+                 (mUsage == BUFFER_USAGE_UNIFORM || mUsage == BUFFER_USAGE_STRUCTURED)));
 
         uint8_t *sourcePointer = nullptr;
         ANGLE_TRY(source->map(context, sourceOffset, clampedSize, GL_MAP_READ_BIT, &sourcePointer));
@@ -1630,9 +1733,17 @@ angle::Result Buffer11::PackStorage::packPixels(const gl::Context *context,
     RenderTarget11 *renderTarget = nullptr;
     ANGLE_TRY(readAttachment.getRenderTarget(context, 0, &renderTarget));
 
+    gl::Rectangle clippedReadArea;
+    bool reverseRowOrder     = false;
+    const bool invertTexture = UsePresentPathFast(mRenderer, &readAttachment);
+    if (!ClipRenderTargetReadArea(*renderTarget, params.area, invertTexture, params.reverseRowOrder,
+                                  &clippedReadArea, &reverseRowOrder))
+    {
+        return angle::Result::Continue;
+    }
+
     const TextureHelper11 *srcTexture = &renderTarget->getTexture();
-    ASSERT(srcTexture->valid());
-    unsigned int srcSubresource = renderTarget->getSubresourceIndex();
+    unsigned int srcSubresource       = renderTarget->getSubresourceIndex();
 
     TextureHelper11 resolvedTexture;
     if (srcTexture->getSampleCount() > 1)
@@ -1643,25 +1754,27 @@ angle::Result Buffer11::PackStorage::packPixels(const gl::Context *context,
         srcSubresource = 0;
     }
 
-    mQueuedPackCommand.reset(new PackPixelsParams(params));
+    mQueuedPackCommand.reset(new PackPixelsParams(clippedReadArea, *params.destFormat,
+                                                  params.outputPitch, reverseRowOrder,
+                                                  params.packBuffer, params.offset));
 
-    gl::Extents srcTextureSize(params.area.width, params.area.height, 1);
+    const gl::Extents stagingTextureSize(clippedReadArea.width, clippedReadArea.height, 1);
     if (!mStagingTexture.get() || mStagingTexture.getFormat() != srcTexture->getFormat() ||
-        mStagingTexture.getExtents() != srcTextureSize ||
+        mStagingTexture.getExtents() != stagingTextureSize ||
         mStagingTexture.getTextureType() != srcTexture->getTextureType())
     {
         mStagingTexture.reset();
         ANGLE_TRY(mRenderer->createStagingTexture(context, srcTexture->getTextureType(),
-                                                  srcTexture->getFormatSet(), srcTextureSize,
+                                                  srcTexture->getFormatSet(), stagingTextureSize,
                                                   StagingAccess::READ, &mStagingTexture));
     }
 
     ID3D11DeviceContext *immediateContext = mRenderer->getDeviceContext();
     D3D11_BOX srcBox;
-    srcBox.left   = params.area.x;
-    srcBox.right  = params.area.x + params.area.width;
-    srcBox.top    = params.area.y;
-    srcBox.bottom = params.area.y + params.area.height;
+    srcBox.left   = static_cast<UINT>(clippedReadArea.x);
+    srcBox.right  = static_cast<UINT>(clippedReadArea.x + clippedReadArea.width);
+    srcBox.top    = static_cast<UINT>(clippedReadArea.y);
+    srcBox.bottom = static_cast<UINT>(clippedReadArea.y + clippedReadArea.height);
 
     // Select the correct layer from a 3D attachment
     srcBox.front = 0;

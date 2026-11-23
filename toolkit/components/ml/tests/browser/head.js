@@ -26,10 +26,6 @@ const { getInferenceProcessInfo } = ChromeUtils.importESModule(
   "chrome://global/content/ml/Utils.sys.mjs"
 );
 
-const { splitContext } = ChromeUtils.importESModule(
-  "resource://gre/modules/shared/FormAutofillML.sys.mjs"
-);
-
 const { HttpServer } = ChromeUtils.importESModule(
   "resource://testing-common/httpd.sys.mjs"
 );
@@ -45,7 +41,6 @@ const {
   PipelineOptions,
   QuantizationLevel,
   ExecutionPriority,
-  InferenceDevice,
   LogLevel,
 } = ChromeUtils.importESModule(
   "chrome://global/content/ml/EngineProcess.sys.mjs"
@@ -981,15 +976,22 @@ function readRequestBody(request) {
  * @param {boolean} [options.holdStreamOpenAfterFinish] - When true, the
  *   streaming tool-call turn stops talking after finish_reason and never closes
  *   the connection, so the client is the only thing that can end the turn.
+ * @param {{status: number, body: object}|null} [options.errorResponse] - When
+ *   set, every request is answered with this HTTP status and JSON body instead
+ *   of a completion.
+ * @param {boolean} [options.holdResponses] - Holds requests without sending
+ *   a response until resumeResponses() is called.
  */
 function startMockOpenAI({
   echo = "This gets echoed.",
   onRequest = null,
   holdStreamOpenAfterFinish = false,
+  errorResponse = null,
+  holdResponses = false,
 } = {}) {
   const server = new HttpServer();
 
-  // Tracked so a test using holdStreamOpenAfterFinish can still stop the server.
+  // Tracked so tests that hold responses can still stop the server.
   const heldResponses = [];
 
   server.registerPathHandler("/v1/chat/completions", (request, response) => {
@@ -1000,6 +1002,18 @@ function startMockOpenAI({
       onRequest(request);
     }
 
+    if (errorResponse) {
+      info("[openai] Answering with error status " + errorResponse.status);
+      response.setStatusLine(request.httpVersion, errorResponse.status, "");
+      response.setHeader(
+        "Content-Type",
+        "application/json; charset=utf-8",
+        false
+      );
+      response.write(JSON.stringify(errorResponse.body));
+      return;
+    }
+
     let bodyText = "";
     if (request.method === "POST") {
       try {
@@ -1007,6 +1021,12 @@ function startMockOpenAI({
       } catch (_) {}
     }
     info("[openai] bodyText: " + bodyText);
+
+    if (holdResponses) {
+      response.processAsync();
+      heldResponses.push(response);
+      return;
+    }
 
     let body;
     try {
@@ -1365,10 +1385,15 @@ function startMockOpenAI({
     }
   }
 
+  function resumeResponses() {
+    holdResponses = false;
+    releaseHeldStreams();
+  }
+
   // -1 tells it to pick an ephemeral port
   server.start(-1);
   const port = server.identity.primaryPort;
-  return { server, port, releaseHeldStreams };
+  return { server, port, releaseHeldStreams, resumeResponses };
 }
 
 function stopMockOpenAI(server) {

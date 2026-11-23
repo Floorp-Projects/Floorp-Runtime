@@ -39,10 +39,6 @@ NimbusTestUtils.init(this);
 
 const kDefaultWait = 2000;
 
-const SRD_PREF_VALUE = Services.prefs.getBoolPref(
-  "browser.settings-redesign.enabled"
-);
-
 function is_element_visible(aElement, aMsg) {
   isnot(aElement, null, "Element should not be null, when checking visibility");
   ok(!BrowserTestUtils.isHidden(aElement), aMsg);
@@ -51,6 +47,28 @@ function is_element_visible(aElement, aMsg) {
 function is_element_hidden(aElement, aMsg) {
   isnot(aElement, null, "Element should not be null, when checking visibility");
   ok(BrowserTestUtils.isHidden(aElement), aMsg);
+}
+
+/**
+ * Asserts that an element exposes the given accessible role and a non-empty
+ * accessible name.
+ *
+ * @param {Element} el
+ * @param {number} role Expected `Ci.nsIAccessibleRole` value.
+ */
+async function assertAccessibleRoleAndName(el, role) {
+  ok(el.getAttribute("aria-label"), "Element has a non-empty aria-label");
+
+  let accService = Cc["@mozilla.org/accessibilityService;1"].getService(
+    Ci.nsIAccessibilityService
+  );
+  let accessible;
+  await TestUtils.waitForCondition(() => {
+    accessible = accService.getAccessibleFor(el);
+    return accessible && accessible.role == role;
+  }, "Accessible reflects the expected role");
+  is(accessible.role, role, "Accessible has the expected role");
+  ok(accessible.name, "Accessible has a non-empty name");
 }
 
 async function assertRadioGroupAccessibleName(radioGroup) {
@@ -65,32 +83,69 @@ async function assertRadioGroupAccessibleName(radioGroup) {
 
   let innerFieldset = radioGroup.fieldset.shadowRoot.querySelector("fieldset");
   ok(innerFieldset, "Radio group has an inner fieldset");
-  ok(
-    innerFieldset.getAttribute("aria-label"),
-    "Inner fieldset has a non-empty aria-label"
+  is(
+    innerFieldset.getAttribute("role"),
+    "radiogroup",
+    "Inner fieldset has the radiogroup role"
   );
+  await assertAccessibleRoleAndName(
+    innerFieldset,
+    Ci.nsIAccessibleRole.ROLE_RADIO_GROUP
+  );
+}
+
+/**
+ * Asserts that a moz-box-group exposes a listbox with a localized
+ * accessible name.
+ *
+ * @param {Element} boxGroup
+ */
+async function assertBoxGroupHasListboxAccessibleName(boxGroup) {
+  ok(boxGroup, "Box group exists");
+
+  let doc = boxGroup.ownerDocument;
+  await doc.l10n.ready;
+
+  await doc.l10n.translateFragment(boxGroup);
+  await boxGroup.updateComplete;
+
+  let listbox = boxGroup.shadowRoot.querySelector("[role='listbox']");
+  ok(listbox, "Box group has an inner listbox");
+  await assertAccessibleRoleAndName(listbox, Ci.nsIAccessibleRole.ROLE_LISTBOX);
+}
+
+async function assertReorderableListAccessibleName(boxGroup) {
+  Assert.ok(boxGroup, "Production box group exists");
+  Assert.ok(
+    BrowserTestUtils.isVisible(boxGroup),
+    "Production box group is visible"
+  );
+
+  await boxGroup.updateComplete;
+  Assert.equal(boxGroup.type, "reorderable-list", "Group is reorderable");
+  await boxGroup.reorderableList.updateComplete;
+
+  let list = boxGroup.shadowRoot.querySelector("ol");
+  Assert.ok(list, "Production group renders an inner ordered list");
+  Assert.ok(BrowserTestUtils.isVisible(list), "Inner list is visible");
 
   let accService = Cc["@mozilla.org/accessibilityService;1"].getService(
     Ci.nsIAccessibilityService
   );
   let accessible;
   await TestUtils.waitForCondition(() => {
-    accessible = accService.getAccessibleFor(innerFieldset);
-    return (
-      accessible && accessible.role == Ci.nsIAccessibleRole.ROLE_RADIO_GROUP
-    );
-  }, "Accessible reflects the localized radio group role");
-  is(
-    innerFieldset.getAttribute("role"),
-    "radiogroup",
-    "Inner fieldset has the radiogroup role"
+    accessible = accService.getAccessibleFor(list);
+    return !!accessible;
+  }, `${boxGroup.id}: list accessible exists`);
+
+  Assert.ok(
+    list.getAttribute("aria-label")?.trim(),
+    `${boxGroup.id}: inner list has a nonempty aria-label`
   );
-  is(
-    accessible.role,
-    Ci.nsIAccessibleRole.ROLE_RADIO_GROUP,
-    "Accessible has the radiogroup role"
+  Assert.ok(
+    accessible.name?.trim(),
+    `${boxGroup.id}: accessible has a nonempty name`
   );
-  ok(accessible.name, "Radio group has a non-empty accessible name");
 }
 
 /**
@@ -382,69 +437,6 @@ async function waitForAndAssertPrefState(pref, expectedValue, message) {
  * @param {string} value - The history mode to select.
  */
 async function selectHistoryMode(win, value) {
-  if (Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)) {
-    await selectRedesignedHistoryMode(win, value);
-    return;
-  }
-
-  let historyMode = win.document.getElementById("historyMode").inputEl;
-
-  // Find the index of the option with the given value. Do this before the first
-  // click so we can bail out early if the option does not exist.
-  let optionIndexStr = Array.from(historyMode.children)
-    .findIndex(option => option.value == value)
-    ?.toString();
-  if (optionIndexStr == null) {
-    throw new Error(
-      "Could not find history mode option item for value: " + value
-    );
-  }
-
-  // Scroll into view for click to succeed.
-  historyMode.scrollIntoView();
-
-  let popupShownPromise = BrowserTestUtils.waitForSelectPopupShown(window);
-
-  EventUtils.synthesizeMouseAtCenter(
-    historyMode,
-    {},
-    historyMode.documentGlobal
-  );
-
-  let popup = await popupShownPromise;
-  let popupItems = Array.from(popup.children);
-
-  let targetItem = popupItems.find(item => item.value == optionIndexStr);
-
-  if (!targetItem) {
-    throw new Error(
-      "Could not find history mode popup item for value: " + value
-    );
-  }
-
-  let popupHiddenPromise = BrowserTestUtils.waitForPopupEvent(popup, "hidden");
-
-  if (popup.isNativeMenu) {
-    popup.activateItem(targetItem);
-  } else {
-    EventUtils.synthesizeMouseAtCenter(
-      targetItem,
-      {},
-      targetItem.documentGlobal
-    );
-  }
-
-  await popupHiddenPromise;
-}
-
-/**
- * Select the given history mode in the redesigned privacy pane.
- *
- * @param {Window} win - The preferences window which contains the
- * dropdown.
- * @param {string} value - The history mode to select.
- */
-async function selectRedesignedHistoryMode(win, value) {
   let historyMode = win.document.querySelector(
     "setting-group[groupid='history2'] #historyMode"
   );

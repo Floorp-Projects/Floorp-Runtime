@@ -169,6 +169,25 @@ browser_removeManySpellingErrors.js
 
 **Audit a11y performance when removing 500 spelling errors from content editable.**
 
+browser_testCSSVisibilityChange.js
+==================================
+
+:owner: Accessibility Team
+:name: browser_testCSSVisibilityChange.js
+:Default options:
+
+::
+
+ --extra-args headless
+ --manifest perftest.toml
+ --manifest-flavor browser-chrome
+ --perfherder
+ --perfherder-metrics name:A11Y_TotalTime,unit:ms,shouldAlert:True, name:A11Y_DoInitialUpdate_parent,unit:ms,shouldAlert:False, name:A11Y_ProcessQueuedCacheUpdate_parent,unit:ms,shouldAlert:False, name:A11Y_ContentRemovedNode_parent,unit:ms,shouldAlert:False, name:A11Y_ContentRemovedAcc_parent,unit:ms,shouldAlert:False, name:A11Y_PruneOrInsertSubtree_parent,unit:ms,shouldAlert:False, name:A11Y_ShutdownChildrenInSubtree_parent,unit:ms,shouldAlert:False, name:A11Y_ShowEvent_parent,unit:ms,shouldAlert:False, name:A11Y_RecvCache_parent,unit:ms,shouldAlert:False, name:A11Y_ProcessShowEvent_parent,unit:ms,shouldAlert:False, name:A11Y_CoalesceEvents_parent,unit:ms,shouldAlert:False, name:A11Y_CoalesceMutationEvents_parent,unit:ms,shouldAlert:False, name:A11Y_ProcessHideEvent_parent,unit:ms,shouldAlert:False, name:A11Y_SendCache_parent,unit:ms,shouldAlert:False, name:A11Y_WillRefresh_parent,unit:ms,shouldAlert:False, name:A11Y_AccessibilityServiceInit_parent,unit:ms,shouldAlert:False, name:A11Y_PlatformShowHideEvent_parent,unit:ms,shouldAlert:False, name:A11Y_DoInitialUpdate_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ProcessQueuedCacheUpdate_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ContentRemovedNode_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ContentRemovedAcc_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_PruneOrInsertSubtree_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ShutdownChildrenInSubtree_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ShowEvent_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_RecvCache_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ProcessShowEvent_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_CoalesceEvents_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_CoalesceMutationEvents_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_ProcessHideEvent_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_SendCache_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_WillRefresh_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_AccessibilityServiceInit_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_PlatformShowHideEvent_Count_parent,unit:iterations,shouldAlert:False, name:A11Y_DoInitialUpdate_content,unit:ms,shouldAlert:False, name:A11Y_ProcessQueuedCacheUpdate_content,unit:ms,shouldAlert:False, name:A11Y_ContentRemovedNode_content,unit:ms,shouldAlert:False, name:A11Y_ContentRemovedAcc_content,unit:ms,shouldAlert:False, name:A11Y_PruneOrInsertSubtree_content,unit:ms,shouldAlert:False, name:A11Y_ShutdownChildrenInSubtree_content,unit:ms,shouldAlert:False, name:A11Y_ShowEvent_content,unit:ms,shouldAlert:False, name:A11Y_RecvCache_content,unit:ms,shouldAlert:False, name:A11Y_ProcessShowEvent_content,unit:ms,shouldAlert:False, name:A11Y_CoalesceEvents_content,unit:ms,shouldAlert:False, name:A11Y_CoalesceMutationEvents_content,unit:ms,shouldAlert:False, name:A11Y_ProcessHideEvent_content,unit:ms,shouldAlert:False, name:A11Y_SendCache_content,unit:ms,shouldAlert:False, name:A11Y_WillRefresh_content,unit:ms,shouldAlert:False, name:A11Y_AccessibilityServiceInit_content,unit:ms,shouldAlert:False, name:A11Y_PlatformShowHideEvent_content,unit:ms,shouldAlert:False, name:A11Y_DoInitialUpdate_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ProcessQueuedCacheUpdate_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ContentRemovedNode_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ContentRemovedAcc_Count_content,unit:iterations,shouldAlert:False, name:A11Y_PruneOrInsertSubtree_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ShutdownChildrenInSubtree_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ShowEvent_Count_content,unit:iterations,shouldAlert:False, name:A11Y_RecvCache_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ProcessShowEvent_Count_content,unit:iterations,shouldAlert:False, name:A11Y_CoalesceEvents_Count_content,unit:iterations,shouldAlert:False, name:A11Y_CoalesceMutationEvents_Count_content,unit:iterations,shouldAlert:False, name:A11Y_ProcessHideEvent_Count_content,unit:iterations,shouldAlert:False, name:A11Y_SendCache_Count_content,unit:iterations,shouldAlert:False, name:A11Y_WillRefresh_Count_content,unit:iterations,shouldAlert:False, name:A11Y_AccessibilityServiceInit_Count_content,unit:iterations,shouldAlert:False, name:A11Y_PlatformShowHideEvent_Count_content,unit:iterations,shouldAlert:False
+ --try-platform linux, mac, win
+ --verbose
+
+**Audit a11y performance when changing the CSS visibility of subtree's ancestor.**
+
 
 ## browser/base/content/test
 
@@ -186,6 +205,25 @@ perftest_browser_xhtml_dom.js
 ## browser/components/aiwindow/ui/test/browser_perf
 
 Performance tests for Smart Window on Firefox Desktop
+
+browser_smartwindow_intent_perf.js
+==================================
+
+:owner: GenAI Team
+:name: browser_smartwindow_intent_perf.js
+:Default options:
+
+::
+
+ --perfherder
+ --perfherder-metrics name:SMART-INTENT-default-intent-latency-first-use,unit:ms,shouldAlert:False, name:SMART-INTENT-default-intent-latency-cold,unit:ms,shouldAlert:True, name:SMART-INTENT-default-intent-latency-warm,unit:ms,shouldAlert:True, name:SMART-INTENT-default-engine-creation-time-first-use,unit:ms,shouldAlert:False, name:SMART-INTENT-default-engine-creation-time-cold,unit:ms,shouldAlert:True, name:SMART-INTENT-default-engine-run-time-first-use,unit:ms,shouldAlert:False, name:SMART-INTENT-default-engine-run-time-cold,unit:ms,shouldAlert:True, name:SMART-INTENT-default-engine-run-time-warm,unit:ms,shouldAlert:True, name:SMART-INTENT-default-memory-before-run-first-use,unit:MiB,shouldAlert:False, name:SMART-INTENT-default-memory-before-run-cold,unit:MiB,shouldAlert:True, name:SMART-INTENT-default-memory-before-run-warm,unit:MiB,shouldAlert:True, name:SMART-INTENT-default-memory-after-run-first-use,unit:MiB,shouldAlert:False, name:SMART-INTENT-default-memory-after-run-cold,unit:MiB,shouldAlert:True, name:SMART-INTENT-default-memory-after-run-warm,unit:MiB,shouldAlert:True, name:SMART-INTENT-default-peak-memory,unit:MiB,shouldAlert:True, name:SMART-INTENT-en-fr-intent-latency-first-use,unit:ms,shouldAlert:False, name:SMART-INTENT-en-fr-intent-latency-cold,unit:ms,shouldAlert:True, name:SMART-INTENT-en-fr-intent-latency-warm,unit:ms,shouldAlert:True, name:SMART-INTENT-en-fr-engine-creation-time-first-use,unit:ms,shouldAlert:False, name:SMART-INTENT-en-fr-engine-creation-time-cold,unit:ms,shouldAlert:True, name:SMART-INTENT-en-fr-engine-run-time-first-use,unit:ms,shouldAlert:False, name:SMART-INTENT-en-fr-engine-run-time-cold,unit:ms,shouldAlert:True, name:SMART-INTENT-en-fr-engine-run-time-warm,unit:ms,shouldAlert:True, name:SMART-INTENT-en-fr-memory-before-run-first-use,unit:MiB,shouldAlert:False, name:SMART-INTENT-en-fr-memory-before-run-cold,unit:MiB,shouldAlert:True, name:SMART-INTENT-en-fr-memory-before-run-warm,unit:MiB,shouldAlert:True, name:SMART-INTENT-en-fr-memory-after-run-first-use,unit:MiB,shouldAlert:False, name:SMART-INTENT-en-fr-memory-after-run-cold,unit:MiB,shouldAlert:True, name:SMART-INTENT-en-fr-memory-after-run-warm,unit:MiB,shouldAlert:True, name:SMART-INTENT-en-fr-peak-memory,unit:MiB,shouldAlert:True
+ --verbose
+ --ml-services
+ --manifest perftest.toml
+ --manifest-flavor browser-chrome
+ --try-platform linux, mac, win
+
+**User-perceived latency and inference memory for the Smart Window intent classifier, driven through the production smartbar flow**
 
 browser_smartwindow_perf.js
 ===========================
@@ -965,6 +1003,72 @@ browser_ml_suggest_inference.js
 **Template test for ML suggest Inference Model**
 
 
+## toolkit/components/pdfjs/test
+
+Performance tests for PDF.js features on Firefox Desktop
+
+browser_pdfjs_alttext_perf.js
+=============================
+
+:owner: GenAI Team
+:name: browser_pdfjs_alttext_perf.js
+:Default options:
+
+::
+
+ --perfherder
+ --perfherder-metrics name:PDFJS-ALT-TEXT-alt-text-latency-first-use,unit:ms,shouldAlert:False, name:PDFJS-ALT-TEXT-alt-text-latency-cold,unit:ms,shouldAlert:True, name:PDFJS-ALT-TEXT-alt-text-latency-warm,unit:ms,shouldAlert:True, name:PDFJS-ALT-TEXT-engine-creation-time-first-use,unit:ms,shouldAlert:False, name:PDFJS-ALT-TEXT-engine-creation-time-cold,unit:ms,shouldAlert:True, name:PDFJS-ALT-TEXT-engine-run-time-first-use,unit:ms,shouldAlert:False, name:PDFJS-ALT-TEXT-engine-run-time-cold,unit:ms,shouldAlert:True, name:PDFJS-ALT-TEXT-engine-run-time-warm,unit:ms,shouldAlert:True, name:PDFJS-ALT-TEXT-memory-before-run-first-use,unit:MiB,shouldAlert:False, name:PDFJS-ALT-TEXT-memory-before-run-cold,unit:MiB,shouldAlert:True, name:PDFJS-ALT-TEXT-memory-before-run-warm,unit:MiB,shouldAlert:True, name:PDFJS-ALT-TEXT-memory-after-run-first-use,unit:MiB,shouldAlert:False, name:PDFJS-ALT-TEXT-memory-after-run-cold,unit:MiB,shouldAlert:True, name:PDFJS-ALT-TEXT-memory-after-run-warm,unit:MiB,shouldAlert:True, name:PDFJS-ALT-TEXT-peak-memory,unit:MiB,shouldAlert:True
+ --verbose
+ --ml-services
+ --manifest perftest.toml
+ --manifest-flavor browser-chrome
+ --try-platform linux, mac, win
+
+**User-perceived latency and inference memory for PDF.js alt-text generation, driven through the production image-adding flow**
+
+
+## toolkit/components/pdfjs/test/perf
+
+Performance tests for the PDF.js viewer UI on Firefox Desktop, using PDFs with empty pages
+
+browser_pdfjs_ui_interaction_perf.js
+====================================
+
+:owner: PDF.js Team
+:name: browser_pdfjs_ui_interaction_perf.js
+:Default options:
+
+::
+
+ --extra-args setpref=layout.frame_rate=0, setpref=docshell.event_starvation_delay_hint=1
+ --perfherder
+ --perfherder-metrics name:PDFJS-UI-scroll-100p,unit:ms,shouldAlert:True, name:PDFJS-UI-zoom-100p,unit:ms,shouldAlert:True, name:PDFJS-UI-goto-1000p,unit:ms,shouldAlert:True
+ --verbose
+ --manifest perftest.toml
+ --manifest-flavor browser-chrome
+ --try-platform linux, mac, win
+
+**Time for the PDF.js viewer to scroll, zoom and go to pages in PDFs with 100 and 1000 empty pages**
+
+browser_pdfjs_ui_open_perf.js
+=============================
+
+:owner: PDF.js Team
+:name: browser_pdfjs_ui_open_perf.js
+:Default options:
+
+::
+
+ --perfherder
+ --perfherder-metrics name:PDFJS-UI-first-open-pagesinit,unit:ms,shouldAlert:False, name:PDFJS-UI-first-open-pagerendered,unit:ms,shouldAlert:False, name:PDFJS-UI-open-1p-pagesinit,unit:ms,shouldAlert:True, name:PDFJS-UI-open-1p-pagerendered,unit:ms,shouldAlert:True, name:PDFJS-UI-open-1p-render-delay,unit:ms,shouldAlert:False, name:PDFJS-UI-open-1000p-pagesinit,unit:ms,shouldAlert:True, name:PDFJS-UI-open-1000p-pagerendered,unit:ms,shouldAlert:True, name:PDFJS-UI-open-1000p-pagesloaded,unit:ms,shouldAlert:True
+ --verbose
+ --manifest perftest.toml
+ --manifest-flavor browser-chrome
+ --try-platform linux, mac, win
+
+**Time for the PDF.js viewer to open PDFs with 1 and 1000 empty pages, from the navigation start**
+
+
 ## toolkit/components/places/tests/browser/performance
 
 Performance tests for Toolkit: Places
@@ -982,7 +1086,7 @@ browser_calculate_frecency_speed.js
  --manifest perftest.toml
  --manifest-flavor browser-chrome
  --perfherder
- --perfherder-metrics name:PlacesCalculateFrecencyHighFrequency,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyLowFrequency,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyChunked,unit:ms,shouldAlert:False
+ --perfherder-metrics name:PlacesCalculateFrecencyHighFrequency,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyLowFrequency,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyChunked,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyBookmarkOnly,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyRedirectChain,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyInteractions,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyManyVisits,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyVeryManyVisits,unit:ms,shouldAlert:False, name:PlacesCalculateFrecencyWorstCase,unit:ms,shouldAlert:False
  --try-platform linux, mac
  --verbose
 

@@ -73,7 +73,7 @@ Use `BackgroundTasksRunner::RunInDetachedProcess` is a helper to open a new back
 
 * `BackgroundTask_defaultagent`
 
-  Reports telemetry on Windows for the system defaults. See [Default Browser Agent](https://firefox-source-docs.mozilla.org/toolkit/mozapps/defaultagent/default-browser-agent/index.html) for more information.
+  Reports telemetry on Windows for the system defaults. See {doc}`Default Browser Agent </toolkit/mozapps/defaultagent/default-browser-agent/index>` for more information.
 
 ## The background task mode runtime environment
 
@@ -89,7 +89,7 @@ The technical mechanism that keeps background tasks "lightweight" is very simple
 
 For Firefox in particular, this means that [`BrowserContentHandler.sys.mjs`](https://searchfox.org/firefox-main/source/browser/components/BrowserContentHandler.sys.mjs) is not registered as a command-line-handler.  This means that [`BrowserGlue.sys.mjs`](https://searchfox.org/firefox-main/source/browser/components/BrowserGlue.sys.mjs) is not loaded, and this short circuits regular headed browsing startup.
 
-See the [documentation for defining static components](https://firefox-source-docs.mozilla.org/build/buildsystem/defining-xpcom-components.html) for how to change this default behaviour, and [Bug 1675848](https://bugzilla.mozilla.org/show_bug.cgi?id=1675848) for details of the implementation.
+See the {doc}`documentation for defining static components </build/buildsystem/defining-xpcom-components>` for how to change this default behaviour, and [Bug 1675848](https://bugzilla.mozilla.org/show_bug.cgi?id=1675848) for details of the implementation.
 
 ### Most background tasks do not process updates
 
@@ -98,10 +98,10 @@ To prevent unexpected interactions between background tasks and the Firefox runt
 Background tasks that are launched at shutdown (and that are not updating) do not prevent Firefox from updating.  However, this can result in Firefox updating out from underneath a running background task: see [this summary of the issue](https://bugzilla.mozilla.org/show_bug.cgi?id=1480452#c8).  Generally, background tasks should be minimal and short-lived and are unlikely to launch additional child subprocesses after startup, so they should not witness this issue, but it is still possible.  See the diagram below visualizing process lifetimes.
 
 ```{mermaid}
+:config: {"gantt": {"axisFormat": " "}}
     gantt
         title Background tasks launched at Firefox shutdown
         dateFormat  YYYY-MM-DD
-        axisFormat
         section Firefox
         firefox (version N)                      :2014-01-03, 3d
         updater                                  :2014-01-06, 1d

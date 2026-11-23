@@ -38,8 +38,8 @@ template <typename Fn>
 struct Caller;
 
 template <typename Fn, typename... Params>
-std::invoke_result_t<Fn, Params...> CallFunctionRef(FunctionRef<Fn> aRef,
-                                                    Params... aParams) {
+std::invoke_result_t<Fn, Params&&...> CallFunctionRef(FunctionRef<Fn> aRef,
+                                                      Params&&... aParams) {
   return aRef(std::forward<Params>(aParams)...);
 }
 
@@ -119,7 +119,7 @@ static void TestImplicitFunctionPointerTypeConversion() {
 
 static void TestMoveOnlyArguments() {
   CHECK(CallFunctionRef<int(mozilla::UniquePtr<int>)>(
-            &incrementUnique, mozilla::MakeUnique<int>(5)) == 6);
+            &incrementUnique, std::make_unique<int>(5)) == 6);
 }
 
 int main() {

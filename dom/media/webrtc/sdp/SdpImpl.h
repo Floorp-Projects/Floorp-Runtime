@@ -20,7 +20,7 @@ class SdpImpl : public Sdp {
  public:
   // For sdp documents that are created rather than parsed
   explicit SdpImpl(const SdpOrigin& origin)
-      : SdpImpl(origin, MakeUnique<SdpAttributeListImpl>(nullptr)) {}
+      : SdpImpl(origin, std::make_unique<SdpAttributeListImpl>(nullptr)) {}
 
   // Deep copies into a generic SdpImpl, with generic media sections. An
   // implementation that needs its clone to keep its own type must override.
@@ -38,7 +38,7 @@ class SdpImpl : public Sdp {
   const SdpMediaSection& GetMediaSection(size_t level) const override final;
   SdpMediaSection& GetMediaSection(size_t level) override final;
 
-  SdpMediaSection& AddMediaSection(const SdpMediaSection::MediaType media,
+  SdpMediaSection& AddMediaSection(const SdpMediaSection::MediaTypeInfo media,
                                    const SdpDirectionAttribute::Direction dir,
                                    const uint16_t port,
                                    const SdpMediaSection::Protocol proto,

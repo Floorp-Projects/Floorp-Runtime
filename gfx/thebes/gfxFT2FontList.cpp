@@ -5,12 +5,13 @@
 #include <android/log.h>
 #include <dirent.h>
 
+#include <memory>
+
 #include "gfxAndroidPlatform.h"
 #include "mozilla/Base64.h"
 #include "mozilla/EndianUtils.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/Omnijar.h"
-#include "mozilla/UniquePtr.h"
 #include "mozilla/UniquePtrExtensions.h"
 #include "mozilla/dom/ContentChild.h"
 #include "nsReadableUtils.h"
@@ -166,7 +167,9 @@ FT2FontEntry::~FT2FontEntry() {
   auto* face = mHBFace.exchange(nullptr);
   hb_face_destroy(face);
   if (mMMVar) {
+    // Scaled fonts may still be using the shared face.
     SharedFTFace* face = mFTFace;
+    AutoLockSharedFTFace lock(face);
     FT_Done_MM_Var(face->GetFace()->glyph->library, mMMVar);
   }
   if (mFTFace) {
@@ -358,10 +361,6 @@ FT2FontEntry* FT2FontEntry::CreateFontEntry(const nsACString& aName,
   }
 
   return fe;
-}
-
-FT2FontEntry* gfxFT2Font::GetFontEntry() {
-  return static_cast<FT2FontEntry*>(mFontEntry.get());
 }
 
 // Copied/modified from similar code in gfxMacPlatformFontList.mm:
@@ -653,6 +652,7 @@ FT_MM_Var* FT2FontEntry::GetMMVar() {
   if (!face) {
     return nullptr;
   }
+  AutoLockSharedFTFace faceLock(face);
   if (FT_Err_Ok != FT_Get_MM_Var(face->GetFace(), &mMMVar)) {
     mMMVar = nullptr;
   }
@@ -719,7 +719,7 @@ void gfxFT2FontList::CollectInitData(const FontListEntry& aFLE,
             mFamilyInitData.AppendElement(fontlist::Family::InitData{
                 key, aFLE.familyName(), fontlist::Family::kNoIndex,
                 aFLE.visibility()});
-            return MakeUnique<nsTArray<fontlist::Face::InitData>>();
+            return std::make_unique<nsTArray<fontlist::Face::InitData>>();
           })
       ->AppendElement(fontlist::Face::InitData{
           aFLE.filepath(), aFLE.index(), false,
@@ -1537,7 +1537,7 @@ void gfxFT2FontList::FindFonts() {
 
   // Chrome process: get the cached list (if any)
   if (!mFontNameCache) {
-    mFontNameCache = MakeUnique<FontNameCache>();
+    mFontNameCache = std::make_unique<FontNameCache>();
   }
   mFontNameCache->Init();
 

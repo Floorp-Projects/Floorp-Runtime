@@ -69,7 +69,7 @@ private fun SecondaryButton(
                 testTag = title + "onboarding_card.negative_button"
             },
         text = secondaryButton.text,
-        onClick = secondaryButton.onClick,
+        onClick = hapticOnClick(secondaryButton.onClick),
     )
 }
 
@@ -109,7 +109,7 @@ private fun CardView(
                         testTag = pageState.title + "onboarding_card.positive_button"
                     },
                 text = pageState.primaryButton.text,
-                onClick = pageState.primaryButton.onClick,
+                onClick = hapticOnClick(pageState.primaryButton.onClick),
             )
         }
     }
@@ -224,37 +224,11 @@ private fun OnboardingPageNotificationPreview() {
             pageState =
                 OnboardingPageState(
                     imageRes = R.drawable.nova_onboarding_notifications,
-                    title = stringResource(R.string.nova_onboarding_add_search_widget_title),
-                    description = stringResource(R.string.nova_onboarding_add_search_widget_subtitle),
+                    title = stringResource(R.string.nova_onboarding_notifications_title),
+                    description = stringResource(R.string.nova_onboarding_notifications_subtitle),
                     primaryButton =
                         Action(
                             text = stringResource(R.string.nova_onboarding_notifications_button),
-                            onClick = {},
-                        ),
-                    secondaryButton =
-                        Action(
-                            text = stringResource(R.string.nova_onboarding_negative_button),
-                            onClick = {},
-                        ),
-                    onRecordImpressionEvent = {},
-                )
-        )
-    }
-}
-
-@PreviewLightDark
-@Composable
-private fun OnboardingPageSearchWidgetPreview() {
-    FirefoxTheme {
-        OnboardingPage(
-            pageState =
-                OnboardingPageState(
-                    imageRes = R.drawable.nova_onboarding_widget,
-                    title = stringResource(R.string.nova_onboarding_add_search_widget_title),
-                    description = stringResource(R.string.nova_onboarding_add_search_widget_subtitle),
-                    primaryButton =
-                        Action(
-                            text = stringResource(R.string.nova_onboarding_add_search_widget_button),
                             onClick = {},
                         ),
                     secondaryButton =

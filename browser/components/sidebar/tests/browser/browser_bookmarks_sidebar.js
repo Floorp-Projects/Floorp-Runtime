@@ -87,7 +87,7 @@ add_task(async function test_bookmarks_panel_opens() {
   const { component } = await showBookmarksSidebar(window);
   ok(component, "Bookmarks panel component is present.");
 
-  ok(component.panelHeader, "Panel header is rendered.");
+  ok(SidebarController.panelHeader, "Panel header is rendered.");
   ok(component.searchInput, "Search input is rendered.");
 
   SidebarTestUtils.closePanel(window);
@@ -125,6 +125,11 @@ async function testBookmarkTitleRendering(bookmarkInfo, title, message) {
   const { component } = await showBookmarksSidebar(window);
   const row = await getBookmarkRow(component.bookmarkList, bookmark);
   Assert.equal(row.title, title, message);
+  await assertRowTooltip(
+    row,
+    `${title}\n${bookmark.url.href}`,
+    "Tooltip shows the title and URL."
+  );
 
   await PlacesUtils.bookmarks.remove(bookmark);
   SidebarTestUtils.closePanel(window);
@@ -913,8 +918,8 @@ add_task(async function test_bookmarks_empty_folder_shows_label() {
   );
   Assert.equal(
     nestedList.folderLabelEl.getAttribute("role"),
-    "listitem",
-    "Empty folder has a listitem role."
+    "treeitem",
+    "Empty folder has a treeitem role."
   );
   Assert.equal(
     nestedList.folderLabelEl.getAttribute("aria-label"),

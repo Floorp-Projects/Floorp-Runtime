@@ -59,6 +59,7 @@
 #include "media/base/stream_params.h"
 #include "modules/rtp_rtcp/include/report_block_data.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
+#include "modules/sframe/sframe_encryption_config.h"
 #include "rtc_base/async_packet_socket.h"
 #include "rtc_base/containers/flat_set.h"
 #include "rtc_base/copy_on_write_buffer.h"
@@ -230,6 +231,12 @@ class MediaSendChannelInterface {
       uint32_t ssrc,
       scoped_refptr<FrameEncryptorInterface> frame_encryptor) = 0;
 
+  // Sets the Sframe encryptor and mode used to encrypt outgoing frames.
+  // Sframe is Unified Plan only, so this applies to the channel's single
+  // send stream.
+  virtual void SetSframeEncryptionConfig(
+      SframeEncryptionConfig sframe_encryption_config) = 0;
+
   virtual RTCError SetRtpSendParameters(
       uint32_t ssrc,
       const RtpParameters& parameters,
@@ -262,6 +269,9 @@ class MediaSendChannelInterface {
   // Resets the encoder factory override for the given SSRC that was set via
   // video/audio specific methods.
   virtual void ResetEncoderFactoryOverride(uint32_t ssrc) = 0;
+
+  // Marks the channel as requiring Sframe encryption. Cannot be undone.
+  virtual void EnableSframe() = 0;
 };
 
 class MediaReceiveChannelInterface {
@@ -336,6 +346,9 @@ class MediaReceiveChannelInterface {
   // Returns current value of base minimum delay in milliseconds.
   virtual std::optional<int> GetBaseMinimumPlayoutDelayMs(
       uint32_t ssrc) const = 0;
+
+  // Marks the channel as requiring Sframe decryption. Cannot be undone.
+  virtual void EnableSframe() = 0;
 };
 
 // The stats information is structured as follows:
@@ -623,8 +636,6 @@ struct VideoSenderInfo : public MediaSenderInfo {
   uint32_t key_frames_encoded = 0;
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-totalencodetime
   uint64_t total_encode_time_ms = 0;
-  // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-totalencodedbytestarget
-  uint64_t total_encoded_bytes_target = 0;
   bool has_entered_low_resolution = false;
   // https://w3c.github.io/webrtc-stats/#dom-rtcinboundrtpstreamstats-qpsum
   std::optional<uint64_t> qp_sum;
@@ -925,6 +936,11 @@ struct AudioReceiverParameters : MediaChannelParameters {};
 class VoiceMediaSendChannelInterface : public MediaSendChannelInterface {
  public:
   virtual bool SetSenderParameters(const AudioSenderParameter& params) = 0;
+
+  // Sets the MID of the media section that is sent. Send streams are created
+  // with the MID, so it must be set before adding send streams and can't be
+  // changed afterwards.
+  virtual void SetMid(absl::string_view mid) = 0;
 
   // Configure stream for sending.
   virtual bool SetAudioSend(uint32_t ssrc,

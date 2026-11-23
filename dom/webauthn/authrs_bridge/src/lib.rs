@@ -107,6 +107,8 @@ enum BrowserPromptType<'a> {
         result: BioEnrollmentResult,
     },
     UnknownError,
+    /// No devices found during initial enumeration.
+    NoDevicesFound,
 }
 
 #[derive(Debug)]
@@ -611,6 +613,18 @@ fn status_callback(
                     browsing_context_id,
                 )?;
             }
+            Ok(StatusUpdate::NoDevicesFound) => {
+                debug!("STATUS: No devices found.");
+                send_prompt(
+                    BrowserPromptType::NoDevicesFound,
+                    tid,
+                    origin,
+                    browsing_context_id,
+                )?;
+            }
+            Ok(StatusUpdate::RequestLogging(_, _)) => {
+                // TODO: https://bugzilla.mozilla.org/show_bug.cgi?id=1868975
+            }
             Err(RecvError) => {
                 debug!("STATUS: end");
                 break;
@@ -922,7 +936,7 @@ impl AuthrsService {
             user: PublicKeyCredentialUserEntity {
                 id: user_id.to_vec(),
                 name: Some(user_name.to_string()),
-                display_name: None,
+                display_name: Some(user_display_name.to_string()),
             },
             pub_cred_params,
             exclude_list,

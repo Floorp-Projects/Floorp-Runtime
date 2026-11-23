@@ -358,6 +358,10 @@ var supported_properties = {
     "scrollbar-color": [ test_scrollbar_color_transition ],
 };
 
+if (IsCSSPropertyPrefEnabled("layout.css.text-autospace-size.enabled")) {
+  supported_properties["text-autospace-size"] = [ test_number_transition ];
+}
+
 if (IsCSSPropertyPrefEnabled("layout.css.backdrop-filter.enabled")) {
   supported_properties["backdrop-filter"] = [ test_filter_transition ];
 }
@@ -377,6 +381,10 @@ supported_properties["font-variation-settings"] = [ test_font_variations_transit
 
 if (IsCSSPropertyPrefEnabled("layout.css.line-clamp.enabled")) {
   supported_properties["line-clamp"] = [ test_pos_integer_or_none_transition ];
+}
+
+if (IsCSSPropertyPrefEnabled("layout.css.display-grid-lanes.enabled")) {
+  supported_properties["fit-tolerance"] = [ test_grid_gap ];
 }
 
 supported_properties["contain-intrinsic-width"] = [ test_length_transition, test_auto_with_length_transition ];

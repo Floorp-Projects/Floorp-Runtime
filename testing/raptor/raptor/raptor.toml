@@ -55,6 +55,9 @@
 ["include:tests/custom/browsertime-custom.toml"]
 # Local custom browsertime tests
 
+["include:tests/custom/browsertime-doh-busy-site.toml"]
+# DoH lookup timings while replaying recorded news-site request timelines locally
+
 ["include:tests/custom/browsertime-hev3-connection.toml"]
 # Custom Happy Eyeballs v3 connection tests
 
@@ -117,6 +120,9 @@
 
 ["include:tests/nav-bench/browsertime-nav-bench.toml"]
 # Navigation benchmark (LoadLine2-style, 6 sites x 50 reps x 2 marks)
+
+["include:tests/nav-bench/browsertime-nav-bench-m.toml"]
+# Navigation benchmark, mobile (Android Fenix)
 
 ["include:tests/tp6/desktop/browsertime-tp6.toml"]
 # raptor-browsertime desktop page-load tests

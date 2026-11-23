@@ -4,6 +4,8 @@
 
 #include "mozilla/dom/FetchDriver.h"
 
+#include <memory>
+
 #include "Fetch.h"
 #include "FetchLog.h"
 #include "FetchUtil.h"
@@ -445,8 +447,7 @@ nsresult FetchDriver::Fetch(AbortSignalImpl* aSignalImpl,
   MOZ_RELEASE_ASSERT(!mRequest->IsSynchronous(),
                      "Synchronous fetch not supported");
 
-  UniquePtr<mozilla::ipc::PrincipalInfo> principalInfo(
-      new mozilla::ipc::PrincipalInfo());
+  auto principalInfo = std::make_unique<mozilla::ipc::PrincipalInfo>();
   nsresult rv = PrincipalToPrincipalInfo(mPrincipal, principalInfo.get());
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return rv;
@@ -835,14 +836,10 @@ nsresult FetchDriver::HttpFetch(
 
       // Streaming uploads (ReadableStream) require HTTP/2 or HTTP/3.
       // Since browsers only use HTTP/2 over TLS, reject non-https URLs early.
-      if (mRequest->HasStreamBody()) {
-        bool isHttps = false;
-        rv = uri->SchemeIs("https", &isHttps);
-        if (NS_SUCCEEDED(rv) && !isHttps) {
-          // Reject streaming upload on non-https (which implies HTTP/1.1)
-          FailWithNetworkError(NS_ERROR_DOM_NETWORK_ERR);
-          return NS_ERROR_DOM_NETWORK_ERR;
-        }
+      if (mRequest->HasStreamBody() && !uri->SchemeIs("https")) {
+        // Reject streaming upload on non-https (which implies HTTP/1.1)
+        FailWithNetworkError(NS_ERROR_DOM_NETWORK_ERR);
+        return NS_ERROR_DOM_NETWORK_ERR;
       }
 
       // Mark the channel as streaming BEFORE calling ExplicitSetUploadStream
@@ -1173,8 +1170,7 @@ FetchDriver::OnStartRequest(nsIRequest* aRequest) MOZ_CAN_RUN_SCRIPT_BOUNDARY {
     response = MakeSafeRefPtr<InternalResponse>(responseStatus, statusText,
                                                 mRequest->GetCredentialsMode());
 
-    UniquePtr<mozilla::ipc::PrincipalInfo> principalInfo(
-        new mozilla::ipc::PrincipalInfo());
+    auto principalInfo = std::make_unique<mozilla::ipc::PrincipalInfo>();
     nsresult rv = PrincipalToPrincipalInfo(mPrincipal, principalInfo.get());
     if (NS_WARN_IF(NS_FAILED(rv))) {
       return rv;
@@ -1392,7 +1388,7 @@ FetchDriver::OnStartRequest(nsIRequest* aRequest) MOZ_CAN_RUN_SCRIPT_BOUNDARY {
     SRICheck::IntegrityMetadata(mRequest->GetIntegrity(), sourceUri, reporter,
                                 &mSRIMetadata);
     mSRIDataVerifier =
-        MakeUnique<SRICheckDataVerifier>(mSRIMetadata, channel, reporter);
+        std::make_unique<SRICheckDataVerifier>(mSRIMetadata, channel, reporter);
 
     // Do not retarget off main thread when using SRI API.
     return NS_OK;

@@ -10,6 +10,10 @@ import {
 } from "moz-src:///browser/components/aiwindow/models/ChatUtils.sys.mjs";
 import { isAllowedURLProtocol } from "moz-src:///browser/components/aiwindow/models/SecurityProperties.sys.mjs";
 
+/**
+ * @import { TabGroupColor } from "chrome://browser/content/tabbrowser/tabgroup.mjs"
+ */
+
 const lazy = {};
 
 ChromeUtils.defineLazyGetter(lazy, "console", () =>
@@ -90,6 +94,18 @@ export class TabManagementService {
    * Counter for generating unique operation IDs.
    */
   #operationCounter = 0;
+
+  /**
+   * Keeps track of where tabs were before they were moved, so we can
+   * restore their properties and undo actions.
+   *
+   * @type {WeakMap<Tab, {
+   *   groupId: string,
+   *   pinned: boolean,
+   *   group: Pick<TabGroupInfo, "id" | "label" | "color"> | null
+   * }>}
+   */
+  #tabOrigins = new WeakMap();
 
   /**
    * Restores tabs closed by a specific operation.
@@ -307,6 +323,15 @@ export class TabManagementService {
     }
 
     const groupColor = color || this.#getNextUnusedColor(window);
+    const origins = validTabs.map(tab => ({
+      tab,
+      pinned: tab.pinned,
+      group: tab.group && {
+        id: tab.group.id,
+        label: tab.group.label,
+        color: tab.group.color,
+      },
+    }));
 
     try {
       const group = window.gBrowser.addTabGroup(validTabs, {
@@ -323,6 +348,10 @@ export class TabManagementService {
           failedTabs,
           error: "Failed to create tab group",
         };
+      }
+
+      for (const { tab, ...tabOrigin } of origins) {
+        this.#tabOrigins.set(tab, { groupId: group.id, ...tabOrigin });
       }
 
       return {
@@ -477,9 +506,9 @@ export class TabManagementService {
         excludeTabs: claimedTabs,
       });
 
-      // Pinned/already-grouped tabs would be rejected later by
-      // createTabGroup's own validation, so a match here can't be treated
-      // as merged - open a fresh tab instead, same as no match at all.
+      // Pinned/already-grouped tabs are left where they are, so a match here
+      // can't be treated as merged - open a fresh tab instead, same as no
+      // match at all.
       if (existingTab && !existingTab.pinned && !existingTab.group) {
         claimedTabs.add(existingTab);
         resolvedTabs.push(existingTab);
@@ -550,6 +579,7 @@ export class TabManagementService {
       // Ungroup each tab individually (removes them from the group but doesn't close them)
       for (const tab of tabsInGroup) {
         window.gBrowser.ungroupTab(tab);
+        this.#restoreTabOrigin(tab, groupId, window);
       }
 
       return {
@@ -567,10 +597,39 @@ export class TabManagementService {
   }
 
   /**
+   * Restores original tab properties and location before an action.
+   *
+   * @param {Tab} tab - Tab just ungrouped from groupId
+   * @param {string} groupId - ID of the group createTabGroup created
+   * @param {Window} window - Browser window containing the tab
+   * @private
+   */
+  #restoreTabOrigin(tab, groupId, window) {
+    const origin = this.#tabOrigins.get(tab);
+    if (origin?.groupId !== groupId) {
+      return;
+    }
+    this.#tabOrigins.delete(tab);
+
+    if (origin.pinned) {
+      window.gBrowser.pinTab(tab);
+    } else if (origin.group) {
+      const prevGroup = window.gBrowser.tabGroups.find(
+        group => group.id === origin.group.id
+      );
+      if (prevGroup) {
+        window.gBrowser.moveTabToExistingGroup(tab, prevGroup);
+      } else {
+        window.gBrowser.addTabGroup([tab], origin.group);
+      }
+    }
+  }
+
+  /**
    * @typedef {object} TabGroupInfo
    * @property {string} id - ID of the tab group
    * @property {string} label - Label of the tab group
-   * @property {string} color - Color code of the tab group
+   * @property {TabGroupColor} color - Color code of the tab group
    * @property {number} tabCount - Number of visible tabs
    * @property {Array<{url: string, title: string, lastAccessed: number}>} tabs
    *   The visible tabs, with sanitized titles
@@ -697,14 +756,6 @@ export class TabManagementService {
   }
 
   /**
-   * Validates tabs for grouping and filters out invalid ones.
-   *
-   * @param {Array<Tab>} tabs - Tabs to validate
-   * @param {Window} window - Browser window
-   * @returns {{validTabs: Array<Tab>, failedTabs: Array}} Valid tabs and failed tabs with reasons
-   * @private
-   */
-  /**
    * Why a tab cannot go into a tab group in the given window.
    *
    * @param {Tab} tab - Tab to check
@@ -716,18 +767,20 @@ export class TabManagementService {
     if (!tab?.linkedBrowser || tab.documentGlobal !== window) {
       return "invalid-tab";
     }
-    if (tab.pinned) {
-      return "pinned-tab";
-    }
-    if (tab.group) {
-      return "already-grouped";
-    }
     if (tab.closing) {
       return "tab-closing";
     }
     return null;
   }
 
+  /**
+   * Validates tabs for grouping and filters out invalid ones.
+   *
+   * @param {Array<Tab>} tabs - Tabs to validate
+   * @param {Window} window - Browser window
+   * @returns {{validTabs: Array<Tab>, failedTabs: Array}} Valid tabs and failed tabs with reasons
+   * @private
+   */
   #validateTabsForGrouping(tabs, window) {
     const validTabs = [];
     const failedTabs = [];

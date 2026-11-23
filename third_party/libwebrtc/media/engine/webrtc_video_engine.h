@@ -54,6 +54,7 @@
 #include "call/call.h"
 #include "call/flexfec_receive_stream.h"
 #include "call/rtp_config.h"
+#include "call/sframe_options.h"
 #include "call/video_receive_stream.h"
 #include "call/video_send_stream.h"
 #include "media/base/codec.h"
@@ -63,6 +64,7 @@
 #include "media/base/media_engine.h"
 #include "media/base/stream_params.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
+#include "modules/sframe/sframe_encryption_config.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/network/sent_packet.h"
 #include "rtc_base/network_route.h"
@@ -238,6 +240,9 @@ class WebRtcVideoSendChannel : public MediaChannelUtil,
       uint32_t ssrc,
       scoped_refptr<FrameEncryptorInterface> frame_encryptor) override;
 
+  void SetSframeEncryptionConfig(
+      SframeEncryptionConfig sframe_encryption_config) override;
+
   // note: The encoder_selector object must remain valid for the lifetime of the
   // MediaChannel, unless replaced.
   void SetEncoderSelector(
@@ -254,6 +259,8 @@ class WebRtcVideoSendChannel : public MediaChannelUtil,
       absl::AnyInvocable<void(const std::set<uint32_t>&)> callback) override {
     ssrc_list_changed_callback_ = std::move(callback);
   }
+
+  void EnableSframe() override;
 
   // Implemented for VideoMediaChannelTest.
   bool sending() const {
@@ -298,7 +305,8 @@ class WebRtcVideoSendChannel : public MediaChannelUtil,
   bool GetChangedSenderParameters(const VideoSenderParameters& params,
                                   ChangedSenderParameters* changed_params) const
       RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
-  bool ApplyChangedParams(const ChangedSenderParameters& changed_params);
+  bool ApplyChangedParams(const ChangedSenderParameters& changed_params,
+                          bool applying_encoder_switch = false);
   bool ValidateSendSsrcAvailability(const StreamParams& sp) const
       RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
   // Executes the actual encoder switch operation.
@@ -331,6 +339,8 @@ class WebRtcVideoSendChannel : public MediaChannelUtil,
 
     void SetFrameEncryptor(
         scoped_refptr<FrameEncryptorInterface> frame_encryptor);
+
+    void UpdateSframeOptions(const SframeSendOptions& options);
 
     bool SetVideoSend(const VideoOptions* options,
                       VideoSourceInterface<VideoFrame>* source);
@@ -469,6 +479,11 @@ class WebRtcVideoSendChannel : public MediaChannelUtil,
   std::optional<VideoCodecSettings> send_codec_ RTC_GUARDED_BY(worker_thread_);
   std::vector<VideoCodecSettings> negotiated_codecs_
       RTC_GUARDED_BY(worker_thread_);
+  // A version of `negotiated_codecs_` that is modified every time the encoder
+  // switches e.g. due to encoder failure. Thus represents the remaining
+  // fallback codecs, in negotiation order.
+  std::vector<VideoCodecSettings> available_negotiated_codecs_
+      RTC_GUARDED_BY(worker_thread_);
   std::vector<VideoCodecSettings> send_codecs_ RTC_GUARDED_BY(worker_thread_);
 
   std::vector<RtpExtension> send_rtp_extensions_ RTC_GUARDED_BY(worker_thread_);
@@ -485,6 +500,7 @@ class WebRtcVideoSendChannel : public MediaChannelUtil,
   // Per peer connection crypto options that last for the lifetime of the peer
   // connection.
   const CryptoOptions crypto_options_;
+  SframeSendOptions sframe_options_ RTC_GUARDED_BY(worker_thread_);
 
   // Callback invoked whenever the list of SSRCs changes.
   absl::AnyInvocable<void(const std::set<uint32_t>&)>
@@ -568,6 +584,8 @@ class WebRtcVideoReceiveChannel : public MediaChannelUtil,
   void SetDepacketizerToDecoderFrameTransformer(
       uint32_t ssrc,
       scoped_refptr<FrameTransformerInterface> frame_transformer) override;
+
+  void EnableSframe() override;
 
  private:
   class WebRtcVideoReceiveStream;
@@ -769,6 +787,7 @@ class WebRtcVideoReceiveChannel : public MediaChannelUtil,
   // Per peer connection crypto options that last for the lifetime of the peer
   // connection.
   const CryptoOptions crypto_options_;
+  SframeReceiveOptions sframe_options_ RTC_GUARDED_BY(thread_checker_);
 
   // Optional frame transformer set on unsignaled streams.
   scoped_refptr<FrameTransformerInterface> unsignaled_frame_transformer_

@@ -12,6 +12,7 @@
 #include "mozilla/net/BackgroundChannelRegistrar.h"
 #include "mozilla/net/ChannelEventQueue.h"
 #include "nsNetCID.h"
+#include "nsProxyRelease.h"
 #include "nsQueryObject.h"
 #include "nsThreadUtils.h"
 
@@ -226,7 +227,7 @@ bool HttpBackgroundChannelParent::OnTransportAndData(
        aOnDataAvailableStart](const nsDependentCSubstring& aData,
                               uint64_t aOffset, uint32_t aCount) {
         return self->SendOnTransportAndData(aChannelStatus, aTransportStatus,
-                                            aOffset, aData, false,
+                                            aOffset, aData,
                                             aOnDataAvailableStart);
       };
 
@@ -269,33 +270,8 @@ bool HttpBackgroundChannelParent::OnStopRequest(
   TimeStamp lastActTabOpt = nsHttp::GetLastActiveTabLoadOptimizationHit();
 
   return SendOnStopRequest(aChannelStatus, aTiming, lastActTabOpt,
-                           aResponseTrailers, aConsoleReports, false,
+                           aResponseTrailers, aConsoleReports,
                            aOnStopRequestStart);
-}
-
-bool HttpBackgroundChannelParent::OnConsoleReport(
-    const nsTArray<ConsoleReportCollected>& aConsoleReports) {
-  LOG(("HttpBackgroundChannelParent::OnConsoleReport [this=%p]", this));
-  AssertIsInMainProcess();
-
-  if (NS_WARN_IF(!mIPCOpened)) {
-    return false;
-  }
-
-  if (!IsOnBackgroundThread()) {
-    MutexAutoLock lock(mBgThreadMutex);
-    nsresult rv = mBackgroundThread->Dispatch(
-        NewRunnableMethod<const CopyableTArray<ConsoleReportCollected>>(
-            "net::HttpBackgroundChannelParent::OnConsoleReport", this,
-            &HttpBackgroundChannelParent::OnConsoleReport, aConsoleReports),
-        NS_DISPATCH_NORMAL);
-
-    MOZ_DIAGNOSTIC_ASSERT(NS_SUCCEEDED(rv));
-
-    return NS_SUCCEEDED(rv);
-  }
-
-  return SendOnConsoleReport(aConsoleReports);
 }
 
 bool HttpBackgroundChannelParent::OnAfterLastPart(const nsresult aStatus) {
@@ -493,6 +469,7 @@ auto HttpBackgroundChannelParent::AttachStreamFilter(
 auto HttpBackgroundChannelParent::DetachStreamFilters()
     -> RefPtr<GenericPromise> {
   LOG(("HttpBackgroundChannelParent::DetachStreamFilters [this=%p]\n", this));
+  MOZ_ASSERT(IsOnBackgroundThread());
   if (NS_WARN_IF(!mIPCOpened) || !SendDetachStreamFilters()) {
     return GenericPromise::CreateAndReject(NS_ERROR_FAILURE, __func__);
   }
@@ -508,18 +485,26 @@ void HttpBackgroundChannelParent::ActorDestroy(ActorDestroyReason aWhy) {
   mIPCOpened = false;
 
   RefPtr<HttpBackgroundChannelParent> self = this;
-  DebugOnly<nsresult> rv = NS_DispatchToMainThread(NS_NewRunnableFunction(
-      "net::HttpBackgroundChannelParent::ActorDestroy", [self]() {
-        MOZ_ASSERT(NS_IsMainThread());
+  nsresult rv = NS_DispatchToMainThread(
+      NS_NewRunnableFunction("net::HttpBackgroundChannelParent::ActorDestroy",
+                             [self]() {
+                               MOZ_ASSERT(NS_IsMainThread());
 
-        RefPtr<HttpChannelParent> channelParent =
-            std::move(self->mChannelParent);
+                               RefPtr<HttpChannelParent> channelParent =
+                                   std::move(self->mChannelParent);
 
-        if (channelParent) {
-          channelParent->OnBackgroundParentDestroyed();
-        }
-      }));
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
+                               if (channelParent) {
+                                 channelParent->OnBackgroundParentDestroyed();
+                               }
+                             }),
+      NS_DISPATCH_FALLIBLE);
+  if (NS_FAILED(rv)) {
+    // HttpChannelParent is not thread-safe refcounted, so don't let it be
+    // released here when the main thread is gone.
+    nsCOMPtr<nsIParentChannel> channelParent = mChannelParent.forget();
+    NS_ReleaseOnMainThread("HttpBackgroundChannelParent::mChannelParent",
+                           channelParent.forget());
+  }
 }
 
 }  // namespace net

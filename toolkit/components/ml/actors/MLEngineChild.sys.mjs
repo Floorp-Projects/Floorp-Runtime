@@ -50,6 +50,28 @@ const SAFE_OVERRIDE_OPTIONS = [
 ];
 
 /**
+ * Structured clone keeps only an Error's name, message and stack, so the HTTP
+ * status and service error code a BackendError carries are sent beside the
+ * error and reattached by MLEngineParent.
+ *
+ * @param {any} error
+ * @returns {{status?: number, error?: any} | null}
+ */
+function getErrorDetails(error) {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const details = {};
+  if (typeof error.status === "number") {
+    details.status = error.status;
+  }
+  if (error.error !== undefined && error.error !== null) {
+    details.error = error.error;
+  }
+  return Object.keys(details).length ? details : null;
+}
+
+/**
  * The engine child is responsible for the life cycle and instantiation of the local
  * machine learning inference engine.
  */
@@ -368,8 +390,18 @@ class EngineDispatcher {
   /** @type {number | null} */
   #keepAliveTimeout = null;
 
+  /**
+   * The request ids of the runs in progress.
+   *
+   * @type {Set<number>}
+   */
+  #runningRequests = new Set();
+
   /** @type {Promise<InferenceEngine>} */
   #engine;
+
+  /** @type {Set<number>} */
+  #pendingRuns = new Set();
 
   /** @type {?string} */
   #taskName;
@@ -516,9 +548,7 @@ class EngineDispatcher {
 
     this.#engine
       .then(() => {
-        this.#status = "IDLE";
-        // Trigger the keep alive timer.
-        void this.keepAlive();
+        this.#setStatus("IDLE");
       })
       .catch(error => {
         if (
@@ -554,16 +584,35 @@ class EngineDispatcher {
   }
 
   /**
+   * Moves the engine to a new status. A terminating engine only moves to
+   * TERMINATED.
+   *
+   * @param {EngineStatus} status
+   */
+  #setStatus(status) {
+    if (
+      this.#status === "TERMINATED" ||
+      (this.#status === "TERMINATING" && status !== "TERMINATED")
+    ) {
+      return;
+    }
+    this.#status = status;
+    this.#keepAlive();
+  }
+
+  /**
    * The worker will be shutdown automatically after some amount of time of not being used, unless:
    *
    * - timeoutMS is set to -1
+   * - a run is in progress
+   * - the engine is terminating
    */
-  keepAlive() {
+  #keepAlive() {
     if (this.#keepAliveTimeout) {
       // Clear any previous timeout.
       lazy.clearTimeout(this.#keepAliveTimeout);
     }
-    if (this.timeoutMS && this.timeoutMS >= 0) {
+    if (this.#status === "IDLE" && this.timeoutMS > 0) {
       this.#keepAliveTimeout = lazy.setTimeout(
         this.terminate.bind(
           this,
@@ -609,9 +658,11 @@ class EngineDispatcher {
           };
 
           const { requestId, request, engineRunOptions } = data;
+          this.#pendingRuns.add(requestId);
           try {
             await this.isReady();
           } catch (error) {
+            this.#pendingRuns.delete(requestId);
             port.postMessage({
               type: "EnginePort:RunResponse",
               requestId,
@@ -626,14 +677,18 @@ class EngineDispatcher {
             return;
           }
 
-          // Do not run the keepAlive timer until we are certain that the engine loaded,
-          // as the engine shouldn't be killed while it is initializing.
-          this.keepAlive();
-
-          this.#status = "RUNNING";
+          this.#runningRequests.add(requestId);
+          this.#setStatus("RUNNING");
           const engine = await this.#engine;
 
           try {
+            if (!this.#pendingRuns.has(requestId)) {
+              throw new DOMException(
+                "Inference run was canceled before starting",
+                "AbortError"
+              );
+            }
+            this.#pendingRuns.delete(requestId);
             const response = await engine.run(
               request,
               requestId,
@@ -659,12 +714,21 @@ class EngineDispatcher {
               requestId,
               response: null,
               error,
+              errorDetails: getErrorDetails(error),
             });
+          } finally {
+            this.#runningRequests.delete(requestId);
+            if (!this.#runningRequests.size) {
+              this.#setStatus("IDLE");
+            }
           }
-          this.#status = "IDLE";
           break;
         }
         case "EnginePort:Cancel": {
+          if (this.#pendingRuns.has(data.requestId)) {
+            this.#pendingRuns.delete(data.requestId);
+            break;
+          }
           try {
             const engine = await this.#engine;
             await engine.cancel(data.requestId);
@@ -687,23 +751,19 @@ class EngineDispatcher {
    * @param {boolean} replacement - Flag indicating whether the engine is being replaced.
    */
   async terminate(shutDownIfEmpty, replacement) {
-    if (this.#keepAliveTimeout) {
-      lazy.clearTimeout(this.#keepAliveTimeout);
-      this.#keepAliveTimeout = null;
-    }
     if (this.#port) {
       // This call will trigger back an EnginePort:Discard that will close the port
       this.#port.postMessage({ type: "EnginePort:EngineTerminated" });
     }
 
-    this.#status = "TERMINATING";
+    this.#setStatus("TERMINATING");
     try {
       const engine = await this.#engine;
       await engine.terminate();
     } catch (error) {
       lazy.console.error("Failed to get the engine", error);
     }
-    this.#status = "TERMINATED";
+    this.#setStatus("TERMINATED");
 
     await this.mlEngineChild.removeEngine(
       this.#engineId,
@@ -830,12 +890,34 @@ class InferenceEngine {
       workerOptions,
       functions
     );
+    // Rebuilds the BackendError a backend threw (see toMsg in Pipeline.mjs),
+    // keeping the status and error code the service reported.
+    worker.ExceptionHandlers.BackendError = data => {
+      const error = new Error(data.message);
+      error.name = data.name;
+      error.backendName = data.backendName;
+      if (data.stack) {
+        error.stack = data.stack;
+      }
+      if ("status" in data) {
+        error.status = data.status;
+      }
+      if ("error" in data) {
+        error.error = data.error;
+      }
+      return error;
+    };
 
     const startTime = ChromeUtils.now();
     const args = [wasm, pipelineOptions];
     const closure = {};
     const transferables = wasm instanceof ArrayBuffer ? [wasm] : [];
-    await worker.post("initializeEngine", args, closure, transferables);
+    try {
+      await worker.post("initializeEngine", args, closure, transferables);
+    } catch (error) {
+      worker.terminate();
+      throw error;
+    }
     ChromeUtils.addProfilerMarker(
       "MLEngineChild",
       { startTime },

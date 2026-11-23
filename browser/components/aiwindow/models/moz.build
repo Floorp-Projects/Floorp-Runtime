@@ -7,6 +7,7 @@ with Files("**"):
 
 DIRS += [
     "aitab",
+    "auth",
     "memories",
     "agents",
     "search",
@@ -18,6 +19,7 @@ BROWSER_CHROME_MANIFESTS += [
 ]
 
 MOZ_SRC_FILES += [
+    "AuthProvider.sys.mjs",
     "Chat.sys.mjs",
     "ChatUtils.sys.mjs",
     "Conversation.sys.mjs",
@@ -34,6 +36,7 @@ MOZ_SRC_FILES += [
     "SearchBrowsingHistoryDomainBoost.sys.mjs",
     "SecurityProperties.sys.mjs",
     "SmartFormFillModel.sys.mjs",
+    "SmartWindowLocation.sys.mjs",
     "SmartWindowNavigationInfo.sys.mjs",
     "TelemetryManager.sys.mjs",
     "TelemetryUtils.sys.mjs",

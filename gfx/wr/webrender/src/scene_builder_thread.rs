@@ -10,8 +10,6 @@ use api::interning::DlDelta;
 use api::channel::{unbounded_channel, single_msg_channel, Receiver, Sender};
 use api::units::*;
 use crate::render_api::{ApiMsg, FrameMsg, SceneMsg, ResourceUpdate, TransactionMsg, MemoryReport};
-use crate::box_shadow::BoxShadow;
-use crate::prim_store::rectangle::RectanglePrim;
 #[cfg(feature = "capture")]
 use crate::capture::CaptureConfig;
 use crate::frame_builder::FrameBuilderConfig;
@@ -24,12 +22,7 @@ use crate::intern::{Internable, Interner, UpdateList};
 use crate::internal_types::{FastHashMap, FastHashSet};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use crate::prim_store::backdrop::{BackdropCapture, BackdropRender};
-use crate::prim_store::borders::{ImageBorder, NormalBorderPrim};
-use crate::prim_store::gradient::{LinearGradient, RadialGradient, ConicGradient};
-use crate::prim_store::image::{Image, YuvImage};
-use crate::prim_store::line_dec::LineDecoration;
 use crate::prim_store::picture::Picture;
-use crate::prim_store::text_run::TextRun;
 use crate::profiler::{self, TransactionProfile};
 use crate::render_backend::SceneView;
 use crate::renderer::{FullFrameStats, PipelineInfo};
@@ -89,7 +82,6 @@ pub struct OffscreenBuiltScene {
 pub struct LoadScene {
     pub document_id: DocumentId,
     pub scene: Scene,
-    pub fonts: SharedFontResources,
     pub view: SceneView,
     pub config: FrameBuilderConfig,
     pub build_frame: bool,
@@ -258,6 +250,7 @@ macro_rules! declare_scene_dl_stores {
         #[derive(Default)]
         pub struct SceneDlStores {
             $( pub $field: crate::dl_interner::DlStore<$key, $value>, )*
+            uids: crate::dl_interner::DlUids,
         }
 
         /// The op lists bound for `SceneDlStores`.
@@ -266,19 +259,16 @@ macro_rules! declare_scene_dl_stores {
             $( $field: Vec<crate::dl_interner::DlOp<$value>>, )*
         }
 
-        // Until the first type is listed nothing in here has anything to do.
-        #[allow(unused_variables)]
         impl SceneDlStores {
             fn report_memory(&self, ops: &mut MallocSizeOfOps, r: &mut MemoryReport) {
                 $( r.interning.dl_stores.$report += self.$field.size_of(ops); )*
             }
 
             fn apply(&mut self, updates: SceneDlUpdates) {
-                $( self.$field.apply(updates.$field); )*
+                $( self.$field.apply(updates.$field, &mut self.uids); )*
             }
         }
 
-        #[allow(unused_variables, unused_mut)]
         impl SceneDlUpdates {
             fn open(&mut self, namespace: DlNamespace) {
                 $( self.$field.push(crate::dl_interner::DlOp::Open(namespace)); )*
@@ -331,8 +321,6 @@ macro_rules! declare_dl_updates {
             scene: SceneDlUpdates,
         }
 
-        // Until the first type is listed nothing in here has anything to do.
-        #[allow(unused_variables)]
         impl DlUpdates {
             /// A namespace comes into use: every store must be told before
             /// anything lands in it. Namespace lifetime rides the same op
@@ -408,6 +396,8 @@ struct Document {
     stats: SceneStats,
     view: SceneView,
     spatial_tree: SceneSpatialTree,
+    /// The embed policy violations already reported, to report each one once.
+    reported_embed_policy_violations: FastHashSet<(PipelineId, PipelineId)>,
 }
 
 impl Document {
@@ -417,6 +407,7 @@ impl Document {
             interners: Interners::default(),
             stats: SceneStats::empty(),
             spatial_tree: SceneSpatialTree::new(),
+            reported_embed_policy_violations: FastHashSet::default(),
             view: SceneView {
                 device_rect,
                 quality_settings: QualitySettings::default(),
@@ -670,11 +661,8 @@ impl SceneBuilderThread {
     /// namespaces are released at the next scene build, by which point the
     /// render backend has dropped the document too.
     fn remove_document(&mut self, document_id: DocumentId) {
-        if let Some(doc) = self.documents.remove(&document_id) {
-            for pipeline_id in doc.scene.pipelines.keys() {
-                self.dl_builders.remove_pipeline(*pipeline_id);
-            }
-        }
+        self.documents.remove(&document_id);
+        self.dl_builders.remove_document(document_id);
         self.doc_to_window.remove(&document_id);
     }
 
@@ -713,7 +701,7 @@ impl SceneBuilderThread {
             // deltas, though, so a pipeline the map does not know gets one
             // here instead, as its display list arriving would have given it.
             for pipeline_id in item.scene.pipelines.keys() {
-                let (namespace, allocated) = self.dl_builders.get_or_alloc(*pipeline_id);
+                let (namespace, allocated) = self.dl_builders.get_or_alloc(item.document_id, *pipeline_id);
                 if allocated {
                     dl_updates.open(namespace);
                 }
@@ -724,7 +712,8 @@ impl SceneBuilderThread {
                 built_scene = Some(SceneBuilder::build(
                     &item.scene,
                     None,
-                    item.fonts,
+                    self.dl_builders.document(item.document_id),
+                    &self.scene_stores,
                     &item.view,
                     &self.config,
                     &mut item.interners,
@@ -733,6 +722,7 @@ impl SceneBuilderThread {
                     &SceneStats::empty(),
                     self.debug_flags,
                 ));
+                item.scene.mark_built(&built_scene.as_ref().unwrap().walked_pipelines);
 
                 interner_updates = Some(
                     item.interners.end_frame_and_get_pending_updates()
@@ -751,6 +741,7 @@ impl SceneBuilderThread {
                     stats: SceneStats::empty(),
                     view: item.view.clone(),
                     spatial_tree: item.spatial_tree,
+                    reported_embed_policy_violations: FastHashSet::default(),
                 },
             );
 
@@ -843,6 +834,7 @@ impl SceneBuilderThread {
         let mut rebuild_scene = false;
         let mut frame_stats = FullFrameStats::default();
         let mut offscreen_scenes = Vec::new();
+        let mut embed_policy_violations = Vec::new();
         let mut dl_updates = DlUpdates::default();
 
         for message in txn.scene_ops.drain(..) {
@@ -885,13 +877,14 @@ impl SceneBuilderThread {
                     // namespace to qualify the slots it mints, and open it on
                     // every store before anything lands in it.
                     let (dl_namespace, allocated) =
-                        self.dl_builders.get_or_alloc(pipeline_id);
+                        self.dl_builders.get_or_alloc(txn.document_id, pipeline_id);
                     if allocated {
                         dl_updates.open(dl_namespace);
                     }
 
                     let delta = display_list.delta();
                     let action = self.dl_builders.check_delta(
+                        txn.document_id,
                         pipeline_id,
                         delta.builder,
                         delta.build,
@@ -954,7 +947,8 @@ impl SceneBuilderThread {
                     let built = SceneBuilder::build(
                         &scene,
                         Some(pipeline_id),
-                        self.fonts.clone(),
+                        self.dl_builders.document(txn.document_id),
+                        &self.scene_stores,
                         &doc.view,
                         &config,
                         &mut doc.interners,
@@ -964,6 +958,8 @@ impl SceneBuilderThread {
                         self.debug_flags,
                     );
                     let spatial_tree_updates = spatial_tree.end_frame_and_get_pending_updates();
+                    scene.mark_built(&built.walked_pipelines);
+                    embed_policy_violations.extend_from_slice(&built.embed_policy_violations);
                     offscreen_scenes.push(OffscreenBuiltScene {
                         scene: built,
                         spatial_tree_updates,
@@ -975,8 +971,23 @@ impl SceneBuilderThread {
                         scene.set_root_pipeline_id(pipeline_id);
                     }
                 }
+                SceneMsg::SetEmbedPolicy { pipeline_id, policy } => {
+                    if scene.embed_policies.get(&pipeline_id) != Some(&policy) {
+                        scene.embed_policies.insert(pipeline_id, policy);
+                        rebuild_scene = true;
+                    }
+                }
+                SceneMsg::SetEmbedPolicyEnforcement(enabled) => {
+                    if scene.enforce_embed_policy != enabled {
+                        scene.enforce_embed_policy = enabled;
+                        rebuild_scene = true;
+                    }
+                }
                 SceneMsg::RemovePipeline(pipeline_id) => {
                     scene.remove_pipeline(pipeline_id);
+                    doc.reported_embed_policy_violations.retain(|&(embedder, child)| {
+                        embedder != pipeline_id && child != pipeline_id
+                    });
                     self.removed_pipelines.insert(pipeline_id);
                     removed_pipelines.push((pipeline_id, txn.document_id));
 
@@ -987,7 +998,7 @@ impl SceneBuilderThread {
                     // Not released here: the render backend goes on building
                     // frames from a scene that still references it until the
                     // rebuilt one is swapped in.
-                    self.dl_builders.remove_pipeline(pipeline_id);
+                    self.dl_builders.remove_pipeline(txn.document_id, pipeline_id);
                 }
             }
         }
@@ -1003,7 +1014,8 @@ impl SceneBuilderThread {
             let built = SceneBuilder::build(
                 &scene,
                 None,
-                self.fonts.clone(),
+                self.dl_builders.document(txn.document_id),
+                &self.scene_stores,
                 &doc.view,
                 &config,
                 &mut doc.interners,
@@ -1013,8 +1025,11 @@ impl SceneBuilderThread {
                 self.debug_flags,
             );
 
+            scene.mark_built(&built.walked_pipelines);
+
             // Update the allocation stats for next scene
             doc.stats = built.get_stats();
+            embed_policy_violations.extend_from_slice(&built.embed_policy_violations);
 
             // Retrieve the list of updates from the clip interner.
             interner_updates = Some(
@@ -1032,7 +1047,7 @@ impl SceneBuilderThread {
             // in and frame-built this transaction's offscreen scenes, so the
             // release cannot land while a scene that still references the
             // namespace is the one being drawn.
-            for namespace in self.dl_builders.take_removals() {
+            for namespace in self.dl_builders.take_removals(txn.document_id) {
                 dl_updates.close(namespace);
             }
             dl_updates.apply_to_scene(&mut self.scene_stores);
@@ -1044,6 +1059,19 @@ impl SceneBuilderThread {
         // interner frame, so that no GC step runs and the epoch doesn't advance.
         if !offscreen_scenes.is_empty() && interner_updates.is_none() {
             interner_updates = Some(doc.interners.take_pending_updates());
+        }
+
+        let hooks = match win_id_opt {
+            Some(win_id) => self.hooks.get(&win_id),
+            None => None,
+        };
+        for violation in embed_policy_violations {
+            if !doc.reported_embed_policy_violations.insert(violation) {
+                continue;
+            }
+            if let Some(hooks) = hooks {
+                hooks.embed_policy_violation(txn.document_id, violation.0, violation.1);
+            }
         }
 
         let scene_build_time_ms =

@@ -80,8 +80,8 @@ SharedPlanarYCbCrImage::GetAsSourceSurface() {
 }
 
 nsresult SharedPlanarYCbCrImage::CopyData(const PlanarYCbCrData& aData) {
-  const Maybe<gfx::IntSize> checkedYSize = aData.GetCheckedYDataSize();
-  if (checkedYSize.isNothing()) {
+  const auto sizes = aData.GetPlaneSizes();
+  if (!sizes) {
     return NS_ERROR_INVALID_ARG;
   }
 
@@ -89,11 +89,7 @@ nsresult SharedPlanarYCbCrImage::CopyData(const PlanarYCbCrData& aData) {
   // allocate it. This code path is slower than the one used when
   // CreateEmptyBuffer has been called since it will trigger a full copy.
   if (!mTextureClient) {
-    const gfx::IntSize ySize = checkedYSize.value();
-    const gfx::IntSize cbcrSize =
-        aData.mCbCrStride > 0 ? gfx::ChromaSize(ySize, aData.mChromaSubsampling)
-                              : gfx::IntSize(0, 0);
-    nsresult r = CreateEmptyBuffer(aData, ySize, cbcrSize);
+    nsresult r = CreateEmptyBuffer(aData, sizes->mY, sizes->mCbCr);
     if (NS_FAILED(r)) {
       return r;
     }
@@ -101,12 +97,13 @@ nsresult SharedPlanarYCbCrImage::CopyData(const PlanarYCbCrData& aData) {
 
   TextureClientAutoLock autoLock(mTextureClient, OpenMode::OPEN_WRITE_ONLY);
   if (!autoLock.Succeeded()) {
-    MOZ_ASSERT(false, "Failed to lock the texture.");
+    MOZ_RELEASE_ASSERT(false, "Failed to lock the texture.");
     return NS_ERROR_UNEXPECTED;
   }
 
   if (!UpdateYCbCrTextureClient(mTextureClient, aData)) {
-    MOZ_ASSERT(false, "Failed to copy YCbCr data into the TextureClient");
+    MOZ_RELEASE_ASSERT(false,
+                       "Failed to copy YCbCr data into the TextureClient");
     return NS_ERROR_UNEXPECTED;
   }
   mTextureClient->MarkImmutable();
@@ -114,7 +111,7 @@ nsresult SharedPlanarYCbCrImage::CopyData(const PlanarYCbCrData& aData) {
 }
 
 nsresult SharedPlanarYCbCrImage::AdoptData(const Data& aData) {
-  MOZ_ASSERT(false, "This shouldn't be used.");
+  MOZ_RELEASE_ASSERT(false, "This shouldn't be used.");
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -125,7 +122,17 @@ bool SharedPlanarYCbCrImage::IsValid() const {
 nsresult SharedPlanarYCbCrImage::CreateEmptyBuffer(
     const PlanarYCbCrData& aData, const gfx::IntSize& aYSize,
     const gfx::IntSize& aCbCrSize) {
-  MOZ_ASSERT(!mTextureClient, "This image already has allocated data");
+  MOZ_RELEASE_ASSERT(!mTextureClient, "This image already has allocated data");
+
+  if (!aData.GetPlaneSizes()) {
+    return NS_ERROR_INVALID_ARG;
+  }
+  const auto bufferSize = ImageDataSerializer::ComputeYCbCrBufferSize(
+      aData.mPictureRect, aYSize, aData.mYStride, aCbCrSize, aData.mCbCrStride,
+      aData.mColorDepth, aData.mChromaSubsampling);
+  if (!bufferSize) {
+    return NS_ERROR_INVALID_ARG;
+  }
 
   TextureFlags flags =
       mCompositable ? mCompositable->GetTextureFlags() : TextureFlags::DEFAULT;
@@ -182,18 +189,13 @@ nsresult SharedPlanarYCbCrImage::CreateEmptyBuffer(
   // do not set mBuffer like in PlanarYCbCrImage because the later
   // will try to manage this memory without knowing it belongs to a
   // shmem.
-  Maybe<uint32_t> bufferSize = ImageDataSerializer::ComputeYCbCrBufferSize(
-      mData.mPictureRect, aYSize, mData.mYStride, aCbCrSize, mData.mCbCrStride,
-      mData.mColorDepth, mData.mChromaSubsampling);
-  mBufferSize = bufferSize.valueOr(0);
+  mBufferSize = *bufferSize;
   mSize = mData.mPictureRect.Size();
   mOrigin = mData.mPictureRect.TopLeft();
 
   mTextureClient->Unlock();
 
-  // ImageDataSerializer::ComputeYCbCrBufferSize may return Nothing() when the
-  // size requested is out of the limit.
-  return bufferSize.isSome() ? NS_OK : NS_ERROR_INVALID_ARG;
+  return NS_OK;
 }
 
 void SharedPlanarYCbCrImage::SetIsDRM(bool aIsDRM) {

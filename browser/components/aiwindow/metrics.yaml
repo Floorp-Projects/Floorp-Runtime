@@ -18,8 +18,10 @@ smart_window:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2015626
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2009615
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
     data_reviews:
       - https://phabricator.services.mozilla.com/D282873
+      - https://phabricator.services.mozilla.com/D338147
     data_sensitivity:
       - interaction
     notification_emails: &emails
@@ -60,8 +62,9 @@ smart_window:
       submit_type: &submit_type
         type: string
         description: >
-          How the request was submitted: button, enter, follow-up, menu, resume,
-          retry, shortcuts, starter, or suggestion
+          How the request was submitted: button, enter, follow-up, fxms,
+          menu, resume, retry, shortcuts, starter, or suggestion. Messaging
+          surfaces may supply their own value instead of fxms
       tabs:
         type: quantity
         unit: count
@@ -76,6 +79,11 @@ smart_window:
         type: string
         description: >
           Version of chat prompt used for this request
+      auth_provider: &auth_provider
+        type: string
+        description: >
+          The Smart Window auth provider active when the event is recorded. One
+          of: fxa (Mozilla account) or guest (guest token, no account)
 
   search_submit:
     type: event
@@ -327,6 +335,95 @@ smart_window:
       chat_id: *chat_id
       message_seq: *message_seq
 
+  aitab_open:
+    type: event
+    description: |
+      The user opens a generated page from its chat card, the first time
+      from the choose card or again from the completed card.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2069135
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D329058
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      chat_id: *chat_id
+      open_target:
+        type: string
+        description: >
+          Where the page opens: "current" or "new".
+      card_state:
+        type: string
+        description: >
+          The card the open came from: "choose" for the first open,
+          "complete" for a later open from the finished card.
+
+  aitab_view:
+    type: event
+    description: |
+      about:smartpage finishes looking up a generated page. The outcome is
+      the status the page shows. The event is sent after the component
+      renders, without waiting for the font. The font extra records
+      whether the heading face was installed at that point.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2069135
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D329058
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      outcome:
+        type: string
+        description: >
+          "ready", "unavailable", or "error".
+      font:
+        type: string
+        description: >
+          Heading font status at render: "ready" when the face was
+          added, "unavailable" when it has not been added yet,
+          "error" when installing the face already failed.
+
+  aitab_link_click:
+    type: event
+    description: |
+      The user opens a link from a generated page.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2069135
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D329058
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      component_type:
+        type: string
+        description: >
+          The component name recorded for creation, for example "Header"
+          or "List_column". "unknown" when the click is outside those blocks.
+      result:
+        type: string
+        description: >
+          "switch" when an existing tab was focused, "new" when a tab
+          was opened, "error" when that attempt failed.
+
+  aitab_delete:
+    type: event
+    description: |
+      The user deletes a generated page that was still stored.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2069135
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D329058
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+
   memory_removed_panel:
     type: event
     description: |
@@ -460,7 +557,10 @@ smart_window:
   tool_call:
     type: event
     description: |
-      The assistant invokes a tool. The tool_name extra identifies which tool;
+      The assistant requests a tool call. Recorded for successful and failed
+      executions, blocked or invalid requests, and calls skipped or aborted
+      before execution. The error extra distinguishes these outcomes.
+      The tool_name extra identifies the requested tool;
       the prompt_version extra captures the Remote Settings configuration
       version for the chat feature so tool-call behavior can be correlated
       with prompt revisions during debugging.
@@ -481,7 +581,7 @@ smart_window:
       tool_name:
         type: string
         description: >
-          Name of the invoked tool, e.g. "run_search", "get_open_tabs",
+          Name of the requested tool, e.g. "run_search", "get_open_tabs",
           "search_browsing_history", "get_user_memories"
       model: *model
       prompt_version:
@@ -491,11 +591,16 @@ smart_window:
       error:
         type: string
         description: >
-          Canonical tool-call error code, or empty on success. A tool that
-          reports a failure by returning an error-bearing result rather than
-          throwing, as search_the_web does, is also counted as
-          "execution_failed" here; for the reason a search failed, see the
-          error extra on smart_window.search_the_web
+          Canonical tool-call error code, or empty on success.
+          "duplicate_search" and "memories_disabled" identify calls blocked
+          before execution. "invalid_arguments" means the arguments could not
+          be parsed or prepared. "skipped" means the call was not executed
+          because another tool was selected to finish the turn. "aborted"
+          means the call was not started because the response was stopped.
+          "execution_failed" covers thrown errors and tools that report a
+          failure by returning an error-bearing result, as search_the_web does.
+          For the reason a search failed, see the error extra on
+          smart_window.search_the_web
 
   model_request:
     type: event
@@ -541,8 +646,10 @@ smart_window:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2021947
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2035241
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2040801
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
     data_reviews:
       - https://phabricator.services.mozilla.com/D287710
+      - https://phabricator.services.mozilla.com/D338147
     data_sensitivity:
       - interaction
     notification_emails: *emails
@@ -584,6 +691,32 @@ smart_window:
         description: >
           True when this response (success or failure) was produced by a
           user-initiated retry of a previous turn
+      auth_provider: *auth_provider
+
+  time_to_first_character:
+    type: event
+    description: |
+      Recorded when the first character of an assistant response is rendered
+      after a chat request is submitted
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2073242
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2073242
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      request_id: *request_id
+      model: *model
+      latency:
+        type: quantity
+        unit: ms
+        description: >
+          Time from response request start to the first rendered assistant character
 
   client_error:
     type: event
@@ -979,13 +1112,15 @@ smart_window:
     type: event
     description: |
       Recorded when a Smart Window launch is requested by a user with Smart
-      Window not blocked by AI controls, before any Firefox Accounts sign-in
-      flow runs. Captures the intent to use Smart Window, so it can be compared
-      against open_window, which is only recorded once the window opens.
+      Window not blocked by AI controls, before any sign-in flow runs. Captures
+      the intent to use Smart Window, so it can be compared against
+      open_window, which is only recorded once the window opens.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2065555
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
     data_reviews:
       - https://phabricator.services.mozilla.com/D321341
+      - https://phabricator.services.mozilla.com/D338147
     data_sensitivity:
       - interaction
     notification_emails: *emails
@@ -999,26 +1134,30 @@ smart_window:
       fxa:
         type: boolean
         description: >
-          Whether the user is signed in to their Firefox Account when the launch
-          is requested. False means the launch sends the user through the
-          sign-in flow first
+          Whether a verified Mozilla account is signed in when the launch is
+          requested. Reflects the Mozilla account only, so it is false by
+          default for guest users; see auth_provider
       new_window:
         type: boolean
         description: >
           Whether the launch opens a new window instead of switching the current
           window to Smart Window
+      auth_provider: *auth_provider
     expires: never
 
   signin_flow_started:
     type: event
     description: |
-      Recorded when Smart Window sends the user into the Firefox Accounts
-      sign-in flow, before the sign-in page is requested. Always paired with a
-      signin_flow_completed, which records how the flow ended.
+      Recorded when Smart Window sends the user into the sign-in flow of the
+      active auth provider (Mozilla account or guest), before the sign-in page
+      is requested. Always paired with a signin_flow_completed, which records
+      how the flow ended.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2070652
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
     data_reviews:
       - https://phabricator.services.mozilla.com/D324742
+      - https://phabricator.services.mozilla.com/D338147
     data_sensitivity:
       - interaction
     notification_emails: *emails
@@ -1028,19 +1167,22 @@ smart_window:
         description: >
           Why Smart Window access was denied, which is what made the sign-in
           flow necessary. One of: signed_out, no_consent (signed in but has not
-          accepted the terms of service), both, or none (the flow was requested
+          accepted the Terms of Use), both, or none (the flow was requested
           directly while access was already allowed)
+      auth_provider: *auth_provider
     expires: never
 
   signin_flow_completed:
     type: event
     description: |
-      Recorded when the Firefox Accounts sign-in flow that Smart Window started
-      ends, whatever the result. Always follows a signin_flow_started.
+      Recorded when the sign-in flow that Smart Window started ends, whatever
+      the result. Always follows a signin_flow_started.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2070652
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
     data_reviews:
       - https://phabricator.services.mozilla.com/D324742
+      - https://phabricator.services.mozilla.com/D338147
     data_sensitivity:
       - interaction
     notification_emails: *emails
@@ -1052,6 +1194,58 @@ smart_window:
           (the user closed the sign-in tab or window without finishing), blocked
           (an account cannot be connected, so the sign-in page was never shown),
           or error (the flow threw)
+      auth_provider: *auth_provider
+    expires: never
+
+  auth_impl_switched:
+    type: event
+    description: |
+      Recorded when the Smart Window auth provider changes from one backend to
+      another after one was already in use. Not recorded when the first
+      provider is chosen.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D338147
+    data_sensitivity:
+      - technical
+    notification_emails: *emails
+    extra_keys:
+      from:
+        type: string
+        description: >
+          The auth provider in use before the switch. One of: fxa (Mozilla
+          account) or guest (guest token, no account)
+      to:
+        type: string
+        description: >
+          The auth provider in use after the switch. One of: fxa or guest
+      reason:
+        type: string
+        description: >
+          Why the provider changed. One of: token_rejected (the server rejected
+          the guest token, so Smart Window fell back to fxa), fxa_signed_in (a
+          verified Mozilla account signed in), nimbus (a Nimbus enrollment set
+          the auth impl pref), or other (the auth impl pref was changed some
+          other way, for example in about:config)
+    expires: never
+
+  auth_impl:
+    type: string
+    lifetime: application
+    description: |
+      The Smart Window auth provider currently in use. One of: fxa (Mozilla
+      account) or guest (guest token, no account). Set when a provider is
+      chosen, which happens the first time Smart Window needs one, and again
+      whenever it switches. Lets other Smart Window metrics be split by guest
+      vs fxa.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D338147
+    data_sensitivity:
+      - technical
+    notification_emails: *emails
     expires: never
 
   open_window:
@@ -1062,10 +1256,12 @@ smart_window:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2009610
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2037980
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2065555
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2084445
     data_reviews:
       - https://phabricator.services.mozilla.com/D285902
       - https://phabricator.services.mozilla.com/D299196
       - https://phabricator.services.mozilla.com/D321341
+      - https://phabricator.services.mozilla.com/D338147
     data_sensitivity:
       - interaction
     notification_emails: *emails
@@ -1077,7 +1273,9 @@ smart_window:
       fxa:
         type: boolean
         description: >
-          Whether the user is signed in to their Firefox Account
+          Whether a verified Mozilla account is signed in. Reflects the Mozilla
+          account only, so it is false by default for guest users; see
+          auth_provider
       onboarding:
         type: boolean
         description: >
@@ -1087,6 +1285,7 @@ smart_window:
         unit: count
         description: >
           Number of tabs the user had opened when they switched to Smart window if the switch was used
+      auth_provider: *auth_provider
     expires: never
 
   classic_switch:
@@ -1587,6 +1786,42 @@ smart_window:
     notification_emails: *emails
     expires: never
 
+  sidebar_open_by_default:
+    type: boolean
+    lifetime: application
+    description: |
+      Records if the user currently has the Smart Window sidebar set to open
+      by default, as set by the `browser.smartwindow.sidebar.openByDefault`
+      pref.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2059197
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2059197
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+
+  sidebar_open_by_default_change:
+    type: event
+    description: |
+      Recorded when the `browser.smartwindow.sidebar.openByDefault` pref
+      changes, for example from the settings page or from the sidebar
+      auto-open callout.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2059197
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2059197
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      enabled:
+        type: boolean
+        description: >
+          Whether the sidebar is now set to open by default
+
   llmaj_based_telemetry:
     type: event
     description: |
@@ -1605,6 +1840,10 @@ smart_window:
       model: *model
       turn_number: *turn_number
       chat_version: *chat_version
+      judge_model:
+        type: string
+        description: >
+          Model used as the judge to evaluate the conversation
       telemetry_version:
         type: string
         description: >
@@ -1655,9 +1894,11 @@ smart_window:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2061465
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2078565
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2061465
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2078565
     data_sensitivity:
       - interaction
     notification_emails: *emails
@@ -1674,7 +1915,7 @@ smart_window:
         description: Type of prompt shown - disambiguation, batch_preview, or safety_confirmation
       reason:
         type: string
-        description: Why the prompt was shown - multiple_matches, low_confidence, batch_action, pinned_tab, active_tab, last_tab, user_action
+        description: Why the prompt was shown - multiple_matches, low_confidence, batch_action, pinned_tab, grouped_tab, active_tab, last_tab, user_action
       candidates:
         type: quantity
         unit: count
@@ -1720,6 +1961,42 @@ smart_window:
         type: string
         description: >
           Reason the original prompt was shown
+
+  browser_action_prompt_toggle_all:
+    type: event
+    description: |
+      User clicks "Select all" or "Deselect all" on a tab confirmation card.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2072041
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2072041
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      action: *browser_action
+      prompt_type:
+        type: string
+        description: >
+          Type of prompt shown: disambiguation, batch_preview, or safety_confirmation
+      entrypoint:
+        type: string
+        description: >
+          Where the card came from: browser_action (a chat request handled by
+          the manage_tabs tool) or resume (a "Pick up where you left off" pill)
+      toggle:
+        type: string
+        description: >
+          Which button the user clicked: select_all or deselect_all
+      candidates:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs shown on the card
 
   browser_action_undo:
     type: event
@@ -1896,6 +2173,87 @@ smart_window:
           The position (0-index) of the Top Sites tile.
           For example: 2 means the third tile in the row.
       visible_topsites: *visible_topsites
+
+  resume_cards_displayed:
+    type: event
+    description: >
+      Recorded once when the Smart Window resume section finishes loading.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2067873
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D332941
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      chat_id: *chat_id
+      location: *location
+      message_seq: *message_seq
+      state:
+        type: string
+        description: >
+          What the section showed: cards, empty_no_suggestions, or
+          empty_all_dismissed.
+      cards:
+        type: quantity
+        unit: count
+        description: >
+          The number of resume cards visible when the section was shown.
+      total_cards:
+        type: quantity
+        unit: count
+        description: >
+          The number of resume cards available, including ones hidden
+          behind "Show more".
+
+  resume_card_action:
+    type: event
+    description: >
+      Recorded when the user interacts with a resume card.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2067873
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D332941
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      chat_id: *chat_id
+      location: *location
+      message_seq: *message_seq
+      action:
+        type: string
+        description: >
+          The action taken: resume, card_click (the surface area of the card),
+          open_tabs, snooze, or dismiss.
+      position:
+        type: quantity
+        description: >
+          The position (0-index) of the card acted on.
+
+  resume_section_action:
+    type: event
+    description: >
+      Recorded when the user interacts with the resume section's own controls
+      rather than a card.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2067873
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D332941
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      chat_id: *chat_id
+      location: *location
+      message_seq: *message_seq
+      action:
+        type: string
+        description: >
+          The action taken: show_more, show_less, or hide_section.
 
   bookmarkbar:
     type: labeled_counter
@@ -2273,8 +2631,13 @@ smart_window:
         type: string
         description: >
           One of the monitor run error codes: network_error, timeout,
-          rate_limit, auth_error, content_extraction_error, canceled,
-          interrupted, model_error, prompt_load_error or unknown_error.
+          budget_exceeded, rate_limit, request_too_large, max_users_reached,
+          upstream_rate_limit, fastly_rate_limit, request_blocked,
+          invalid_model, invalid_request, global_budget_exceeded,
+          guest_budget_exceeded, max_guests_reached,
+          auth_error, content_extraction_error,
+          canceled, interrupted, model_error, prompt_load_error or
+          unknown_error.
           Only present when success is false. Never a free-form message.
       outcome:
         type: boolean
@@ -3250,3 +3613,116 @@ smart_window:
         description: >
           How the last open of the source editor ended. One of done, cancel, or
           aborted. Absent when the editor was never opened.
+
+  aitab_create_initiate:
+    type: event
+    description: |
+      Recorded when generation of a new AI Tab page starts.
+    bugs: &aitab_bugs
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2069132
+    data_reviews: &aitab_data_reviews
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2069132
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      num_tabs: &aitab_num_tabs
+        type: quantity
+        unit: tabs
+        description: >
+          Number of tabs referenced explicitly. If 0, other page content is
+          used.
+      how_initiated:
+        type: string
+        description: >
+          How the generation was requested: tab_list, tab_group, fxms,
+          chat, or chat_followup
+      raw_content_len: &aitab_raw_content_len
+        type: quantity
+        unit: characters
+        description: >
+          Length in characters of the raw_content argument sent in the
+          request, or 0 if missing
+      num_tabs_total_attempted:
+        type: quantity
+        unit: tabs
+        description: >
+          Number of tabs originally requested, before the tab limit is applied
+
+  aitab_edit_initiate:
+    type: event
+    description: |
+      Recorded when a modification of an existing AI Tab page starts.
+    bugs: *aitab_bugs
+    data_reviews: *aitab_data_reviews
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      num_tabs: *aitab_num_tabs
+      how_initiated:
+        type: string
+        description: >
+          How the modification was requested: chat, refresh, or chat_followup
+      raw_content_len: *aitab_raw_content_len
+
+  aitab_create_complete:
+    type: event
+    description: |
+      Recorded when generation of a new AI Tab page finishes, successfully or
+      not.
+    bugs: *aitab_bugs
+    data_reviews: *aitab_data_reviews
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys: &aitab_complete_extra_keys
+      is_success:
+        type: boolean
+        description: >
+          Whether a valid page was generated
+      error:
+        type: string
+        description: >
+          Canonical error code, or absent on success: no_content, canceled,
+          page_load_failed, page_not_found, conversation_unavailable,
+          pages_unreadable, nothing_to_change, history_limit, empty_response,
+          invalid_json, content_related, invalid_format, or generation_failed
+      components_used:
+        type: string
+        description: >
+          JSON-encoded array of the component types in the generated page, in
+          the order they are used, each formatted as component_layout (or just
+          component when it has no layout). An empty array on failure.
+      num_chars_read:
+        type: quantity
+        unit: characters
+        description: >
+          Number of characters sent to the model outside of the prompt
+          template (page content, focus and modification instructions)
+      num_chars_out:
+        type: quantity
+        unit: characters
+        description: >
+          Number of characters returned by the model
+      seconds_elapsed:
+        type: quantity
+        unit: seconds
+        description: >
+          Time taken to generate the page
+
+  aitab_edit_complete:
+    type: event
+    description: |
+      Recorded when a modification of an existing AI Tab page finishes,
+      successfully or not.
+    bugs: *aitab_bugs
+    data_reviews: *aitab_data_reviews
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys: *aitab_complete_extra_keys

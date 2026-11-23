@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AwesomeBarAction
 import mozilla.components.browser.state.ext.getUrl
 import mozilla.components.browser.state.search.DefaultSearchEngineProvider
+import mozilla.components.browser.state.search.SearchAccessPoint
 import mozilla.components.browser.state.search.SearchEngine
 import mozilla.components.browser.state.selector.findTab
 import mozilla.components.browser.state.store.BrowserStore
@@ -40,6 +41,7 @@ import mozilla.components.lib.state.Middleware
 import mozilla.components.lib.state.State
 import mozilla.components.lib.state.Store
 import mozilla.components.lib.state.ext.flow
+import mozilla.components.support.ktx.util.URLStringUtils
 import mozilla.components.support.utils.ClipboardHandler
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.BookmarksManagement
@@ -56,6 +58,7 @@ import org.mozilla.fenix.components.UseCases
 import org.mozilla.fenix.components.appstate.AppAction.SearchAction.SearchEngineSelected
 import org.mozilla.fenix.components.appstate.AppAction.URLCopiedToClipboard
 import org.mozilla.fenix.components.metrics.MetricsUtils
+import org.mozilla.fenix.components.metrics.toSearchAccessPoint
 import org.mozilla.fenix.components.search.BOOKMARKS_SEARCH_ENGINE_ID
 import org.mozilla.fenix.components.search.HISTORY_SEARCH_ENGINE_ID
 import org.mozilla.fenix.components.search.TABS_SEARCH_ENGINE_ID
@@ -200,7 +203,14 @@ class FenixSearchMiddleware(
                 action.suggestion.editSuggestion?.let {
                     toolbarStore.dispatch(
                         BrowserEditToolbarAction.SearchQueryUpdated(
-                            query = BrowserToolbarQuery(it),
+                            query =
+                                BrowserToolbarQuery(
+                                    if (action.suggestion.flags.any { flag -> flag in URL_SUGGESTION_FLAGS }) {
+                                        URLStringUtils.toLosslessEditableUrl(it)
+                                    } else {
+                                        it
+                                    }
+                                ),
                             isQueryPrefilled = true,
                         )
                     )
@@ -283,7 +293,7 @@ class FenixSearchMiddleware(
             }
         val shouldShowSearchSuggestions =
             with(store.state) {
-                currentTabData?.url != query && query.isNotBlank()
+                !isCurrentUrl(query, currentTabData?.url) && query.isNotBlank()
             }
         val shouldShowCurrentWebsiteDetails =
             settings.showAddressBarInFocusMode &&
@@ -300,7 +310,7 @@ class FenixSearchMiddleware(
                     browsingModeManager.mode.isPrivate &&
                     !isSearchSuggestionsFeatureEnabled() &&
                     query.isNotBlank() &&
-                    currentTabData?.url != query
+                    !isCurrentUrl(query, currentTabData?.url)
             }
 
         store.dispatch(SearchFragmentAction.AllowSearchSuggestionsInPrivateModePrompt(showPrivatePrompt))
@@ -377,6 +387,12 @@ class FenixSearchMiddleware(
             ) {
                 val searchEngine = store.state.searchEngineSource.searchEngine
 
+                val searchAccessPoint =
+                    when (store.state.searchAccessPoint) {
+                        MetricsUtils.Source.NONE -> MetricsUtils.Source.SUGGESTION
+                        else -> store.state.searchAccessPoint
+                    }
+
                 openToBrowserAndLoad(
                     url = searchTerms,
                     createNewTab =
@@ -388,13 +404,8 @@ class FenixSearchMiddleware(
                     usePrivateMode = browsingModeManager.mode.isPrivate,
                     forceSearch = true,
                     searchEngine = searchEngine,
+                    accessPoint = searchAccessPoint.toSearchAccessPoint(),
                 )
-
-                val searchAccessPoint =
-                    when (store.state.searchAccessPoint) {
-                        MetricsUtils.Source.NONE -> MetricsUtils.Source.SUGGESTION
-                        else -> store.state.searchAccessPoint
-                    }
 
                 if (searchEngine != null) {
                     MetricsUtils.recordSearchMetrics(
@@ -428,6 +439,7 @@ class FenixSearchMiddleware(
         forceSearch: Boolean = false,
         searchEngine: SearchEngine? = null,
         flags: LoadUrlFlags = LoadUrlFlags.none(),
+        accessPoint: String = SearchAccessPoint.DEFAULT,
     ) {
         navController.navigate(R.id.browserFragment)
         useCases.fenixBrowserUseCases.loadUrlOrSearch(
@@ -437,6 +449,7 @@ class FenixSearchMiddleware(
             forceSearch = forceSearch,
             searchEngine = searchEngine,
             flags = flags,
+            accessPoint = accessPoint,
         )
     }
 
@@ -606,7 +619,7 @@ class FenixSearchMiddleware(
         val searchTerms = session.content.searchTerms
         val currentInput =
             when (searchTerms.isEmpty()) {
-                true -> session.getUrl()
+                true -> session.getUrl()?.let(URLStringUtils::toLosslessEditableUrl)
                 else -> searchTerms
             }
 
@@ -617,4 +630,15 @@ class FenixSearchMiddleware(
 
     private val sessionSearchWasStartedFor
         get() = browserStore.state.findTab(appStore.state.searchState.sourceTabId ?: "")
+
+    private companion object {
+        // Suggestions whose edit text is a browser-owned URL.
+        val URL_SUGGESTION_FLAGS =
+            setOf(
+                AwesomeBar.Suggestion.Flag.BOOKMARK,
+                AwesomeBar.Suggestion.Flag.HISTORY,
+                AwesomeBar.Suggestion.Flag.OPEN_TAB,
+                AwesomeBar.Suggestion.Flag.SYNC_TAB,
+            )
+    }
 }

@@ -74,6 +74,7 @@
 #include "media/base/rtp_utils.h"
 #include "media/base/stream_params.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
+#include "modules/sframe/sframe_encryption_config.h"
 #include "rtc_base/async_packet_socket.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/containers/flat_set.h"
@@ -100,6 +101,7 @@ class RtpReceiveChannelHelper : public Base, public MediaChannelUtil {
         transport_overhead_per_packet_(0),
         num_network_route_changes_(0) {}
   ~RtpReceiveChannelHelper() override = default;
+  void EnableSframe() override {}
   const std::vector<RtpExtension>& recv_extensions() {
     return recv_extensions_;
   }
@@ -281,6 +283,7 @@ class RtpSendChannelHelper : public Base, public MediaChannelUtil {
         transport_overhead_per_packet_(0),
         num_network_route_changes_(0) {}
   ~RtpSendChannelHelper() override = default;
+  void EnableSframe() override {}
   const std::vector<RtpExtension>& send_extensions() {
     return send_extensions_;
   }
@@ -440,6 +443,8 @@ class RtpSendChannelHelper : public Base, public MediaChannelUtil {
   void SetFrameEncryptor(uint32_t /* ssrc */,
                          scoped_refptr<FrameEncryptorInterface>
                          /* frame_encryptor */) override {}
+  void SetSframeEncryptionConfig(
+      SframeEncryptionConfig /* sframe_encryption_config */) override {}
   void SetEncoderToPacketizerFrameTransformer(
       uint32_t /* ssrc */,
       scoped_refptr<FrameTransformerInterface> /* frame_transformer */)
@@ -620,6 +625,7 @@ class FakeVoiceMediaSendChannel
   const std::vector<DtmfInfo>& dtmf_info_queue() const;
   const AudioOptions& options() const;
   int max_bps() const;
+  const std::string& mid() const;
   bool HasSource(uint32_t ssrc) const;
   bool GetOutputVolume(uint32_t ssrc, double* volume);
 
@@ -631,6 +637,7 @@ class FakeVoiceMediaSendChannel
   MediaType media_type() const override { return MediaType::AUDIO; }
 
   bool SetSenderParameters(const AudioSenderParameter& params) override;
+  void SetMid(absl::string_view mid) override;
   bool SetSend(bool send) override;
   bool SetAudioSend(uint32_t ssrc,
                     bool enable,
@@ -679,6 +686,7 @@ class FakeVoiceMediaSendChannel
   AudioOptions options_;
   std::map<uint32_t, std::unique_ptr<VoiceChannelAudioSink>> local_sinks_;
   int max_bps_;
+  std::string mid_;
 };
 
 // A helper function to compare the FakeVoiceMediaChannel::DtmfInfo.

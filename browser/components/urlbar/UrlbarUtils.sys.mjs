@@ -10,7 +10,7 @@
 /**
  * @import {UrlbarLoadRequest, URIFixupPrimitives} from "chrome://browser/content/urlbar/UrlbarShared.mjs"
  * @import {Query} from "./UrlbarProvidersManager.sys.mjs"
- * @import {SearchEngine} from "moz-src:///toolkit/components/search/SearchEngine.sys.mjs"
+ * @import {SearchEngine, SearchSubmissionData} from "moz-src:///toolkit/components/search/SearchEngine.sys.mjs"
  * @import {SmartbarInput} from "chrome://browser/content/urlbar/SmartbarInput.mjs"
  */
 
@@ -244,18 +244,26 @@ export var UrlbarUtils = {
    *
    * @param {UrlbarLoadRequest} loadRequest
    *   What to load.
-   * @returns {{url: ?string, postData: ?nsIInputStream}}
-   *   `url` will be null when the search engine wasn't found.
+   * @param {string} [sapSource]
+   *   The search access point, used to select the partner code for an engine
+   *   search.
+   * @returns {{url: ?string, postData: ?nsIInputStream, submission: ?SearchSubmissionData}}
+   *   `url` will be null when the search engine wasn't found. `submission` is
+   *   only set for engine searches.
    */
-  loadRequestToUrl(loadRequest) {
+  loadRequestToUrl(loadRequest, sapSource) {
     if (loadRequest.engineSearch) {
       let { engineName, query } = loadRequest.engineSearch;
       let engine = lazy.SearchService.getEngineByName(engineName);
       if (!engine) {
-        return { url: null, postData: null };
+        return { url: null, postData: null, submission: null };
       }
-      let [url, postData] = this.getSearchQueryUrl(engine, query);
-      return { url, postData };
+      let [url, postData, submission] = this.getSearchQueryUrl(
+        engine,
+        query,
+        sapSource
+      );
+      return { url, postData, submission };
     }
 
     return {
@@ -263,6 +271,7 @@ export var UrlbarUtils = {
       postData: loadRequest.urlLoad.postData
         ? this.getPostDataStream(loadRequest.urlLoad.postData)
         : null,
+      submission: null,
     };
   },
 
@@ -273,13 +282,15 @@ export var UrlbarUtils = {
    *   The engine to generate the query for.
    * @param {string} query
    *   The query string to search for.
-   * @returns {Array}
-   *   Returns an array containing the query url (string) and the
-   *    post data (object).
+   * @param {string} [sapSource]
+   *   The search access point, used to select the partner code.
+   * @returns {[string, ?nsIInputStream, SearchSubmissionData]}
+   *   Returns an array containing the query url, the post data and the
+   *   submission they were taken from.
    */
-  getSearchQueryUrl(engine, query) {
-    let submission = engine.getSubmission(query);
-    return [submission.uri.spec, submission.postData];
+  getSearchQueryUrl(engine, query, sapSource) {
+    let submission = engine.getSubmission(query, null, sapSource);
+    return [submission.uri.spec, submission.postData, submission];
   },
 
   /**
@@ -397,7 +408,7 @@ export var UrlbarUtils = {
    *
    * @param {SearchEngine|nsIURI|URL|string} urlOrEngine
    *   The entity to initiate a speculative connection for.
-   * @param {window} window
+   * @param {BrowserWindow} window
    *   The window from where the connection is initialized.
    */
   setupSpeculativeConnection(urlOrEngine, window) {
@@ -526,6 +537,44 @@ export var UrlbarUtils = {
           preferredURIDisplaySpec: info.preferredURI?.displaySpec ?? null,
         }
       : null;
+  },
+
+  /**
+   * Retrieves clipboard data as text.
+   *
+   * @param {number} threshold
+   *   The approximate byte size past which the clipboard is left unread. The
+   *   count is platform-dependent; see `nsIClipboard.getDataIfSmallerThan`.
+   * @param {Window} win
+   *   The window reading the clipboard.
+   * @returns {Promise<?string>}
+   *   The text, or null if it exceeds the threshold or can't be read.
+   */
+  async getClipboardTextIfSmallerThan(threshold, win) {
+    let transferable = Cc["@mozilla.org/widget/transferable;1"].createInstance(
+      Ci.nsITransferable
+    );
+    transferable.init(win.docShell.QueryInterface(Ci.nsILoadContext));
+    transferable.addDataFlavor("text/plain");
+
+    try {
+      if (
+        !(await Services.clipboard.getDataIfSmallerThan(
+          transferable,
+          threshold,
+          Services.clipboard.kGlobalClipboard,
+          win.browsingContext.currentWindowContext
+        ))
+      ) {
+        return null;
+      }
+
+      let data = {};
+      transferable.getTransferData("text/plain", data);
+      return data.value.QueryInterface(Ci.nsISupportsString).data;
+    } catch (e) {
+      return null;
+    }
   },
 
   /**
@@ -1292,7 +1341,7 @@ export var UrlbarUtils = {
    * Returns window.gURLBar for regular browser windows, or the smartbar
    * for AI windows in immersive view.
    *
-   * @param {Window} window
+   * @param {BrowserWindow} window
    *   The window to get the URL bar for.
    * @returns {UrlbarInput | SmartbarInput }
    *   The URL bar element that should be focused.
@@ -1435,6 +1484,9 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
         type: "boolean",
       },
       lastVisit: {
+        type: "number",
+      },
+      semanticDistance: {
         type: "number",
       },
       tabGroup: {
@@ -1603,6 +1655,9 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
       },
       requestId: {
         type: "string",
+      },
+      semanticDistance: {
+        type: "number",
       },
       shouldShowUrl: {
         type: "boolean",
@@ -1945,18 +2000,17 @@ export class UrlbarProvider {
   }
 
   /**
-   * @type {Query}
-   *   This can be used by the provider to check the query is still running
-   *   after executing async tasks:
+   * This can be used by the provider to check the query is still running
+   * after executing async tasks::
    *
-   * ```
    *   let instance = this.queryInstance;
    *   await ...
    *   if (instance != this.queryInstance) {
    *     // Query was canceled or a new one started.
    *     return;
    *   }
-   * ```
+   *
+   * @type {Query}
    */
   queryInstance;
 
@@ -2160,12 +2214,9 @@ export class UrlbarProvider {
    *
    * @param {UrlbarResult} _result
    *   The result being selected.
-   * @param {Element} [_element]
-   *   The selected element. Undefined in the message path.
-   *   New providers should not use this parameter!
    * @abstract
    */
-  onBeforeSelection(_result, _element) {}
+  onBeforeSelection(_result) {}
 
   /**
    * Called when a result from the provider is selected. "Selected" refers to

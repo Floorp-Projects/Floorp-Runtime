@@ -185,6 +185,12 @@ class EditorBase : public nsIEditor,
   }
 
   /**
+   * Like GetSelection(), but returns null for non-normal selections that
+   * weren't created yet instead of creating them.
+   */
+  Selection* GetExistingSelection(SelectionType aSelectionType) const;
+
+  /**
    * Get frame selection from SelectionRef(), but returns null
    * for canvas-based EditContext, where we don't want to touch
    * the DOM selection (since it may be in accessible content.)
@@ -335,10 +341,14 @@ class EditorBase : public nsIEditor,
    * Return true if it's possible to undo/redo right now.
    */
   bool CanUndo() const {
-    return IsUndoRedoEnabled() && NumberOfUndoItems() > 0;
+    // We should always allow undo/redo for EditContext, since the
+    // history is managed by the web app.
+    return (IsUndoRedoEnabled() && NumberOfUndoItems() > 0) ||
+           ComputeEditContext();
   }
   bool CanRedo() const {
-    return IsUndoRedoEnabled() && NumberOfRedoItems() > 0;
+    return (IsUndoRedoEnabled() && NumberOfRedoItems() > 0) ||
+           ComputeEditContext();
   }
 
   /**
@@ -1022,6 +1032,22 @@ class EditorBase : public nsIEditor,
       mSelectionCreatedByDoubleclick = aSelectionCreatedByDoubleclick;
     }
 
+    /**
+     * Set whether the selection was created by double-click on the innermost
+     * edit action which is dispatching `beforeinput` or `input`, if any.
+     */
+    void SetSelectionCreatedByDoubleclickOfEditActionDispatchingInputEvent(
+        bool aSelectionCreatedByDoubleclick) {
+      for (AutoEditActionDataSetter* editActionData = this; editActionData;
+           editActionData = editActionData->mParentData) {
+        if (editActionData->mDispatchingInputEvent) {
+          editActionData->SetSelectionCreatedByDoubleclick(
+              aSelectionCreatedByDoubleclick);
+          return;
+        }
+      }
+    }
+
     [[nodiscard]] bool SelectionCreatedByDoubleclick() const {
       return mSelectionCreatedByDoubleclick;
     }
@@ -1679,6 +1705,14 @@ class EditorBase : public nsIEditor,
   }
 
   /**
+   * Return true if the edit action being handled deletes a selection which
+   * was created by double-clicking a word.
+   */
+  [[nodiscard]] bool IsSelectionCreatedByDoubleclick() const {
+    return mEditActionData && mEditActionData->SelectionCreatedByDoubleclick();
+  }
+
+  /**
    * GetInputEventData() returns inserting or inserted text value with
    * current edit action.  The result is proper for InputEvent.data value.
    */
@@ -2124,6 +2158,15 @@ class EditorBase : public nsIEditor,
       const EditorDOMPointBase<PT, CT>& aPoint, ErrorResult& aRv) const {
     MOZ_ASSERT(IsEditActionDataAvailable());
     MOZ_ASSERT(!aRv.Failed());
+
+    if (IsHTMLEditor() && aPoint.IsSet() &&
+        aPoint.GetContainer()->IsInNativeAnonymousSubtree()) [[unlikely]] {
+      MOZ_ASSERT_UNREACHABLE(
+          "Fix the caller to stop collapsing selection into the native "
+          "anonymous subtree!");
+      aRv.Throw(NS_ERROR_FAILURE);
+      return;
+    }
 
     if (aPoint.GetInterlinePosition() != InterlinePosition::Undefined) {
       if (MOZ_UNLIKELY(NS_FAILED(SelectionRef().SetInterlinePosition(

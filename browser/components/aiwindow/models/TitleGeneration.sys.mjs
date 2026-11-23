@@ -8,7 +8,7 @@ import {
   renderPrompt,
   MODEL_FEATURES,
 } from "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs";
-import { openAIEngine } from "moz-src:///browser/components/aiwindow/models/openAIEngine.sys.mjs";
+import { AuthProvider } from "moz-src:///browser/components/aiwindow/models/AuthProvider.sys.mjs";
 import { sanitizeUntrustedContent } from "moz-src:///browser/components/aiwindow/models/ChatUtils.sys.mjs";
 
 const lazy = {};
@@ -68,16 +68,20 @@ export async function generateChatTitle(
     const tabInfo = current_tab || { url: "", title: "", description: "" };
     tabInfo.title = sanitizeUntrustedContent(tabInfo.title);
 
+    // The first assistant reply is context for the prompt, not a turn to
+    // continue: some providers (e.g. Mistral) reject a conversation that ends
+    // on an assistant message, which made title generation fall back to the
+    // default title. Its framing lives in the Remote Settings prompt.
     conversation.setSystemMessage(
-      renderPrompt(rawPrompt, { current_tab: JSON.stringify(tabInfo) })
+      renderPrompt(rawPrompt, {
+        current_tab: JSON.stringify(tabInfo),
+        assistant_response: assistantResponse,
+      })
     );
     conversation.addUserMessage(message);
-    if (assistantResponse) {
-      conversation.addAssistantMessage(assistantResponse);
-    }
 
     const response = await conversation.run({
-      fxAccountToken: await openAIEngine.getFxAccountToken(),
+      token: await AuthProvider.getToken(),
     });
 
     return response?.finalOutput?.trim() || generateDefaultTitle(message);

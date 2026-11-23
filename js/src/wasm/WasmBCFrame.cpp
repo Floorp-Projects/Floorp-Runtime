@@ -141,48 +141,42 @@ void BaseLocalIter::operator++(int) {
 
 bool BaseCompiler::checkStackHeight() {
   if (MOZ_UNLIKELY(!fr.checkStackHeight())) {
+#ifdef DEBUG
+    jit::GetJitContext()->setWasmFatalError();
+#endif
     return decoder_.fail(decoder_.beginOffset(), "stack frame is too large");
   }
   return true;
 }
 
-bool BaseCompiler::createStackMap(Maybe<Trap> reason) {
-  return createStackMap(reason, HasDebugFrameWithLiveRefs::No);
-}
-
-bool BaseCompiler::createStackMap(Maybe<Trap> reason,
-                                  CodeOffset assemblerOffset) {
-  if (!checkStackHeight()) {
-    return false;
-  }
-  const ExitStubMapVector noExtras;
-  StackMap* stackMap;
-  return stackMapGenerator_.createStackMap(reason, noExtras,
-                                           HasDebugFrameWithLiveRefs::No, stk_,
-                                           &stackMap) &&
-         (!stackMap || stackMaps_->add(assemblerOffset.offset(), stackMap));
-}
-
-bool BaseCompiler::createStackMap(
-    Maybe<Trap> reason, HasDebugFrameWithLiveRefs debugFrameWithLiveRefs) {
-  if (!checkStackHeight()) {
-    return false;
-  }
-  const ExitStubMapVector noExtras;
-  StackMap* stackMap;
-  return stackMapGenerator_.createStackMap(
-             reason, noExtras, debugFrameWithLiveRefs, stk_, &stackMap) &&
-         (!stackMap || stackMaps_->add(masm.currentOffset(), stackMap));
-}
-
 bool BaseCompiler::createStackMap(
     Maybe<Trap> reason, FaultingCodeRange insnRange,
     HasDebugFrameWithLiveRefs debugFrameWithLiveRefs) {
+  if (!checkStackHeight()) {
+    return false;
+  }
+  const ExitStubMapVector noExtras;
+  StackMap* stackMap;
+  // `createStackMap` returns false on OOM.  It can also succeed without
+  // creating a map, if the map wouldn't contain any refs, in which case there
+  // is nothing to add.
+  return stackMapGenerator_.createStackMap(
+             reason, noExtras, debugFrameWithLiveRefs, stk_, &stackMap) &&
+         (!stackMap || stackMaps_->add(insnRange.resumeOffset(), stackMap));
+}
+
+bool BaseCompiler::createStackMap(
+    Maybe<Trap> reason, CodeOffset resumeOffset,
+    HasDebugFrameWithLiveRefs debugFrameWithLiveRefs) {
+  MOZ_ASSERT(resumeOffset.bound());
+  if (!checkStackHeight()) {
+    return false;
+  }
   const ExitStubMapVector noExtras;
   StackMap* stackMap;
   return stackMapGenerator_.createStackMap(
              reason, noExtras, debugFrameWithLiveRefs, stk_, &stackMap) &&
-         (!stackMap || stackMaps_->add(insnRange.resumeOffset(), stackMap));
+         (!stackMap || stackMaps_->add(resumeOffset.offset(), stackMap));
 }
 
 bool BaseCompiler::createDebugOnlyStackMapForNonResumingTrap(StackMap** result,
@@ -577,14 +571,19 @@ void BaseStackFrame::zeroLocals(BaseRegAlloc* ra) {
     return;
   }
 
-  // For other cases, it's best to have a zero in a register.
+  // For other cases, it's best to have a zero in a register. ARM64 stores an
+  // immediate zero from its zero register.
   //
   // One can do more here with SIMD registers (store 16 bytes at a time) or
   // with instructions like STRD on ARM (store 8 bytes at a time), but that's
   // for another day.
 
+#ifdef JS_CODEGEN_ARM64
+  ImmWord zero(0);
+#else
   RegI32 zero = ra->needI32();
   masm.mov(ImmWord(0), zero);
+#endif
 
   // For the general case we want to have a loop body of UNROLL_LIMIT stores
   // and then a tail of less than UNROLL_LIMIT stores.  When initWords is less
@@ -600,7 +599,9 @@ void BaseStackFrame::zeroLocals(BaseRegAlloc* ra) {
     for (uint32_t i = low; i < high; i += wordSize) {
       masm.storePtr(zero, Address(sp_, localOffset(i + wordSize)));
     }
+#ifndef JS_CODEGEN_ARM64
     ra->freeI32(zero);
+#endif
     return;
   }
 
@@ -633,7 +634,9 @@ void BaseStackFrame::zeroLocals(BaseRegAlloc* ra) {
 
   ra->freeI32(p);
   ra->freeI32(lim);
+#ifndef JS_CODEGEN_ARM64
   ra->freeI32(zero);
+#endif
 }
 
 }  // namespace wasm

@@ -57,6 +57,7 @@ struct LoadURIOptions;
 class MediaController;
 enum class AudioFocusInterruptAction : uint8_t;
 struct LoadingSessionHistoryInfo;
+class SessionHistoryInfo;
 class SSCacheCopy;
 class WindowGlobalParent;
 class SessionStoreFormData;
@@ -174,14 +175,12 @@ class CanonicalBrowsingContext final : public BrowsingContext {
 
   // Calls the session history listeners' OnHistoryReload, storing the result in
   // aCanReload. If aCanReload is set to true and we have an active or a loading
-  // entry then aLoadState will be initialized from that entry, and
-  // aReloadActiveEntry will be true if we have an active entry. If aCanReload
-  // is true and aLoadState and aReloadActiveEntry are not set then we should
-  // attempt to reload based on the current document in the docshell.
+  // entry then aLoadState will be initialized from that entry. If aCanReload
+  // is true and aLoadState is not set then we should attempt to reload based
+  // on the current document in the docshell.
   void NotifyOnHistoryReload(
       uint32_t aReloadFlags, bool& aCanReload,
-      Maybe<NotNull<RefPtr<nsDocShellLoadState>>>& aLoadState,
-      Maybe<bool>& aReloadActiveEntry);
+      Maybe<NotNull<RefPtr<nsDocShellLoadState>>>& aLoadState);
 
   // See BrowsingContext::SetActiveSessionHistoryEntry. If
   // aKeepSharedState is true, aInfo's shared state is used even if the
@@ -369,7 +368,10 @@ class CanonicalBrowsingContext final : public BrowsingContext {
   MOZ_CAN_RUN_SCRIPT
   void HistoryCommitIndexAndLength();
 
-  void DeactivateDocuments();
+  void DeactivateDocuments(
+      const SessionHistoryInfo* aPageSwapTargetInfo = nullptr,
+      NavigationType aNavigationType = NavigationType::Push,
+      bool aForUnload = false);
 
   MOZ_CAN_RUN_SCRIPT
   void ReactivateDocuments(SessionHistoryEntry* aEntry,

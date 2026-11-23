@@ -228,7 +228,8 @@ bool WindowContext::CheckOnlyOwningProcessCanSet(ContentParent* aSource) {
   return false;
 }
 
-void WindowContext::DidSet(FieldIndex<IDX_AllowJavascript>, bool aOldValue) {
+void WindowContext::DidSet(FieldIndex<IDX_AllowJavascript>,
+                           bool /*aOldValue*/) {
   RecomputeCanExecuteScripts();
 }
 
@@ -273,7 +274,7 @@ void WindowContext::RecomputeCanExecuteScripts(bool aApplyChanges) {
 }
 
 void WindowContext::DidSet(FieldIndex<IDX_SHEntryHasUserInteraction>,
-                           bool aOldValue) {
+                           bool /*aOldValue*/) {
   MOZ_ASSERT(
       TopWindowContext() == this,
       "SHEntryHasUserInteraction can only be set on the top window context");
@@ -401,23 +402,13 @@ void WindowContext::Discard() {
 }
 
 void WindowContext::AddSecurityState(uint32_t aStateFlags) {
-  MOZ_ASSERT(TopWindowContext() == this);
-  MOZ_ASSERT((aStateFlags &
-              (nsIWebProgressListener::STATE_LOADED_MIXED_DISPLAY_CONTENT |
-               nsIWebProgressListener::STATE_LOADED_MIXED_ACTIVE_CONTENT |
-               nsIWebProgressListener::STATE_BLOCKED_MIXED_DISPLAY_CONTENT |
-               nsIWebProgressListener::STATE_BLOCKED_MIXED_ACTIVE_CONTENT |
-               nsIWebProgressListener::STATE_HTTPS_ONLY_MODE_UPGRADED |
-               nsIWebProgressListener::STATE_HTTPS_ONLY_MODE_UPGRADE_FAILED |
-               nsIWebProgressListener::STATE_HTTPS_ONLY_MODE_UPGRADED_FIRST)) ==
-                 aStateFlags,
+  MOZ_ASSERT((aStateFlags & kValidSecurityStateFlags) == aStateFlags,
              "Invalid flags specified!");
 
   if (XRE_IsParentProcess()) {
-    Canonical()->AddSecurityState(aStateFlags);
-  } else {
-    ContentChild* child = ContentChild::GetSingleton();
-    child->SendAddSecurityState(this, aStateFlags);
+    TopWindowContext()->Canonical()->ApplySecurityStateToTop(aStateFlags);
+  } else if (WindowGlobalChild* child = GetWindowGlobalChild()) {
+    child->SendAddSecurityState(aStateFlags);
   }
 }
 

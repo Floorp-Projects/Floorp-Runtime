@@ -1955,7 +1955,7 @@ class ImportOKPKeyTask : public ImportKeyTask {
         mFormat.EqualsLiteral(WEBCRYPTO_KEY_FORMAT_PKCS8)) {
       // Private key import
       if (mFormat.EqualsLiteral(WEBCRYPTO_KEY_FORMAT_JWK)) {
-        privKey = CryptoKey::PrivateKeyFromJwk(mJwk);
+        privKey = CryptoKey::PrivateKeyFromJwk(mJwk, mAlgName);
         if (!privKey) {
           return NS_ERROR_DOM_DATA_ERR;
         }
@@ -1997,7 +1997,7 @@ class ImportOKPKeyTask : public ImportKeyTask {
       } else if (mFormat.EqualsLiteral(WEBCRYPTO_KEY_FORMAT_SPKI)) {
         pubKey = CryptoKey::PublicKeyFromSpki(mKeyData);
       } else if (mFormat.EqualsLiteral(WEBCRYPTO_KEY_FORMAT_JWK)) {
-        pubKey = CryptoKey::PublicKeyFromJwk(mJwk);
+        pubKey = CryptoKey::PublicKeyFromJwk(mJwk, mAlgName);
       } else {
         MOZ_ASSERT(false);
       }
@@ -2582,7 +2582,7 @@ GenerateAsymmetricKeyTask::GenerateAsymmetricKeyTask(
     nsIGlobalObject* aGlobal, JSContext* aCx, const nsString& aAlgName,
     const ObjectOrString& aAlgorithm, bool aExtractable,
     const Sequence<nsString>& aKeyUsages)
-    : mKeyPair(MakeUnique<CryptoKeyPair>()),
+    : mKeyPair(std::make_unique<CryptoKeyPair>()),
       mMechanism(CKM_INVALID_MECHANISM),
       mRsaParams(),
       mDhParams(),
@@ -2593,7 +2593,7 @@ GenerateAsymmetricKeyTask::GenerateAsymmetricKeyTask(
 GenerateAsymmetricKeyTask::GenerateAsymmetricKeyTask(
     nsIGlobalObject* aGlobal, JSContext* aCx, const ObjectOrString& aAlgorithm,
     bool aExtractable, const Sequence<nsString>& aKeyUsages)
-    : mKeyPair(MakeUnique<CryptoKeyPair>()),
+    : mKeyPair(std::make_unique<CryptoKeyPair>()),
       mMechanism(CKM_INVALID_MECHANISM),
       mRsaParams(),
       mDhParams(),

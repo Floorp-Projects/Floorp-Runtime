@@ -27,8 +27,10 @@ use crate::prim_store::{PictureIndex, PrimitiveScratchBuffer};
 use crate::prim_store::{DeferredResolve, PrimitiveInstance};
 use crate::prim_store::storage;
 use crate::profiler::{self, TransactionProfile};
-use crate::render_backend::{DataStores, ScratchBuffer};
+use crate::render_backend::{DataStores, DlStores, ScratchBuffer};
 use crate::renderer::{GpuBufferBuilder, GpuBufferBuilderF, GpuBufferBuilderI, GpuBufferF, GpuBufferI};
+use crate::renderer::{GpuBufferEdges, PathEdgeBufferBuilder};
+use crate::path_tiler::PathTiler;
 use crate::render_target::{PictureCacheTarget, PictureCacheTargetKind};
 use crate::render_target::{RenderTargetContext, RenderTargetKind, RenderTarget};
 use crate::render_task_graph::{Pass, RenderTaskGraph, RenderTaskId, SubPassSurface};
@@ -43,7 +45,7 @@ use crate::transform::{TransformPalette, TransformData};
 use std::sync::Arc;
 use std::{f32, mem};
 use crate::util::{MaxRect, VecHelper, Preallocator};
-use crate::visibility::{new_clip_root_stack, update_prim_visibility, FrameVisibilityState, FrameVisibilityContext};
+use crate::visibility::{build_backdrop_capture_regions, new_clip_root_stack, update_prim_visibility, FrameVisibilityState, FrameVisibilityContext};
 use crate::internal_types::{FrameVec, FrameMemory};
 
 #[derive(Clone, Copy, Debug)]
@@ -109,6 +111,9 @@ pub struct FrameBuilder {
     composite_state_prealloc: CompositeStatePreallocator,
     #[cfg_attr(feature = "capture", serde(skip))]
     plane_splitters: Vec<PlaneSplitter>,
+    /// Retained between frames to reuse its allocations.
+    #[cfg_attr(feature = "capture", serde(skip))]
+    path_tiler: PathTiler,
 }
 
 pub struct FrameBuildingContext<'a> {
@@ -120,6 +125,7 @@ pub struct FrameBuildingContext<'a> {
     pub debug_override: &'a SceneDebugOverride,
     pub fb_config: &'a FrameBuilderConfig,
     pub root_spatial_node_index: SpatialNodeIndex,
+    pub dl_stores: &'a DlStores,
 }
 
 impl<'a> FrameBuildingContext<'a> {
@@ -245,12 +251,13 @@ pub struct PictureContext {
     pub surface_index: SurfaceIndex,
     pub dirty_region_count: usize,
     pub subpixel_mode: SubpixelMode,
+    /// The picture's `PrimitiveList::shadow_offset`.
+    pub shadow_offset: LayoutVector2D,
 }
 
 /// Mutable state of a picture that gets modified when
 /// the children are processed.
 pub struct PictureState {
-    pub map_local_to_pic: SpaceMapper<LayoutPixel, PicturePixel>,
     /// Maps this picture's space to the screen framebuffer, for the debug
     /// overlays that draw into it.
     pub map_pic_to_device: SpaceMapper<PicturePixel, DevicePixel>,
@@ -262,6 +269,7 @@ impl FrameBuilder {
             prim_headers_prealloc: Preallocator::new(0),
             composite_state_prealloc: CompositeStatePreallocator::default(),
             plane_splitters: Vec::new(),
+            path_tiler: PathTiler::new(),
         }
     }
 
@@ -277,6 +285,7 @@ impl FrameBuilder {
         scene_properties: &SceneProperties,
         transform_palette: &mut TransformPalette,
         data_stores: &DataStores,
+        dl_stores: &DlStores,
         scratch: &mut ScratchBuffer,
         debug_flags: DebugFlags,
         debug_override: &SceneDebugOverride,
@@ -315,6 +324,7 @@ impl FrameBuilder {
             debug_override,
             fb_config: &scene.config,
             root_spatial_node_index,
+            dl_stores,
         };
 
         scene.picture_graph.build_update_passes(
@@ -347,9 +357,9 @@ impl FrameBuilder {
         ));
 
         // Empty the per-frame draw storage. The visibility pass pushes into it
-        // as it finds drawn primitives; the scene's primitive count only sizes
-        // the instance-to-draw side table.
-        scratch.primitive.frame.reset_draws(scene.prim_instances.len());
+        // as it finds drawn primitives; the scene's picture count only sizes
+        // the per-picture draw lists.
+        scratch.primitive.frame.reset_draws(scene.prim_store.pictures.len());
 
         // Cluster, prim, and clip-leaf rects are snapped to the device pixel
         // grid as they are produced by the in-frame picture-graph passes:
@@ -361,6 +371,25 @@ impl FrameBuilder {
             &mut scene.prim_store.pictures,
             &mut scene.surfaces,
             &frame_context,
+        );
+
+        build_backdrop_capture_regions(
+            &scene.backdrop_chains,
+            &scene.prim_store.pictures,
+            &scene.picture_graph,
+            &scene.surfaces,
+            &scene.prim_instances,
+            tile_caches,
+            &frame_context,
+            &mut scratch.primitive.frame.backdrop_captures,
+        );
+
+        let slice_ids = tile_cache_slice_ids(&scene.tile_cache_pictures, &scene.prim_store.pictures);
+        let backdrop_root_regions = crate::tile_cache::backdrop_root_regions(
+            &slice_ids,
+            tile_caches,
+            &scratch.primitive.frame.backdrop_captures,
+            frame_context.spatial_tree,
         );
 
         // In order to handle picture snapshots consistently we need
@@ -397,6 +426,7 @@ impl FrameBuilder {
                     resource_cache,
                     frame_gpu_data,
                     data_stores,
+                    dl_stores,
                     clip_tree: &scene.clip_tree,
                     composite_state,
                     rg_builder,
@@ -439,7 +469,7 @@ impl FrameBuilder {
                 }
             }
 
-            for pic_index in scene.tile_cache_pictures.iter().rev() {
+            for (position, pic_index) in scene.tile_cache_pictures.iter().enumerate().rev() {
                 if !render_picture_cache_slices {
                     break;
                 }
@@ -451,11 +481,20 @@ impl FrameBuilder {
                             .get_mut(&slice_id)
                             .expect("bug: non-existent tile cache");
 
+                        tile_cache.update_backdrop_sample_rects(
+                            position,
+                            &backdrop_root_regions,
+                            &scratch.primitive.frame.backdrop_captures,
+                            &scratch.primitive.frame.required_backdrop_chains,
+                            spatial_tree,
+                        );
+
                         let mut visibility_state = FrameVisibilityState {
                             clip_store: &mut scene.clip_store,
                             resource_cache,
                             frame_gpu_data,
                             data_stores,
+                            dl_stores,
                             clip_tree: &scene.clip_tree,
                             composite_state,
                             rg_builder,
@@ -527,6 +566,32 @@ impl FrameBuilder {
             &frame_context,
             composite_state);
 
+        // Whether a backdrop-filter is drawn depends on which tiles of its slice
+        // are, so this runs once all of them that won't be are hidden, and all
+        // that will be redrawn are dirty.
+        if render_picture_cache_slices {
+            for tile_cache in tile_caches.values_mut() {
+                tile_cache.cull_tiles(
+                    resource_cache,
+                    composite_state,
+                    frame_context.root_spatial_node_index,
+                    frame_context.global_screen_device_rect,
+                    frame_context.spatial_tree,
+                );
+            }
+            crate::tile_cache::update_cross_slice_backdrops(
+                &slice_ids,
+                tile_caches,
+                &mut scratch.primitive.frame.backdrop_captures,
+                &scratch.primitive.frame.required_backdrop_chains,
+                crate::tile_cache::supports_dirty_rects(
+                    &composite_state.compositor_kind,
+                    scene.config.gpu_supports_render_target_partial_update,
+                ),
+                frame_context.spatial_tree,
+            );
+        }
+
         profile.start_time(profiler::FRAME_PREPARE_TIME);
 
         let mut picture_scratch_handles = frame_memory.new_vec_with_capacity(n_pics);
@@ -570,7 +635,6 @@ impl FrameBuilder {
 
             frame_state.surface_builder.push_surface(
                 snapshot_surface,
-                false,
                 DeviceRect::max_rect(),
                 None,
                 frame_state.surfaces,
@@ -588,6 +652,7 @@ impl FrameBuilder {
                 &frame_context,
                 &mut frame_state,
                 data_stores,
+                dl_stores,
                 &mut scratch.primitive,
                 tile_caches,
                 &mut scene.prim_instances
@@ -625,6 +690,7 @@ impl FrameBuilder {
                 &frame_context,
                 &mut frame_state,
                 data_stores,
+                dl_stores,
                 &mut scratch.primitive,
                 tile_caches,
                 &mut scene.prim_instances
@@ -661,6 +727,7 @@ impl FrameBuilder {
         device_origin: DeviceIntPoint,
         scene_properties: &SceneProperties,
         data_stores: &DataStores,
+        dl_stores: &DlStores,
         scratch: &mut ScratchBuffer,
         debug_flags: DebugFlags,
         debug_override: &SceneDebugOverride,
@@ -678,6 +745,7 @@ impl FrameBuilder {
         let mut gpu_buffer_builder = GpuBufferBuilder {
             f32: GpuBufferBuilderF::new(&frame_memory, 8 * 1024, stamp.frame_id()),
             i32: GpuBufferBuilderI::new(&frame_memory, 2 * 1024, stamp.frame_id()),
+            edges: PathEdgeBufferBuilder::new(&frame_memory, 0),
         };
 
         profile.set(profiler::PRIMITIVES, scene.prim_instances.len());
@@ -719,6 +787,7 @@ impl FrameBuilder {
             scene_properties,
             &mut transform_palette,
             data_stores,
+            dl_stores,
             scratch,
             debug_flags,
             debug_override,
@@ -768,6 +837,7 @@ impl FrameBuilder {
                     batch_lookback_count: scene.config.batch_lookback_count,
                     spatial_tree,
                     data_stores,
+                    dl_stores,
                     scratch: &mut scratch.primitive,
                     screen_device_rect,
                     tile_caches,
@@ -786,6 +856,7 @@ impl FrameBuilder {
                     &mut z_generator,
                     &scene.prim_instances,
                     &cmd_buffers,
+                    &mut self.path_tiler,
                 );
 
                 has_texture_cache_tasks |= !pass.texture_cache.is_empty();
@@ -803,6 +874,7 @@ impl FrameBuilder {
                     batch_lookback_count: scene.config.batch_lookback_count,
                     spatial_tree,
                     data_stores,
+                    dl_stores,
                     scratch: &mut scratch.primitive,
                     screen_device_rect,
                     tile_caches,
@@ -842,6 +914,7 @@ impl FrameBuilder {
 
         let gpu_buffer_f = gpu_buffer_builder.f32.finalize(&render_tasks);
         let gpu_buffer_i = gpu_buffer_builder.i32.finalize(&render_tasks);
+        let gpu_buffer_edges = gpu_buffer_builder.edges.finalize();
 
         Frame {
             device_rect: DeviceIntRect::from_origin_and_size(
@@ -860,6 +933,7 @@ impl FrameBuilder {
             composite_state,
             gpu_buffer_f,
             gpu_buffer_i,
+            gpu_buffer_edges,
             allocator_memory: frame_memory,
         }
     }
@@ -1141,6 +1215,7 @@ pub fn build_render_pass(
     z_generator: &mut ZBufferIdGenerator,
     prim_instances: &[PrimitiveInstance],
     cmd_buffers: &CommandBufferList,
+    path_tiler: &mut PathTiler,
 ) -> RenderPass {
     tracy_rs::profile_scope!("build_render_pass");
 
@@ -1171,6 +1246,7 @@ pub fn build_render_pass(
                                 gpu_buffer_builder,
                                 render_tasks,
                                 transforms,
+                                path_tiler,
                             );
                         }
 
@@ -1193,6 +1269,7 @@ pub fn build_render_pass(
                                 gpu_buffer_builder,
                                 render_tasks,
                                 transforms,
+                                path_tiler,
                             );
                         }
 
@@ -1278,31 +1355,6 @@ pub fn build_render_pass(
 
                         pass.picture_cache.push(target);
                     }
-                    RenderTaskKind::TileComposite(ref tile_task) => {
-                        let mut dirty_rect = tile_task.scissor_rect;
-                        let mut valid_rect = tile_task.valid_rect;
-                        // If we have a surface size, clip the dirty and vaild rects
-                        // to that size. This ensures that native compositors will
-                        // pass sanity checks (Bug 1971296).
-                        if let ResolvedSurfaceTexture::Native { size, .. } = surface {
-                            let surface_size_rect = <DeviceIntRect>::from_size(*size);
-                            dirty_rect = dirty_rect.intersection(&surface_size_rect).unwrap_or_default();
-                            valid_rect = valid_rect.intersection(&surface_size_rect).unwrap_or_default();
-                        }
-
-                        let target = PictureCacheTarget {
-                            surface: surface.clone(),
-                            clear_color: Some(tile_task.clear_color),
-                            kind: PictureCacheTargetKind::Blit {
-                                task_id: tile_task.task_id.expect("bug: no source task_id set"),
-                                sub_rect_offset: tile_task.sub_rect_offset,
-                            },
-                            dirty_rect,
-                            valid_rect,
-                        };
-
-                        pass.picture_cache.push(target);
-                    }
                     _ => {
                         unreachable!();
                     }
@@ -1328,6 +1380,7 @@ pub fn build_render_pass(
                         gpu_buffer_builder,
                         render_tasks,
                         transforms,
+                        path_tiler,
                     );
                 }
             }
@@ -1419,6 +1472,8 @@ pub struct Frame {
     /// pass for primitives that were visible and dirty.
     pub gpu_buffer_f: GpuBufferF,
     pub gpu_buffer_i: GpuBufferI,
+    /// The edges of the path tiles, shared by all of the frame's paths.
+    pub gpu_buffer_edges: GpuBufferEdges,
 
     /// The backing store for the frame's allocator.
     ///
@@ -1450,4 +1505,18 @@ impl Frame {
         // or external surfaces being updated).
         self.passes.is_empty()
     }
+}
+
+/// The slice ids of the picture cache slices, bottom-up.
+fn tile_cache_slice_ids(
+    tile_cache_pictures: &[PictureIndex],
+    pictures: &[PictureInstance],
+) -> Vec<SliceId> {
+    tile_cache_pictures
+        .iter()
+        .map(|pic_index| match pictures[pic_index.0 as usize].raster_config {
+            Some(RasterConfig { composite_mode: PictureCompositeMode::TileCache { slice_id }, .. }) => slice_id,
+            _ => panic!("bug: not a tile cache"),
+        })
+        .collect()
 }

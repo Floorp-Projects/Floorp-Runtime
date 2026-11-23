@@ -213,6 +213,11 @@
         android:id="@+id/action_global_protections_dashboard"
         app:destination="@+id/global_protections_dashboard"/>
 
+    <action
+        android:id="@+id/action_global_pairFragment"
+        app:destination="@+id/pairFragment"
+        app:launchSingleTop="true"/>
+
     <fragment
         android:id="@+id/tabManagementFragment"
         android:name="org.mozilla.fenix.tabstray.ui.TabManagementFragment">
@@ -460,6 +465,19 @@
         <argument
             android:name="isSandboxCustomTab"
             app:argType="boolean" />
+        <action
+            android:id="@+id/action_externalAppBrowserFragment_to_menuFragment"
+            app:destination="@id/menu_graph">
+            <argument
+                android:name="customTabSessionId"
+                android:defaultValue="@null"
+                app:argType="string"
+                app:nullable="true" />
+            <argument
+                android:name="isSandboxCustomTab"
+                android:defaultValue="false"
+                app:argType="boolean" />
+        </action>
     </fragment>
 
     <fragment
@@ -1121,6 +1139,13 @@
             app:exitAnim="@anim/slide_out_left"
             app:popEnterAnim="@anim/slide_in_left"
             app:popExitAnim="@anim/slide_out_right" />
+        <action
+            android:id="@+id/action_customizationFragment_to_customizeMenuFragment"
+            app:destination="@id/customizeMenuFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
     </fragment>
     <fragment
         android:id="@+id/privateBrowsingFragment"
@@ -1496,6 +1521,11 @@
             android:id="@+id/searchEngineFragment"
             android:name="org.mozilla.fenix.settings.search.SearchEngineFragment"
             android:label="@string/preferences_search">
+            <argument
+                android:name="preference_to_scroll_to"
+                android:defaultValue="@null"
+                app:argType="string"
+                app:nullable="true" />
             <action
                 android:id="@+id/action_searchEngineFragment_to_defaultEngineFragment"
                 app:destination="@+id/defaultEngineFragment" />
@@ -1844,6 +1874,15 @@
     <argument
       android:name="accessPoint"
       app:argType="org.mozilla.fenix.components.menu.MenuAccessPoint" />
+    <argument
+      android:name="customTabSessionId"
+      android:defaultValue="@null"
+      app:nullable="true"
+      app:argType="string" />
+    <argument
+      android:name="isSandboxCustomTab"
+      android:defaultValue="false"
+      app:argType="boolean" />
 
     <dialog
       android:id="@+id/menuFragment"
@@ -1851,6 +1890,15 @@
       <argument
         android:name="accessPoint"
         app:argType="org.mozilla.fenix.components.menu.MenuAccessPoint" />
+      <argument
+        android:name="customTabSessionId"
+        android:defaultValue="@null"
+        app:argType="string"
+        app:nullable="true" />
+      <argument
+        android:name="isSandboxCustomTab"
+        android:defaultValue="false"
+        app:argType="boolean" />
 
       <action
         android:id="@+id/action_menuFragment_to_translationsDialogFragment"
@@ -1871,8 +1919,24 @@
       <action
         android:id="@+id/action_menuFragment_to_loginsListFragment"
         app:destination="@id/savedLogins" />
+
+      <action
+        android:id="@+id/action_menuFragment_to_storiesFragment"
+        app:destination="@id/storiesFragment"
+        app:popUpTo="@id/storiesFragment"
+        app:popUpToInclusive="false"
+        app:launchSingleTop="true" />
+
+      <action
+        android:id="@+id/action_menuFragment_to_customizeMenuFragment"
+        app:destination="@id/customizeMenuFragment" />
     </dialog>
   </navigation>
+
+    <fragment
+      android:id="@+id/customizeMenuFragment"
+      android:name="org.mozilla.fenix.components.menu.compose.customize.CustomizeMenuFragment"
+      android:label="@string/customize_menu" />
 
     <navigation
         android:id="@+id/trust_panel_graph"

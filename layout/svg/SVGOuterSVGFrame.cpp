@@ -29,8 +29,7 @@ using namespace mozilla::image;
 
 nsContainerFrame* NS_NewSVGOuterSVGFrame(mozilla::PresShell* aPresShell,
                                          mozilla::ComputedStyle* aStyle) {
-  return new (aPresShell)
-      mozilla::SVGOuterSVGFrame(aStyle, aPresShell->GetPresContext());
+  return new mozilla::SVGOuterSVGFrame(aStyle, aPresShell->GetPresContext());
 }
 
 namespace mozilla {
@@ -682,8 +681,8 @@ void SVGOuterSVGFrame::Destroy(DestroyContext& aContext) {
 
 nsContainerFrame* NS_NewSVGOuterSVGAnonChildFrame(
     mozilla::PresShell* aPresShell, mozilla::ComputedStyle* aStyle) {
-  return new (aPresShell)
-      mozilla::SVGOuterSVGAnonChildFrame(aStyle, aPresShell->GetPresContext());
+  return new mozilla::SVGOuterSVGAnonChildFrame(aStyle,
+                                                aPresShell->GetPresContext());
 }
 
 namespace mozilla {
@@ -708,7 +707,7 @@ void SVGOuterSVGAnonChildFrame::BuildDisplayList(
   // inside the nsDisplayTransform for our viewbox transform. The
   // nsDisplaySVGWrapper's reference frame is this frame, because this frame
   // always returns true from IsSVGTransformed.
-  nsDisplayList newList(aBuilder);
+  nsDisplayList newList;
   nsDisplayListSet set(&newList, &newList, &newList, &newList, &newList,
                        &newList);
   BuildDisplayListForNonBlockChildren(aBuilder, set);

@@ -4,7 +4,7 @@
 
 use api::{BlobImageHandler, ColorF, CrashAnnotator, DocumentId, IdNamespace};
 use api::{RenderBackendId, VoidPtrToSizeFn, FontRenderMode, ImageFormat};
-use api::{RenderNotifier, ImageBufferKind};
+use api::{RenderNotifier, ImageBufferKind, PipelineId};
 use api::units::*;
 use api::channel::unbounded_channel;
 pub use api::DebugFlags;
@@ -13,7 +13,8 @@ use crate::bump_allocator::ChunkPool;
 use crate::render_api::{ApiMsg, RenderApiSender, FrameMsg, ResourceCacheInit, WindowRegistration};
 use crate::render_backend_pool::{PoolMemberSetup, RenderBackendPool};
 use crate::scene_builder_thread::SceneBuilderRequest;
-use crate::composite::{CompositorKind, CompositorConfig};
+use crate::composite::{CompositorKind, CompositorConfig, SwapchainMode};
+use super::layer_tree::LayerTree;
 use crate::device::{
     DeviceOptions, GpuBackendConfig, UploadMethod, UploadBufferPool, VertexUsageHint, Device, ProgramCache, TextureFilter
 };
@@ -28,7 +29,7 @@ use crate::renderer::{
     debug, vertex,
     debug::DebugOverlayState,
     Renderer, BufferDamageTracker, PipelineInfo, TextureResolver,
-    RendererError, ShaderPrecacheFlags, VERTEX_DATA_TEXTURE_COUNT,
+    RendererError, ShaderPrecacheFlags,
     upload::UploadTexturePool,
     shade::{Shaders, SharedShaders},
 };
@@ -101,6 +102,9 @@ pub trait SceneBuilderHooks {
     /// This is called exactly once, when the scene builder thread is about to
     /// terminate.
     fn deregister(&self);
+    /// This is called when the embed policy of `embedder` rejects an iframe
+    /// item that references `child`, once per pair and document.
+    fn embed_policy_violation(&self, _document_id: DocumentId, _embedder: PipelineId, _child: PipelineId) {}
 }
 
 /// Allows callers to hook into the main render_backend loop and provide
@@ -347,11 +351,13 @@ pub fn create_webrender_instance(
     HAS_BEEN_INITIALIZED.store(true, Ordering::SeqCst);
 
     // For now, we assume that native OS compositors are top-left origin. If that doesn't
-    // turn out to be the case, we can add a query method on `LayerCompositor`.
+    // turn out to be the case, we can add a query method on the `Compositor` trait.
     match options.compositor_config {
         CompositorConfig::Draw { .. } | CompositorConfig::Native { .. } => {}
-        CompositorConfig::Layer { .. } => {
-            options.surface_origin_is_top_left = true;
+        CompositorConfig::Layer { ref compositor } => {
+            if let SwapchainMode::OsLayers { .. } = compositor.get_swapchain_mode() {
+                options.surface_origin_is_top_left = true;
+            }
         }
     }
 
@@ -532,11 +538,6 @@ pub fn create_webrender_instance(
     let staging_texture_pool = UploadTexturePool::new();
     let texture_resolver = TextureResolver::new(&mut device);
 
-    let mut vertex_data_textures = Vec::new();
-    for _ in 0 .. VERTEX_DATA_TEXTURE_COUNT {
-        vertex_data_textures.push(vertex::VertexDataTextures::new());
-    }
-
     let is_software = device.get_capabilities().renderer_name.starts_with("Software");
 
     device.end_frame();
@@ -553,8 +554,8 @@ pub fn create_webrender_instance(
     };
 
     let compositor_kind = match options.compositor_config {
-        CompositorConfig::Draw { max_partial_present_rects, draw_previous_partial_present_regions, .. } => {
-            CompositorKind::Draw { max_partial_present_rects, draw_previous_partial_present_regions }
+        CompositorConfig::Draw { max_partial_present_rects, .. } => {
+            CompositorKind::Draw { max_partial_present_rects }
         }
         CompositorConfig::Native { ref compositor } => {
             let capabilities = compositor.get_capabilities();
@@ -563,8 +564,9 @@ pub fn create_webrender_instance(
                 capabilities,
             }
         }
-        CompositorConfig::Layer { .. } => {
+        CompositorConfig::Layer { ref compositor } => {
             CompositorKind::Layer {
+                mode: compositor.get_swapchain_mode(),
             }
         }
     };
@@ -763,6 +765,7 @@ pub fn create_webrender_instance(
         shaders,
         debug: debug::LazyInitializedDebugRenderer::new(),
         debug_flags: DebugFlags::empty(),
+        path_aa_samples: if cfg!(target_os = "android") { 4 } else { 8 },
         profile: TransactionProfile::new(),
         frame_counter: 0,
         resource_upload_time: 0.0,
@@ -782,8 +785,10 @@ pub fn create_webrender_instance(
         gpu_buffer_texture_i: None,
         gpu_buffer_texture_i_too_large: 0,
         gpu_buffer_last_data_i: Vec::new(),
-        vertex_data_textures,
-        current_vertex_data_textures: 0,
+        gpu_buffer_texture_edges: None,
+        gpu_buffer_texture_edges_too_large: 0,
+        gpu_buffer_last_data_edges: Vec::new(),
+        vertex_data: vertex::VertexDataRing::new(),
         pipeline_info: PipelineInfo::default(),
         dither_matrix_texture,
         external_image_handler: None,
@@ -807,6 +812,7 @@ pub fn create_webrender_instance(
         documents_seen: FastHashSet::default(),
         force_redraw: true,
         compositor_config: options.compositor_config,
+        layer_tree: LayerTree::new(),
         current_compositor_kind: compositor_kind,
         limit_sdr_yuv_external_composites: options.limit_sdr_yuv_external_composites,
         allocated_native_surfaces: FastHashSet::default(),

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://global/content/elements/moz-button-group.mjs";
 import { MigrationWizardConstants } from "chrome://browser/content/migration/migration-wizard-constants.mjs";
 
@@ -73,7 +73,7 @@ export class MigrationWizard extends HTMLElement {
               </p>
               <ol>
                 <li data-l10n-id="migration-no-permissions-instructions-step1"></li>
-                <li class="migration-no-permissions-instructions-step2" data-l10n-id="migration-no-permissions-instructions-step2" data-l10n-args='{"permissionsPath": "" }'>
+                <li class="migration-no-permissions-instructions-step2" data-l10n-id="migration-no-permissions-instructions-step2-2" data-l10n-args='{"permissionsPath": "" }'>
                   <code></code>
                 </li>
               </ol>
@@ -495,6 +495,10 @@ export class MigrationWizard extends HTMLElement {
       this.#shadowRoot.appendChild(panel);
     } else {
       this.#shadowRoot.appendChild(this.#browserProfileSelectorList);
+      // The list opens on mousedown, so without this the mouse release on the
+      // selector would light dismiss the popover right away.
+      this.#browserProfileSelector.popoverTargetElement =
+        this.#browserProfileSelectorList;
     }
   }
 
@@ -723,7 +727,9 @@ export class MigrationWizard extends HTMLElement {
       let panelItem = this.#browserProfileSelectorList.querySelector(
         `panel-item[key="${state.migratorKey}"]`
       );
-      this.#onBrowserProfileSelectionChanged(panelItem);
+      if (panelItem) {
+        this.#onBrowserProfileSelectionChanged(panelItem);
+      }
     }
 
     let fileImportErrorMessageEl = selectionPage.querySelector(
@@ -1593,6 +1599,11 @@ export class MigrationWizard extends HTMLElement {
   }
 
   handleEvent(event) {
+    if (event.target == this.#browserProfileSelector && event.type == "click") {
+      // The panel-list opens and closes itself, so keep the selector from
+      // also toggling it as its popover target.
+      event.preventDefault();
+    }
     if (
       event.target == this.#browserProfileSelector &&
       (event.type == "mousedown" ||

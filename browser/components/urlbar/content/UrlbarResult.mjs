@@ -15,15 +15,16 @@
 
 import { UrlbarShared } from "chrome://browser/content/urlbar/UrlbarShared.mjs";
 
-const lazy = typeof ChromeUtils != "undefined" ? {} : null;
+const { XPCOMUtils } =
+  typeof ChromeUtils == "undefined"
+    ? { XPCOMUtils: null }
+    : ChromeUtils.importESModule("resource://gre/modules/XPCOMUtils.sys.mjs");
 
-if (lazy) {
-  ChromeUtils.defineESModuleGetters(lazy, {
-    JsonSchemaValidator:
-      "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs",
-    UrlbarUtils: "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs",
-  });
-}
+const lazy = XPCOMUtils?.declareLazy({
+  JsonSchemaValidator:
+    "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs",
+  UrlbarUtils: "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs",
+});
 
 /**
  * @typedef UrlbarAutofillData
@@ -37,6 +38,8 @@ if (lazy) {
  *   The type of the autofill.
  * @property {string} [adaptiveHistoryInput]
  *   The input string associated with this autofill item.
+ * @property {boolean} [noVisitAction]
+ *   Whether the view should not show a "Visit" action.
  */
 
 /**
@@ -46,7 +49,7 @@ export class UrlbarResult {
   /**
    * @typedef {{ [name: string]: any }} Payload
    *
-   * @typedef {typeof lazy.UrlbarShared.HIGHLIGHT} HighlightType
+   * @typedef {Values<typeof UrlbarShared.HIGHLIGHT>} HighlightType
    * @typedef {Array<[number, number]>} HighlightIndexes e.g. [[index, length],,]
    * @typedef {Record<string, HighlightType | HighlightIndexes>} Highlights
    */
@@ -61,6 +64,7 @@ export class UrlbarResult {
    * @param {boolean} [params.heuristic]
    * @param {boolean} [params.hideRowLabel]
    * @param {boolean} [params.isBestMatch]
+   * @param {string} [params.bestMatchType]
    * @param {boolean} [params.isBottomUrlSuggestion]
    * @param {boolean} [params.isRichSuggestion]
    * @param {boolean} [params.isSuggestedIndexRelativeToGroup]
@@ -88,6 +92,7 @@ export class UrlbarResult {
     heuristic = false,
     hideRowLabel = false,
     isBestMatch = false,
+    bestMatchType = undefined,
     isBottomUrlSuggestion = false,
     isRichSuggestion = false,
     isSuggestedIndexRelativeToGroup = false,
@@ -140,7 +145,6 @@ export class UrlbarResult {
     this.#group = group;
     this.#heuristic = heuristic;
     this.#hideRowLabel = hideRowLabel;
-    this.#isBestMatch = isBestMatch;
     this.#isBottomUrlSuggestion = isBottomUrlSuggestion;
     this.#isRichSuggestion = isRichSuggestion;
     this.#isSuggestedIndexRelativeToGroup = isSuggestedIndexRelativeToGroup;
@@ -155,6 +159,15 @@ export class UrlbarResult {
     if (this.#type == UrlbarShared.RESULT_TYPE.TIP) {
       this.#isRichSuggestion = true;
       this.#richSuggestionIconSize = 24;
+    }
+
+    if (bestMatchType !== undefined) {
+      this.#bestMatchType = bestMatchType;
+    } else if (isBestMatch) {
+      // The default type is `LARGE`.
+      this.#bestMatchType = UrlbarShared.BEST_MATCH_TYPE.LARGE;
+    } else {
+      this.#bestMatchType = UrlbarShared.BEST_MATCH_TYPE.NONE;
     }
 
     this.#testForceNewContent = testForceNewContent;
@@ -268,7 +281,16 @@ export class UrlbarResult {
    * @type {boolean}
    */
   get isBestMatch() {
-    return this.#isBestMatch;
+    return this.#bestMatchType != UrlbarShared.BEST_MATCH_TYPE.NONE;
+  }
+
+  /**
+   * The result's best-match type, a `UrlbarShared.BEST_MATCH_TYPE` value.
+   *
+   * @type {string}
+   */
+  get bestMatchType() {
+    return this.#bestMatchType;
   }
 
   /**
@@ -613,7 +635,8 @@ export class UrlbarResult {
       group: this.#group,
       heuristic: this.#heuristic,
       hideRowLabel: this.#hideRowLabel,
-      isBestMatch: this.#isBestMatch,
+      isBestMatch: this.isBestMatch,
+      bestMatchType: this.#bestMatchType,
       isBottomUrlSuggestion: this.#isBottomUrlSuggestion,
       isRichSuggestion: this.#isRichSuggestion,
       isSuggestedIndexRelativeToGroup: this.#isSuggestedIndexRelativeToGroup,
@@ -678,7 +701,7 @@ export class UrlbarResult {
   #group;
   #heuristic;
   #hideRowLabel;
-  #isBestMatch;
+  #bestMatchType;
   #isBottomUrlSuggestion;
   #isRichSuggestion;
   #isSuggestedIndexRelativeToGroup;

@@ -109,6 +109,11 @@ ConvertYCbCr16to8Line(uint8_t* aDst,
 
 struct YUV8BitData {
   nsresult Init(const layers::PlanarYCbCrData& aData) {
+    const auto sizes = aData.GetPlaneSizes();
+    if (!sizes) {
+      return NS_ERROR_INVALID_ARG;
+    }
+
     if (aData.mColorDepth == ColorDepth::COLOR_8) {
       mData = aData;
       return NS_OK;
@@ -118,8 +123,8 @@ struct YUV8BitData {
 
     // We align the destination stride to 32 bytes, so that libyuv can use
     // SSE optimised code.
-    auto ySize = aData.YDataSize();
-    auto cbcrSize = aData.CbCrDataSize();
+    const auto& ySize = sizes->mY;
+    const auto& cbcrSize = sizes->mCbCr;
     mData.mYStride = (ySize.width + 31) & ~31;
     mData.mCbCrStride = (cbcrSize.width + 31) & ~31;
     mData.mYUVColorSpace = aData.mYUVColorSpace;
@@ -135,7 +140,7 @@ struct YUV8BitData {
                             "CbCr without Y makes no sense");
       return NS_ERROR_INVALID_ARG;
     }
-    mYChannel = MakeUnique<uint8_t[]>(yMemorySize.value());
+    mYChannel = std::make_unique<uint8_t[]>(yMemorySize.value());
     if (!mYChannel) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
@@ -150,11 +155,11 @@ struct YUV8BitData {
                           bitDepth);
 
     if (cbcrMemorySize.isSome()) {
-      mCbChannel = MakeUnique<uint8_t[]>(cbcrMemorySize.value());
+      mCbChannel = std::make_unique<uint8_t[]>(cbcrMemorySize.value());
       if (!mCbChannel) {
         return NS_ERROR_OUT_OF_MEMORY;
       }
-      mCrChannel = MakeUnique<uint8_t[]>(cbcrMemorySize.value());
+      mCrChannel = std::make_unique<uint8_t[]>(cbcrMemorySize.value());
       if (!mCrChannel) {
         return NS_ERROR_OUT_OF_MEMORY;
       }
@@ -179,7 +184,7 @@ struct YUV8BitData {
       if (alphaSize.isNothing()) {
         return NS_ERROR_INVALID_ARG;
       }
-      mAlphaChannel = MakeUnique<uint8_t[]>(alphaSize.value());
+      mAlphaChannel = std::make_unique<uint8_t[]>(alphaSize.value());
       if (!mAlphaChannel) {
         return NS_ERROR_OUT_OF_MEMORY;
       }

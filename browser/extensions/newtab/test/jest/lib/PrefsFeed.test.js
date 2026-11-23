@@ -9,6 +9,7 @@ import {
 } from "common/Actions.mjs";
 import { mockServices, stubGlobals } from "test/jest/test-utils";
 import { PrefsFeed } from "lib/PrefsFeed.sys.mjs";
+import { PREFS_CONFIG } from "lib/ActivityStream.sys.mjs";
 
 const NIMBUS_FEATURES = [
   "adsBackend",
@@ -58,7 +59,7 @@ describe("PrefsFeed", () => {
       ["baz", { value: 1, skipBroadcast: true }],
       ["qux", { value: 1, skipBroadcast: true, alsoToPreloaded: true }],
     ]);
-    services = mockServices(["prefs", "obs", "vc"]);
+    services = mockServices(["prefs", "obs"]);
     nimbusFeatures = mockNimbusFeatures();
     region = { home: "US", REGION_TOPIC: "browser-region-updated" };
     selectableProfileService = {
@@ -274,6 +275,12 @@ describe("PrefsFeed", () => {
     feed.init();
     expect(feed.geo).toBe("US");
   });
+  it("should leave region out of the initial values when it is unresolved", () => {
+    region.home = "";
+    feed.onAction({ type: at.INIT });
+    const [[{ data }]] = feed.store.dispatch.mock.calls;
+    expect(data.region).toBeUndefined();
+  });
   it("should add region observer on init", () => {
     region.home = "";
     feed.init();
@@ -330,19 +337,6 @@ describe("PrefsFeed", () => {
           data: { name: "browserNovaEnabled", value: false },
         })
       );
-    });
-  });
-  describe("supportsWidgetSearchSap", () => {
-    it("is true in the initial values on a host that knows the access point", () => {
-      feed.onAction({ type: at.INIT });
-      const [[{ data }]] = feed.store.dispatch.mock.calls;
-      expect(data.supportsWidgetSearchSap).toBe(true);
-    });
-    it("is false in the initial values on a host older than 157", () => {
-      services.vc.compare.mockReturnValue(-1);
-      feed.onAction({ type: at.INIT });
-      const [[{ data }]] = feed.store.dispatch.mock.calls;
-      expect(data.supportsWidgetSearchSap).toBe(false);
     });
   });
   describe("recordsHistory", () => {
@@ -813,6 +807,25 @@ describe("PrefsFeed", () => {
       );
     });
 
+    it("should write trainhop highlights.rows to the default branch", () => {
+      const setIntPref = jest.fn();
+      services.prefs.getDefaultBranch.mockReturnValue({
+        setIntPref,
+        setStringPref: jest.fn(),
+        setBoolPref: jest.fn(),
+      });
+      nimbusFeatures.newtabTrainhop.getAllEnrollments.mockReturnValue([
+        {
+          meta: { isRollout: false },
+          value: { type: "highlights", payload: { rows: 3 } },
+        },
+      ]);
+
+      feed.onTrainhopExperimentUpdated();
+
+      expect(setIntPref).toHaveBeenCalledWith("section.highlights.rows", 3);
+    });
+
     it("should write widgetsSettings default-enabled values to the default branch", () => {
       const setBoolPref = jest.fn();
       services.prefs.getDefaultBranch.mockReturnValue({
@@ -978,6 +991,81 @@ describe("PrefsFeed", () => {
 
         expect(setBoolPref).toHaveBeenCalledWith(
           "widgets.recentSearches.enabled",
+          true
+        );
+      }
+    );
+
+    it.each([
+      ["widgets", { horoscopesEnabled: true }],
+      ["widgetsSettings", { horoscopesEnabled: true }],
+      ["widgetHoroscopes", { enabled: true }],
+    ])(
+      "should turn on the preffed-off horoscopes default from %s",
+      (type, payload) => {
+        const setBoolPref = jest.fn();
+        services.prefs.getDefaultBranch.mockReturnValue({
+          setBoolPref,
+          setStringPref: jest.fn(),
+        });
+        nimbusFeatures.newtabTrainhop.getAllEnrollments.mockReturnValue([
+          { meta: { isRollout: false }, value: { type, payload } },
+        ]);
+
+        feed.onTrainhopExperimentUpdated();
+
+        expect(setBoolPref).toHaveBeenCalledWith(
+          "widgets.horoscopes.enabled",
+          true
+        );
+      }
+    );
+
+    it.each([
+      ["widgets", { travelEnabled: true }],
+      ["widgetsSettings", { travelEnabled: true }],
+      ["widgetTravel", { enabled: true }],
+    ])(
+      "should turn on the preffed-off travel default from %s",
+      (type, payload) => {
+        const setBoolPref = jest.fn();
+        services.prefs.getDefaultBranch.mockReturnValue({
+          setBoolPref,
+          setStringPref: jest.fn(),
+        });
+        nimbusFeatures.newtabTrainhop.getAllEnrollments.mockReturnValue([
+          { meta: { isRollout: false }, value: { type, payload } },
+        ]);
+
+        feed.onTrainhopExperimentUpdated();
+
+        expect(setBoolPref).toHaveBeenCalledWith(
+          "widgets.travel.enabled",
+          true
+        );
+      }
+    );
+
+    it.each([
+      ["widgets", { solitaireEnabled: true }],
+      ["widgetsSettings", { solitaireEnabled: true }],
+      ["widgetSolitaire", { enabled: true }],
+    ])(
+      "should turn on the preffed-off solitaire default from %s",
+      (type, payload) => {
+        const setBoolPref = jest.fn();
+        services.prefs.getDefaultBranch.mockReturnValue({
+          setBoolPref,
+          setStringPref: jest.fn(),
+        });
+        nimbusFeatures.newtabTrainhop.getAllEnrollments.mockReturnValue([
+          { meta: { isRollout: false }, value: { type, payload } },
+        ]);
+
+        feed.onTrainhopExperimentUpdated();
+
+        expect(setBoolPref).toHaveBeenCalledWith(
+          "widgets.solitaire.enabled",
           true
         );
       }
@@ -1703,6 +1791,17 @@ describe("PrefsFeed", () => {
       feed.observe(undefined, region.REGION_TOPIC);
       expect(feed.store.dispatch).toHaveBeenCalledTimes(1);
     });
+
+    it("should broadcast the resolved region to content", () => {
+      region.home = "FR";
+      feed.observe(undefined, region.REGION_TOPIC);
+      expect(feed.store.dispatch).toHaveBeenCalledWith(
+        ac.BroadcastToContent({
+          type: at.PREF_CHANGED,
+          data: { name: "region", value: region.home },
+        })
+      );
+    });
   });
   describe("#_setStringPref", () => {
     it("should call _setPref and getStringPref from _setStringPref", () => {
@@ -1838,6 +1937,7 @@ describe("PrefsFeed", () => {
                 maxProfileAgeInHours: 48,
                 disableTopSites: true,
                 disableTopStories: true,
+                disableWidgets: true,
                 variant: TEST_VARIANT,
                 enterActivationWindowMessageID: "",
                 exitActivationWindowMessageID: "",
@@ -1866,6 +1966,7 @@ describe("PrefsFeed", () => {
         expect(feed.enterActivationWindowState).toHaveBeenCalledTimes(1);
         expect(feed.enterActivationWindowState).toHaveBeenCalledWith(
           TEST_VARIANT,
+          true,
           true,
           true,
           "",
@@ -2037,6 +2138,7 @@ describe("PrefsFeed", () => {
           TEST_VARIANT,
           true,
           true,
+          true,
           "",
           true
         );
@@ -2051,6 +2153,7 @@ describe("PrefsFeed", () => {
         expect(feed.enterActivationWindowState).toHaveBeenCalledTimes(1);
         expect(feed.enterActivationWindowState).toHaveBeenCalledWith(
           TEST_VARIANT,
+          true,
           true,
           true,
           "",
@@ -2076,7 +2179,7 @@ describe("PrefsFeed", () => {
       it("should broadcast pref changes when entering activation window", () => {
         feed.inActivationWindowState = "";
 
-        feed.enterActivationWindowState(TEST_VARIANT, true, true, "");
+        feed.enterActivationWindowState(TEST_VARIANT, true, true, false, "");
 
         expect(feed.onPrefChanged).toHaveBeenCalledTimes(2);
         expect(feed.onPrefChanged).toHaveBeenCalledWith(
@@ -2094,7 +2197,7 @@ describe("PrefsFeed", () => {
       it("should not broadcast when already in the same variant", () => {
         feed.inActivationWindowState = TEST_VARIANT;
 
-        feed.enterActivationWindowState(TEST_VARIANT, true, true, "");
+        feed.enterActivationWindowState(TEST_VARIANT, true, true, false, "");
 
         expect(feed.onPrefChanged).not.toHaveBeenCalled();
         expect(defaultBranch.setBoolPref).not.toHaveBeenCalled();
@@ -2103,7 +2206,7 @@ describe("PrefsFeed", () => {
       it("should broadcast when entering with different variant", () => {
         feed.inActivationWindowState = "variant-a";
 
-        feed.enterActivationWindowState("variant-b", true, true, "");
+        feed.enterActivationWindowState("variant-b", true, true, false, "");
 
         expect(feed.onPrefChanged).toHaveBeenCalledTimes(2);
       });
@@ -2111,7 +2214,7 @@ describe("PrefsFeed", () => {
       it("should only broadcast for top sites if only disabling top sites", () => {
         feed.inActivationWindowState = "";
 
-        feed.enterActivationWindowState(TEST_VARIANT, true, false, "");
+        feed.enterActivationWindowState(TEST_VARIANT, true, false, false, "");
 
         expect(feed.onPrefChanged).toHaveBeenCalledTimes(1);
         expect(feed.onPrefChanged).toHaveBeenCalledWith(
@@ -2124,7 +2227,7 @@ describe("PrefsFeed", () => {
       it("should only broadcast for top stories if only disabling top stories", () => {
         feed.inActivationWindowState = "";
 
-        feed.enterActivationWindowState(TEST_VARIANT, false, true, "");
+        feed.enterActivationWindowState(TEST_VARIANT, false, true, false, "");
 
         expect(feed.onPrefChanged).toHaveBeenCalledTimes(1);
         expect(feed.onPrefChanged).toHaveBeenCalledWith(
@@ -2134,10 +2237,27 @@ describe("PrefsFeed", () => {
         );
       });
 
+      it("should only broadcast for widgets if only disabling widgets", () => {
+        feed.inActivationWindowState = "";
+
+        feed.enterActivationWindowState(TEST_VARIANT, false, false, true, "");
+
+        expect(defaultBranch.setBoolPref).toHaveBeenCalledWith(
+          "widgets.enabled",
+          false
+        );
+        expect(feed.onPrefChanged).toHaveBeenCalledTimes(1);
+        expect(feed.onPrefChanged).toHaveBeenCalledWith(
+          "widgets.enabled",
+          false,
+          false
+        );
+      });
+
       it("should not broadcast if not disabling anything", () => {
         feed.inActivationWindowState = "";
 
-        feed.enterActivationWindowState(TEST_VARIANT, false, false, "");
+        feed.enterActivationWindowState(TEST_VARIANT, false, false, false, "");
 
         expect(feed.onPrefChanged).not.toHaveBeenCalled();
       });
@@ -2149,6 +2269,7 @@ describe("PrefsFeed", () => {
           TEST_VARIANT,
           true,
           true,
+          false,
           "",
           /* isStartup */ true
         );
@@ -2171,6 +2292,7 @@ describe("PrefsFeed", () => {
           TEST_VARIANT,
           true,
           true,
+          false,
           "",
           /* isStartup */ true
         );
@@ -2195,6 +2317,7 @@ describe("PrefsFeed", () => {
           TEST_VARIANT,
           true,
           false,
+          false,
           "",
           /* isStartup */ true
         );
@@ -2214,6 +2337,7 @@ describe("PrefsFeed", () => {
           "test-variant",
           true,
           true,
+          false,
           "ENTER_MESSAGE_ID"
         );
 
@@ -2226,7 +2350,7 @@ describe("PrefsFeed", () => {
       it("should not set enter message ID pref when empty string", () => {
         feed.inActivationWindowState = "";
 
-        feed.enterActivationWindowState("test-variant", true, true, "");
+        feed.enterActivationWindowState("test-variant", true, true, false, "");
 
         expect(calledNames(feed._prefs.set)).not.toContain(
           "activationWindow.enterMessageID"
@@ -2241,10 +2365,16 @@ describe("PrefsFeed", () => {
 
       it("should broadcast pref changes when no user values were set", () => {
         feed._prefs.isSet.mockReturnValue(false);
+        jest.spyOn(PREFS_CONFIG, "get").mockReturnValueOnce({ value: true });
 
         feed.exitActivationWindowState();
 
-        expect(feed.onPrefChanged).toHaveBeenCalledTimes(2);
+        expect(feed.onPrefChanged).toHaveBeenCalledTimes(3);
+        expect(feed.onPrefChanged).toHaveBeenCalledWith(
+          "widgets.enabled",
+          true,
+          false
+        );
         expect(feed.onPrefChanged).toHaveBeenCalledWith(
           "feeds.topsites",
           true,
@@ -2265,7 +2395,7 @@ describe("PrefsFeed", () => {
 
         feed.exitActivationWindowState();
 
-        expect(feed.onPrefChanged).toHaveBeenCalledTimes(1);
+        expect(feed.onPrefChanged).toHaveBeenCalledTimes(2);
         expect(feed.onPrefChanged).toHaveBeenCalledWith(
           "feeds.section.topstories",
           true,
@@ -2286,7 +2416,7 @@ describe("PrefsFeed", () => {
 
         feed.exitActivationWindowState();
 
-        expect(feed.onPrefChanged).toHaveBeenCalledTimes(1);
+        expect(feed.onPrefChanged).toHaveBeenCalledTimes(2);
         expect(feed.onPrefChanged).toHaveBeenCalledWith(
           "feeds.topsites",
           true,
@@ -2299,10 +2429,41 @@ describe("PrefsFeed", () => {
         );
       });
 
-      it("should not broadcast if both prefs had user values", () => {
+      it("should ignore a non-boolean trainhop widgets value", () => {
+        feed._prefs.isSet.mockReturnValue(false);
+        feed._trainhopConfig = { widgetsSettings: { enabled: "true" } };
+        jest.spyOn(PREFS_CONFIG, "get").mockReturnValueOnce({ value: false });
+
+        feed.exitActivationWindowState();
+
+        expect(defaultBranch.setBoolPref).toHaveBeenCalledWith(
+          "widgets.enabled",
+          false
+        );
+      });
+
+      it("should reset widgets default to the trainhop value when set", () => {
+        feed._prefs.isSet.mockReturnValue(false);
+        feed._trainhopConfig = { widgetsSettings: { enabled: false } };
+
+        feed.exitActivationWindowState();
+
+        expect(defaultBranch.setBoolPref).toHaveBeenCalledWith(
+          "widgets.enabled",
+          false
+        );
+        expect(feed.onPrefChanged).toHaveBeenCalledWith(
+          "widgets.enabled",
+          false,
+          false
+        );
+      });
+
+      it("should not broadcast if all prefs had user values", () => {
         feed._prefs.isSet.mockReturnValue(true);
         FAKE_PREFS.set("activationWindow.temp.topSitesUserValue", false);
         FAKE_PREFS.set("activationWindow.temp.topStoriesUserValue", true);
+        FAKE_PREFS.set("activationWindow.temp.widgetsUserValue", false);
 
         feed.exitActivationWindowState();
 
@@ -2406,6 +2567,14 @@ describe("PrefsFeed", () => {
         );
       });
 
+      it("should track widgets user value when changed during activation window", () => {
+        feed.trackActivationWindowPrefChange("widgets.enabled", true);
+        expect(feed._prefs.set).toHaveBeenCalledWith(
+          "activationWindow.temp.widgetsUserValue",
+          true
+        );
+      });
+
       it("should not track changes for other prefs", () => {
         feed.trackActivationWindowPrefChange("some.other.pref", false);
         expect(calledNames(feed._prefs.set)).not.toContain(
@@ -2413,6 +2582,9 @@ describe("PrefsFeed", () => {
         );
         expect(calledNames(feed._prefs.set)).not.toContain(
           "activationWindow.temp.topStoriesUserValue"
+        );
+        expect(calledNames(feed._prefs.set)).not.toContain(
+          "activationWindow.temp.widgetsUserValue"
         );
       });
     });
@@ -2507,6 +2679,20 @@ describe("PrefsFeed", () => {
         );
         expect(feed._prefs.reset).toHaveBeenCalledWith(
           "activationWindow.temp.topStoriesUserValue"
+        );
+      });
+
+      it("should restore user's widgets value", () => {
+        feed._prefs.isSet = jest.fn(
+          name => name === "activationWindow.temp.widgetsUserValue"
+        );
+        FAKE_PREFS.set("activationWindow.temp.widgetsUserValue", false);
+
+        feed.exitActivationWindowState();
+
+        expect(feed._prefs.set).toHaveBeenCalledWith("widgets.enabled", false);
+        expect(feed._prefs.reset).toHaveBeenCalledWith(
+          "activationWindow.temp.widgetsUserValue"
         );
       });
 

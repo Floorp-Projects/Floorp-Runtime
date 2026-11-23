@@ -18,6 +18,7 @@
 #include "nsGlobalWindowInner.h"
 #include "nsIGlobalObject.h"
 #include "nsILoadInfo.h"
+#include "nsIURIMutator.h"
 #include "nsNetUtil.h"
 #include "nsScriptSecurityManager.h"
 #include "nsString.h"
@@ -44,7 +45,7 @@ void ConnectionAllowlists::Allowlist::AppendPattern(
   mSerializedPatterns.AppendElement(aSerializedPattern);
 }
 
-// https://wicg.github.io/connection-allowlists/#abstract-opdef-parse-a-connection-allowlist-header
+// https://w3c.github.io/connection-allowlists/#abstract-opdef-parse-a-connection-allowlist-header
 /* static */
 Maybe<ConnectionAllowlists::Allowlist>
 ConnectionAllowlists::ParseConnectionAllowlistHeader(const nsACString& aHeader,
@@ -179,8 +180,20 @@ void ConnectionAllowlists::SetResponseURI(nsIURI* aURI) {
 bool ConnectionAllowlists::ShouldLoad(nsIURI* aURI,
                                       nsILoadInfo* aLoadInfo) const {
   // TODO: We probably need to exempt some content like in SubjectToCSP.
-  // TODO(Bug 2072261): WebRTC.
   // TODO: Requests vs URL.
+
+  nsCOMPtr<nsIURI> uri = aURI;
+
+  // Per https://fetch.spec.whatwg.org/#concept-main-fetch, the
+  // upgrade-insecure-requests and mixed content upgrades (steps 5 and 6) happen
+  // before the Connection Allowlists check (step 7), so match the upgraded URL.
+  // Gecko performs these upgrades later as a REDIRECT_STS_UPGRADE redirect,
+  // which ConnectionAllowlistsService::ConsultForRedirect ignores.
+  if (NS_WillUpgradeInsecureRequest(uri, aLoadInfo) &&
+      NS_WARN_IF(
+          NS_FAILED(NS_GetSecureUpgradedURI(aURI, getter_AddRefs(uri))))) {
+    return false;
+  }
 
   switch (aLoadInfo->GetExternalContentPolicyType()) {
     case ExtContentPolicyType::TYPE_DOCUMENT:
@@ -189,8 +202,22 @@ bool ConnectionAllowlists::ShouldLoad(nsIURI* aURI,
       // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-to-a-javascript:-url,
       // documents loaded via javascript: URL don't trigger a real request, so
       // they also shouldn't be blockable by the Connection Allowlists.
-      if (aURI->SchemeIs("javascript")) {
+      if (uri->SchemeIs("javascript")) {
         return true;
+      }
+      break;
+
+    case ExtContentPolicyType::TYPE_WEBSOCKET:
+      // Per
+      // https://websockets.spec.whatwg.org/#concept-websocket-establish,
+      // the request URL of a WebSocket has its ws: or wss: scheme replaced
+      // with http: or https:, so match the allowlist against that URL.
+      MOZ_ASSERT(uri->SchemeIs("ws") || uri->SchemeIs("wss"));
+      if (NS_WARN_IF(NS_FAILED(
+              NS_MutateURI(uri)
+                  .SetScheme(uri->SchemeIs("wss") ? "https"_ns : "http"_ns)
+                  .Finalize(uri)))) {
+        return false;
       }
       break;
 
@@ -202,10 +229,10 @@ bool ConnectionAllowlists::ShouldLoad(nsIURI* aURI,
       break;
   }
 
-  return !ShouldBlockURL(aURI, aLoadInfo);
+  return !ShouldBlockURL(uri, aLoadInfo);
 }
 
-// https://wicg.github.io/connection-allowlists/#abstract-opdef-match-a-url-to-a-connection-allowlist
+// https://w3c.github.io/connection-allowlists/#abstract-opdef-match-a-url-to-a-connection-allowlist
 bool ConnectionAllowlists::MatchURL(nsIURI* aURI,
                                     const Allowlist& aAllowlist) const {
   // 1. If url is local, return success.
@@ -243,7 +270,7 @@ bool ConnectionAllowlists::MatchURL(nsIURI* aURI,
   return false;
 }
 
-// https://wicg.github.io/connection-allowlists/#abstract-opdef-should-url-be-blocked-by-connection-allowlists
+// https://w3c.github.io/connection-allowlists/#abstract-opdef-should-url-be-blocked-by-connection-allowlists
 bool ConnectionAllowlists::ShouldBlockURL(nsIURI* aURI,
                                           nsILoadInfo* aLoadInfo) const {
   // 1. For each connection allowlist in connection allowlists:
@@ -260,7 +287,7 @@ bool ConnectionAllowlists::ShouldBlockURL(nsIURI* aURI,
 
     // 1.2. Report a violation given url, environment, and connection
     // allowlist.
-    ReportViolation(AsVariant(aURI), aLoadInfo, *allowlist);
+    ReportBlockedRequest(aURI, aLoadInfo, *allowlist, /* aIsRedirect */ false);
 
     // 1.3. If connection allowlist's disposition is enforce, return blocked.
     if (allowlist->mDisposition == Disposition::Enforce) {
@@ -273,23 +300,106 @@ bool ConnectionAllowlists::ShouldBlockURL(nsIURI* aURI,
   return false;
 }
 
-// https://wicg.github.io/connection-allowlists/#abstract-opdef-report-a-violation
+// The redirect steps of
+// https://w3c.github.io/connection-allowlists/#abstract-opdef-should-request-be-blocked-by-connection-allowlists
+bool ConnectionAllowlists::ShouldBlockRedirect(nsIURI* aOriginalURI,
+                                               nsILoadInfo* aLoadInfo) const {
+  // 2. For each allowlist in allowlists:
+  for (const Maybe<Allowlist>& allowlist :
+       {std::cref(mEnforcement), std::cref(mReportOnly)}) {
+    if (allowlist.isNothing()) {
+      continue;
+    }
+
+    // 2.1. If request’s URL list’s size is greater than 1:
+    // 2.1.1. If allowlist’s redirects is allow, continue.
+    if (allowlist->mRedirects == Redirects::Allow) {
+      continue;
+    }
+
+    // 2.1.2. Report a violation given request’s url, request’s client, and
+    // allowlist.
+    ReportBlockedRequest(aOriginalURI, aLoadInfo, *allowlist,
+                         /* aIsRedirect */ true);
+
+    // 2.1.3. If allowlist’s disposition is enforce, return blocked.
+    if (allowlist->mDisposition == Disposition::Enforce) {
+      LOG("Blocking redirect of: {}", aOriginalURI->GetSpecOrDefault());
+      return true;
+    }
+  }
+
+  // 3. Return allowed.
+  return false;
+}
+
+// https://w3c.github.io/connection-allowlists/#abstract-opdef-should-webrtc-be-blocked-by-connection-allowlists
+bool ConnectionAllowlists::ShouldBlockWebRTC(
+    nsPIDOMWindowInner* aWindow) const {
+  // 1. Let allowlists be environment’s policy container’s connection
+  // allowlists.
+  // 2. For each allowlist in allowlists:
+  for (const Maybe<Allowlist>& allowlist :
+       {std::cref(mEnforcement), std::cref(mReportOnly)}) {
+    if (allowlist.isNothing()) {
+      continue;
+    }
+
+    // 2.1. If allowlist’s webrtc is allow, continue.
+    if (allowlist->mWebRTC == WebRTC::Allow) {
+      continue;
+    }
+
+    // Report violations to the web console.
+    Resource resource{nsCString("webrtc"_ns)};
+    ReportToConsole(resource, aWindow->WindowID(), *allowlist);
+
+    // 2.2. Report a violation given "webrtc", environment, and allowlist.
+    ReportViolation(resource, aWindow, *allowlist);
+
+    // 2.3. If allowlist’s disposition is enforce, return blocked.
+    if (allowlist->mDisposition == Disposition::Enforce) {
+      LOG("Blocking WebRTC");
+      return true;
+    }
+  }
+
+  // 3. Return allowed.
+  return false;
+}
+
 /* static */
-void ConnectionAllowlists::ReportViolation(
-    const Variant<nsIURI*, nsCString>& aResource, nsILoadInfo* aLoadInfo,
-    const Allowlist& aAllowlist) {
+void ConnectionAllowlists::ReportBlockedRequest(nsIURI* aURI,
+                                                nsILoadInfo* aLoadInfo,
+                                                const Allowlist& aAllowlist,
+                                                bool aIsRedirect) {
+  // Report violations to the web console, except for preloads.
+  Resource resource{aURI};
+  if (!nsContentUtils::IsPreloadType(aLoadInfo->InternalContentPolicyType())) {
+    ReportToConsole(resource, aLoadInfo->GetInnerWindowID(), aAllowlist,
+                    aIsRedirect);
+  }
+
+  // TODO: This will fail when blocking in the parent process for e.g.
+  // navigation.
+  nsCOMPtr<nsPIDOMWindowInner> window =
+      nsGlobalWindowInner::GetInnerWindowWithId(aLoadInfo->GetInnerWindowID());
+  ReportViolation(resource, window, aAllowlist);
+}
+
+// https://w3c.github.io/connection-allowlists/#abstract-opdef-report-a-violation
+/* static */
+void ConnectionAllowlists::ReportViolation(const Resource& aResource,
+                                           nsPIDOMWindowInner* aWindow,
+                                           const Allowlist& aAllowlist) {
   // 1. If allowlist’s reporting endpoint is null, return.
   if (aAllowlist.mReportingEndpoint.IsEmpty()) {
     return;
   }
 
-  // The report is queued on the environment that initiated the load.
-  // TODO: This will fail when blocking in the parent process for e.g.
-  // navigation.
-  RefPtr<nsGlobalWindowInner> window =
-      nsGlobalWindowInner::GetInnerWindowWithId(aLoadInfo->GetInnerWindowID());
+  nsCOMPtr<nsPIDOMWindowInner> window = aWindow;
   if (!window) {
-    LOG("Not reporting a violation, no global for the load.");
+    LOG("Not reporting a violation, no global for the environment.");
     return;
   }
 
@@ -323,9 +433,10 @@ void ConnectionAllowlists::ReportViolation(
   //
   // disposition
   //   allowlist’s disposition.
+  nsIGlobalObject* global = window->AsGlobal();
   RefPtr<ConnectionAllowlistViolationReportBody> violation =
       new ConnectionAllowlistViolationReportBody(
-          window, url, connection, aAllowlist.mSerializedPatterns.Clone(),
+          global, url, connection, aAllowlist.mSerializedPatterns.Clone(),
           aAllowlist.mDisposition == Disposition::Enforce
               ? ConnectionAllowlistDisposition::Enforce
               : ConnectionAllowlistDisposition::Report);
@@ -333,8 +444,40 @@ void ConnectionAllowlists::ReportViolation(
   // 3. Generate and queue a report given environment as the context,
   // "connection-allowlist" as the type, allowlist’s reporting endpoint as the
   // destination, and violation as the data.
-  ReportingUtils::Report(window, nsGkAtoms::connection_allowlist,
+  ReportingUtils::Report(global, nsGkAtoms::connection_allowlist,
                          aAllowlist.mReportingEndpoint, url, violation);
+}
+
+/* static */
+void ConnectionAllowlists::ReportToConsole(const Resource& aResource,
+                                           uint64_t aInnerWindowID,
+                                           const Allowlist& aAllowlist,
+                                           bool aIsRedirect) {
+  const bool enforce = aAllowlist.mDisposition == Disposition::Enforce;
+  const char* messageKey;
+  if (aIsRedirect) {
+    messageKey = enforce ? "ConnectionAllowlistRedirectBlocked"
+                         : "ConnectionAllowlistReportOnlyRedirectBlocked";
+  } else {
+    messageKey = enforce ? "ConnectionAllowlistBlocked"
+                         : "ConnectionAllowlistReportOnlyBlocked";
+  }
+  AutoTArray<nsString, 1> params;
+  nsString* param = params.AppendElement();
+  if (aResource.is<nsIURI*>()) {
+    CopyUTF8toUTF16(aResource.as<nsIURI*>()->GetSpecOrDefault(), *param);
+  } else {
+    CopyUTF8toUTF16(aResource.as<nsCString>(), *param);
+  }
+  nsAutoString localizedMsg;
+  nsresult rv = nsContentUtils::FormatLocalizedString(
+      PropertiesFile::SECURITY_PROPERTIES, messageKey, params, localizedMsg);
+  NS_ENSURE_SUCCESS_VOID(rv);
+
+  nsContentUtils::ReportToConsoleByWindowID(
+      localizedMsg,
+      enforce ? nsIScriptError::errorFlag : nsIScriptError::warningFlag,
+      "Security"_ns, aInnerWindowID);
 }
 
 void ConnectionAllowlists::Allowlist::ToEntryArgs(

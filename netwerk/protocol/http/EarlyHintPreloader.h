@@ -94,7 +94,7 @@ class EarlyHintPreloader final : public nsIStreamListener,
       nsIURI* aBaseURI, nsIPrincipal* aPrincipal,
       nsICookieJarSettings* aCookieJarSettings,
       const nsACString& aReferrerPolicy, const nsACString& aCSPHeader,
-      uint64_t aBrowsingContextID,
+      const nsACString& aConnectionAllowlistHeader, uint64_t aBrowsingContextID,
       dom::CanonicalBrowsingContext* aLoadingBrowsingContext,
       bool aIsModulepreload);
 
@@ -106,6 +106,10 @@ class EarlyHintPreloader final : public nsIStreamListener,
   // this preload. Preventing compromised content processes to access Early Hint
   // preloads from other origins
   bool IsFromContentParent(dom::ContentParentId aCpId) const;
+
+  // Returns true if the content channel request described by aURI and
+  // aLoadInfo is the request this preload was started for.
+  bool MatchesRequest(nsIURI* aURI, nsILoadInfo* aLoadInfo) const;
 
   // Should be called by the preloader service when the preload is not
   // needed after all, because the final response returns a non-2xx status
@@ -145,6 +149,8 @@ class EarlyHintPreloader final : public nsIStreamListener,
 
   nsCOMPtr<nsIChannel> mChannel;
   nsCOMPtr<nsIChannel> mRedirectChannel;
+  nsCOMPtr<nsIURI> mURI;
+  nsCOMPtr<nsILoadInfo> mLoadInfo;
 
   dom::ContentParentId mCpId;
   EarlyHintConnectArgs mConnectArgs;

@@ -26,6 +26,7 @@ namespace egl
 class AttributeMap;
 class Device;
 class Display;
+class ThreadSafeDisplay;
 class Image;
 class Stream;
 class Surface;
@@ -35,8 +36,8 @@ struct Config;
 
 EGLBoolean BindAPI(Thread *thread, EGLenum api);
 EGLBoolean BindTexImage(Thread *thread,
-                        egl::Display *dpyPacked,
-                        SurfaceID surfacePacked,
+                        egl::ThreadSafeDisplay *dpyPacked,
+                        egl::Surface *surfacePacked,
                         EGLint buffer);
 EGLBoolean ChooseConfig(Thread *thread,
                         egl::Display *dpyPacked,
@@ -45,13 +46,13 @@ EGLBoolean ChooseConfig(Thread *thread,
                         EGLint config_size,
                         EGLint *num_config);
 EGLint ClientWaitSync(Thread *thread,
-                      egl::Display *dpyPacked,
-                      egl::SyncID syncPacked,
+                      egl::ThreadSafeDisplay *dpyPacked,
+                      egl::Sync *syncPacked,
                       EGLint flags,
                       EGLTime timeout);
 EGLBoolean CopyBuffers(Thread *thread,
-                       egl::Display *dpyPacked,
-                       SurfaceID surfacePacked,
+                       egl::ThreadSafeDisplay *dpyPacked,
+                       egl::Surface *surfacePacked,
                        EGLNativePixmapType target);
 EGLContext CreateContext(Thread *thread,
                          egl::Display *dpyPacked,
@@ -90,7 +91,7 @@ EGLSurface CreatePlatformWindowSurface(Thread *thread,
                                        void *native_window,
                                        const AttributeMap &attrib_listPacked);
 EGLSync CreateSync(Thread *thread,
-                   egl::Display *dpyPacked,
+                   egl::ThreadSafeDisplay *dpyPacked,
                    EGLenum type,
                    const AttributeMap &attrib_listPacked);
 EGLSurface CreateWindowSurface(Thread *thread,
@@ -100,8 +101,10 @@ EGLSurface CreateWindowSurface(Thread *thread,
                                const AttributeMap &attrib_listPacked);
 EGLBoolean DestroyContext(Thread *thread, egl::Display *dpyPacked, gl::ContextID ctxPacked);
 EGLBoolean DestroyImage(Thread *thread, egl::Display *dpyPacked, ImageID imagePacked);
-EGLBoolean DestroySurface(Thread *thread, egl::Display *dpyPacked, SurfaceID surfacePacked);
-EGLBoolean DestroySync(Thread *thread, egl::Display *dpyPacked, egl::SyncID syncPacked);
+EGLBoolean DestroySurface(Thread *thread,
+                          egl::ThreadSafeDisplay *dpyPacked,
+                          egl::Surface *surfacePacked);
+EGLBoolean DestroySync(Thread *thread, egl::ThreadSafeDisplay *dpyPacked, egl::Sync *syncPacked);
 EGLBoolean GetConfigAttrib(Thread *thread,
                            egl::Display *dpyPacked,
                            egl::Config *configPacked,
@@ -123,15 +126,15 @@ EGLDisplay GetPlatformDisplay(Thread *thread,
                               const AttributeMap &attrib_listPacked);
 __eglMustCastToProperFunctionPointerType GetProcAddress(Thread *thread, const char *procname);
 EGLBoolean GetSyncAttrib(Thread *thread,
-                         egl::Display *dpyPacked,
-                         egl::SyncID syncPacked,
+                         egl::ThreadSafeDisplay *dpyPacked,
+                         egl::Sync *syncPacked,
                          EGLint attribute,
                          EGLAttrib *value);
 EGLBoolean Initialize(Thread *thread, egl::Display *dpyPacked, EGLint *major, EGLint *minor);
 EGLBoolean MakeCurrent(Thread *thread,
-                       egl::Display *dpyPacked,
-                       SurfaceID drawPacked,
-                       SurfaceID readPacked,
+                       egl::ThreadSafeDisplay *dpyPacked,
+                       egl::Surface *drawPacked,
+                       egl::Surface *readPacked,
                        gl::ContextID ctxPacked);
 EGLenum QueryAPI(Thread *thread);
 EGLBoolean QueryContext(Thread *thread,
@@ -141,26 +144,34 @@ EGLBoolean QueryContext(Thread *thread,
                         EGLint *value);
 const char *QueryString(Thread *thread, egl::Display *dpyPacked, EGLint name);
 EGLBoolean QuerySurface(Thread *thread,
-                        egl::Display *dpyPacked,
-                        SurfaceID surfacePacked,
+                        egl::ThreadSafeDisplay *dpyPacked,
+                        egl::Surface *surfacePacked,
                         EGLint attribute,
                         EGLint *value);
 EGLBoolean ReleaseTexImage(Thread *thread,
-                           egl::Display *dpyPacked,
-                           SurfaceID surfacePacked,
+                           egl::ThreadSafeDisplay *dpyPacked,
+                           egl::Surface *surfacePacked,
                            EGLint buffer);
 EGLBoolean ReleaseThread(Thread *thread);
 EGLBoolean SurfaceAttrib(Thread *thread,
-                         egl::Display *dpyPacked,
-                         SurfaceID surfacePacked,
+                         egl::ThreadSafeDisplay *dpyPacked,
+                         egl::Surface *surfacePacked,
                          EGLint attribute,
                          EGLint value);
-EGLBoolean SwapBuffers(Thread *thread, egl::Display *dpyPacked, SurfaceID surfacePacked);
-EGLBoolean SwapInterval(Thread *thread, egl::Display *dpyPacked, EGLint interval);
+EGLBoolean SwapBuffers(Thread *thread,
+                       egl::ThreadSafeDisplay *dpyPacked,
+                       egl::Surface *surfacePacked);
+EGLBoolean SwapInterval(Thread *thread,
+                        egl::Display *dpyPacked,
+                        egl::Surface *drawSurface,
+                        EGLint interval);
 EGLBoolean Terminate(Thread *thread, egl::Display *dpyPacked);
 EGLBoolean WaitClient(Thread *thread);
 EGLBoolean WaitGL(Thread *thread);
 EGLBoolean WaitNative(Thread *thread, EGLint engine);
-EGLBoolean WaitSync(Thread *thread, egl::Display *dpyPacked, egl::SyncID syncPacked, EGLint flags);
+EGLBoolean WaitSync(Thread *thread,
+                    egl::ThreadSafeDisplay *dpyPacked,
+                    egl::Sync *syncPacked,
+                    EGLint flags);
 }  // namespace egl
 #endif  // LIBGLESV2_EGL_STUBS_AUTOGEN_H_

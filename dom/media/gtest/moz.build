@@ -102,6 +102,12 @@ UNIFIED_SOURCES += [
     "YUVBufferGenerator.cpp",
 ]
 
+# Not in UNIFIED_SOURCES: on macOS it includes MacIOSurface.h, which pulls in
+# CoreVideo, see the MOZ_APPLEMEDIA block.
+SOURCES += [
+    "TestImagePixelFormat.cpp",
+]
+
 if CONFIG["MOZ_WEBRTC"]:
     LOCAL_INCLUDES += [
         "/dom/media/webrtc/libwebrtcglue",
@@ -146,6 +152,7 @@ if CONFIG["OS_TARGET"] == "WINNT":
     # StrCat macro that conflicts with absl::StrCat in WebRTC unified units.
     SOURCES += [
         "TestWMFDeadlock.cpp",
+        "TestWMFEncoderModule.cpp",
     ]
 
 if CONFIG["MOZ_WEBRTC"] and CONFIG["OS_TARGET"] != "Android":
@@ -168,6 +175,7 @@ TEST_HARNESS_FILES.gtest += [
     "../test/output_avc.mkv",
     "../test/output_hevc.mkv",
     "../test/output_hevc_aac.mkv",
+    "../test/output_mp3.mkv",
     "../test/reftest/color_quads/720p.png.bt2020.pq.tv.yuv420p10.hevc.mp4",
     "../test/vp9cake.webm",
     "av1-color-metadata.mp4",
@@ -228,3 +236,15 @@ if CONFIG["CC_TYPE"] in ("clang", "clang-cl"):
     CXXFLAGS += [
         "-Wno-inconsistent-missing-override",
     ]
+
+SOURCE_HEADERS += [
+    "GMPTestMonitor.h",
+    "MediaSinkTestUtils.h",
+    "MockDecoderModule.h",
+    "MockGPUVideoSurfaceManager.h",
+    "MockGraphInterface.h",
+    "MockMediaDataDemuxer.h",
+    "MockMediaDecoderOwner.h",
+    "MockMediaResource.h",
+    "YUVBufferGenerator.h",
+]

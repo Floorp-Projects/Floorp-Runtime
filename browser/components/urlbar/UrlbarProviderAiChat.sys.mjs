@@ -11,10 +11,9 @@ import {
   UrlbarProvider,
   UrlbarUtils,
 } from "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
-const lazy = {};
-
-ChromeUtils.defineESModuleGetters(lazy, {
+const lazy = XPCOMUtils.declareLazy({
   AIWindow:
     "moz-src:///browser/components/aiwindow/ui/modules/AIWindow.sys.mjs",
   AIWindowUI:
@@ -223,7 +222,7 @@ export class UrlbarProviderAiChat extends UrlbarProvider {
     );
     actor.ask({
       contextMentions: controller.input.getResolvedContextWebsites?.() ?? [],
-      contextPageUrl: controller.input.getContextPageUrl?.() ?? null,
+      contextPageUrl: controller.input.getContextPageUrl?.()?.href ?? null,
       detectedIntent: this.#lastIntentEvaluation.intent ?? "chat",
       location: controller.input.sapLocation ?? "urlbar",
       submitType: isCtaButtonClick ? "button" : "enter",

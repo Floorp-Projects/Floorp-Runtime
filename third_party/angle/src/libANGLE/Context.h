@@ -14,13 +14,14 @@
 #include <mutex>
 #include <set>
 #include <string>
-#include "common/unsafe_buffers.h"
 
 #include "angle_gl.h"
 #include "common/MemoryBuffer.h"
 #include "common/PackedEnums.h"
 #include "common/SimpleMutex.h"
 #include "common/angleutils.h"
+#include "common/partition_alloc/raw_ptr.h"
+#include "common/unsafe_buffers.h"
 #include "libANGLE/Caps.h"
 #include "libANGLE/Constants.h"
 #include "libANGLE/Context_gles_1_0_autogen.h"
@@ -57,6 +58,7 @@ class EGLImplFactory;
 namespace egl
 {
 class AttributeMap;
+class Display;
 class Surface;
 struct Config;
 class Thread;
@@ -143,6 +145,7 @@ class ErrorSet : angle::NonCopyable
 
     const GLenum mResetStrategy;
     const bool mLoseContextOnOutOfMemory;
+    const bool mLoseContextOnInternalError;
 
     // Context-loss handling
     bool mContextLostForced;
@@ -613,16 +616,16 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     egl::Error initialize();
 
-    egl::Error onDestroy(const egl::Display *display);
+    egl::Error onDestroy(const egl::ThreadSafeDisplay *display);
     ~Context() override;
 
     void setLabel(EGLLabelKHR label) override;
     EGLLabelKHR getLabel() const override;
 
-    egl::Error makeCurrent(egl::Display *display,
+    egl::Error makeCurrent(egl::ThreadSafeDisplay *display,
                            egl::Surface *drawSurface,
                            egl::Surface *readSurface);
-    egl::Error unMakeCurrent(const egl::Display *display);
+    egl::Error unMakeCurrent();
 
     // These create and destroy methods pass through to ResourceManager, which owns these objects.
     bool createBuffer(BufferID *outBuffer);
@@ -638,6 +641,9 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     void deleteProgramPipeline(ProgramPipelineID pipeline);
     void deleteMemoryObject(MemoryObjectID memoryObject);
     void deleteSemaphore(SemaphoreID semaphore);
+
+    // Only used for capturing frame data in ANGLE_capture_enabled builds.
+    bool canProtectCoherentMemoryDirectly();
 
     void bindReadFramebuffer(FramebufferID framebufferHandle);
     void bindDrawFramebuffer(FramebufferID framebufferHandle);
@@ -734,8 +740,6 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     MemoryProgramCache *getMemoryProgramCache() const { return mMemoryProgramCache; }
     MemoryShaderCache *getMemoryShaderCache() const { return mMemoryShaderCache; }
 
-    angle::SimpleMutex &getProgramCacheMutex() const;
-
     bool hasBeenCurrent() const { return mHasBeenCurrent; }
     egl::Display *getDisplay() const { return mDisplay; }
     egl::Surface *getCurrentDrawSurface() const { return mCurrentDrawSurface; }
@@ -751,7 +755,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     }
 
     bool isShared() const { return mShared; }
-    bool isSharedContext() const { return mSharedContext; }
+    bool isSharedContext() const { return mSharedContext.load(std::memory_order_relaxed); }
     // Once a context is setShared() it cannot be undone
     void setShared()
     {
@@ -919,9 +923,9 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
                                 GLuint framebufferStencilSize) const;
     bool noopClearBuffer(GLenum buffer, GLint drawbuffer) const;
 
-    void addRef() const { mRefCount++; }
-    void release() const { mRefCount--; }
-    bool isReferenced() const { return mRefCount > 0; }
+    void addRef() const { mRefCount.fetch_add(1, std::memory_order_relaxed); }
+    void release() const { mRefCount.fetch_sub(1, std::memory_order_acq_rel); }
+    bool isReferenced() const { return mRefCount.load(std::memory_order_acquire) > 0; }
 
     egl::ShareGroup *getShareGroup() const { return mState.getShareGroup(); }
 
@@ -932,8 +936,8 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     bool supportsGeometryOrTesselation() const;
     void dirtyAllState();
 
-    bool isDestroyed() const { return mIsDestroyed; }
-    void setIsDestroyed() { mIsDestroyed = true; }
+    bool isDestroyed() const { return mIsDestroyed.load(std::memory_order_acquire); }
+    void setIsDestroyed() { mIsDestroyed.store(true, std::memory_order_release); }
 
     // This function acts as glEnable(GL_COLOR_LOGIC_OP), but it's called from the GLES1 emulation
     // code to implement logicOp using the non-GLES1 functionality (i.e. GL_ANGLE_logic_op).  The
@@ -1067,7 +1071,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     State mState;
     bool mShared;
-    bool mSharedContext;
+    std::atomic<bool> mSharedContext;
     bool mDisplayTextureShareGroup;
     bool mDisplaySemaphoreShareGroup;
 
@@ -1125,7 +1129,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     const bool mSurfacelessSupported;
     egl::Surface *mCurrentDrawSurface;
     egl::Surface *mCurrentReadSurface;
-    egl::Display *mDisplay;
+    raw_ptr<egl::Display> mDisplay;
     const bool mWebGLContext;
     const bool mHardenedContext;
     bool mBufferAccessValidationEnabled;
@@ -1170,9 +1174,9 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     // Cache representation of the serialized context string.
     mutable std::string mCachedSerializedStateString;
 
-    mutable size_t mRefCount;
+    mutable std::atomic<size_t> mRefCount;
 
-    bool mIsDestroyed;
+    std::atomic<bool> mIsDestroyed;
     bool mDestroyedManagers;
 
     std::unique_ptr<Framebuffer> mDefaultFramebuffer;
@@ -1205,7 +1209,7 @@ class [[nodiscard]] ScopedContextRef
 extern Context *GetCurrentValidContextTLS();
 extern void SetCurrentValidContextTLS(Context *context);
 #else
-extern thread_local Context *gCurrentValidContext;
+extern constinit thread_local Context *gCurrentValidContext;
 #endif
 
 extern void SetCurrentValidContext(Context *context);

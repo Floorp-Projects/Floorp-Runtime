@@ -12,7 +12,6 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,12 +19,14 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import mozilla.components.compose.base.text.Text
+import mozilla.components.compose.menu.data.MenuItemTitle
 import mozilla.components.compose.menu.data.StandardMenuItem
 import mozilla.components.compose.menu.ui.MenuItemIconRes
 import mozilla.components.compose.menu.ui.MenuItemState
 import mozilla.components.ui.icons.R as iconsR
 import org.junit.Test
 import org.mozilla.fenix.R
+import org.mozilla.fenix.components.menu.MenuTarget
 import org.mozilla.fenix.components.menu.fake.FakeMenuHost
 import org.mozilla.fenix.components.menu.fake.reachableEvents
 import org.mozilla.fenix.components.menu.store.MenuAction
@@ -42,12 +43,13 @@ class QuitMenuItemProviderTest {
 
         assertEquals(
             StandardMenuItem(
-                title = Text.Resource(R.string.browser_menu_delete_browsing_data_on_quit, listOf(APP_NAME)),
+                title =
+                    MenuItemTitle(Text.Resource(R.string.browser_menu_delete_browsing_data_on_quit, listOf(APP_NAME))),
                 icon = MenuItemIconRes(iconsR.drawable.mozac_ic_cross_circle_fill_24),
                 onClickEvent = MenuAction.DeleteBrowsingDataAndQuit,
                 state = MenuItemState.WARNING,
             ),
-            provider.itemFlow.value,
+            provider.itemsFlow.value.single(),
         )
     }
 
@@ -55,7 +57,22 @@ class QuitMenuItemProviderTest {
     fun `GIVEN the user keeps their data when quitting WHEN providing the item THEN don't show it`() {
         val provider = createProvider(deletesBrowsingDataOnQuit = false)
 
-        assertNull(provider.itemFlow.value)
+        assertTrue(provider.itemsFlow.value.isEmpty())
+    }
+
+    @Test
+    fun `GIVEN customize menu target WHEN providing the item THEN show default item`() {
+        val provider = createProvider(deletesBrowsingDataOnQuit = false, target = MenuTarget.CustomizeMenu)
+
+        assertEquals(
+            StandardMenuItem(
+                title =
+                    MenuItemTitle(Text.Resource(R.string.browser_menu_delete_browsing_data_on_quit, listOf(APP_NAME))),
+                icon = MenuItemIconRes(iconsR.drawable.mozac_ic_cross_circle_fill_24),
+                state = MenuItemState.WARNING,
+            ),
+            provider.itemsFlow.value.single(),
+        )
     }
 
     @Test
@@ -78,7 +95,7 @@ class QuitMenuItemProviderTest {
     fun `WHEN building the item THEN handle all events it can dispatch and no others`() {
         val provider = createProvider(deletesBrowsingDataOnQuit = true)
 
-        val events = requireNotNull(provider.itemFlow.value).reachableEvents()
+        val events = provider.itemsFlow.value.single().reachableEvents()
 
         assertTrue(events.all { provider.handles(it) }, "Not all of $events are handled")
         assertFalse(provider.handles(MenuAction.Navigate.Settings))
@@ -87,6 +104,7 @@ class QuitMenuItemProviderTest {
     private fun createProvider(
         deletesBrowsingDataOnQuit: Boolean,
         applicationScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined),
+        target: MenuTarget = MenuTarget.BrowserTab,
     ) =
         QuitMenuItemProvider(
             appName = APP_NAME,
@@ -94,6 +112,7 @@ class QuitMenuItemProviderTest {
             deleteBrowsingDataController = { deleteBrowsingDataController },
             quitApplicationDelegate = { quitCount++ },
             applicationScope = applicationScope,
+            target = target,
         )
 
     private companion object {
