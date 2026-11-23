@@ -31,7 +31,7 @@ class PatchPolicyTests(unittest.TestCase):
 
     def test_actual_exact_inventory(self):
         result = hosted.verify_source_patch_policy(SOURCE)
-        self.assertEqual(len(result["commonPatches"]), 28)
+        self.assertEqual(len(result["commonPatches"]), 31)
         self.assertEqual(len(result["debugPatches"]), 3)
         entry = next(e for e in result["commonPatches"] if e["path"].endswith("fdh-windows-private-profile-token.patch"))
         self.assertEqual(entry["sha256"], "121cd0eb12896e6365043369c58c37d53dcde3f129bbfa745e87639c5309a0f0")
