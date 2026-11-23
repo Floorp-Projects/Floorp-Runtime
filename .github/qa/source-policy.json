@@ -121,6 +121,10 @@
   {
    "path": ".github/patches/upstream/tools-signing-macos-mach_commands.py.patch",
    "sha256": "0710aa23682cf1cfb4f555527eef31ae759c9d82ff315003330d020747991a92"
+  },
+  {
+   "path": ".github/patches/upstream/ziparchive-jarlog-gred-mainthread.patch",
+   "sha256": "d4b3fee310c245941697a8075d0c9b03f5a52f9c08f21f3f50c4dccce3159a45"
   }
  ],
  "debugPatches": [

@@ -1,0 +1,58 @@
+diff --git a/modules/libjar/nsZipArchive.cpp b/modules/libjar/nsZipArchive.cpp
+index 9e3b72642ed..1eaf872b367 100644
+--- a/modules/libjar/nsZipArchive.cpp
++++ b/modules/libjar/nsZipArchive.cpp
+@@ -17,6 +17,8 @@
+ #include "mozilla/MemUtils.h"
+ #include "mozilla/UniquePtrExtensions.h"
+ #include "mozilla/StaticMutex.h"
++#include "mozilla/StaticPtr.h"
++#include "mozilla/ClearOnShutdown.h"
+ #include "mozilla/StaticPrefs_network.h"
+ #include "stdlib.h"
+ #include "nsDirectoryService.h"
+@@ -159,6 +161,11 @@ class ZipArchiveLogger {
+ StaticMutex ZipArchiveLogger::sLock;
+ static ZipArchiveLogger zipLog;
+ 
++// Cached result of NS_GRE_DIR for the zip log: the directory service may
++// only be queried on the main thread, but archives are opened on others.
++static StaticMutex sGreDirMutex;
++static StaticRefPtr<nsIFile> sGreDir;
++
+ //***********************************************************
+ // For every inflation the following allocations are done:
+ // malloc(1 * 9520)
+@@ -940,7 +947,7 @@ nsZipArchive::nsZipArchive(nsZipHandle* aZipHandle, PRFileDesc* aFd,
+       if (aZipHandle->mFile.IsZip()) {
+         // Nested archive, likely omni.ja in APK.
+         aZipHandle->mFile.GetPath(mURI);
+-      } else if (nsDirectoryService::gService) {
++      } else if (nsDirectoryService::gService || sGreDir) {
+         // We can reach here through the initialization of Omnijar from
+         // XRE_InitCommandLine, which happens before the directory service
+         // is initialized. When that happens, it means the opened archive is
+@@ -948,9 +955,21 @@ nsZipArchive::nsZipArchive(nsZipHandle* aZipHandle, PRFileDesc* aFd,
+         // when the directory service is not initialized.
+         nsCOMPtr<nsIFile> dir = aZipHandle->mFile.GetBaseFile();
+         nsCOMPtr<nsIFile> gre_dir;
+-        nsAutoCString path;
+-        if (NS_SUCCEEDED(nsDirectoryService::gService->Get(
++        {
++          StaticMutexAutoLock lock(sGreDirMutex);
++          gre_dir = sGreDir;
++        }
++        // The directory service may only be used on the main thread;
++        // once resolved there, the result is cached for later use here.
++        if (!gre_dir && NS_IsMainThread() && nsDirectoryService::gService &&
++            NS_SUCCEEDED(nsDirectoryService::gService->Get(
+                 NS_GRE_DIR, NS_GET_IID(nsIFile), getter_AddRefs(gre_dir)))) {
++          StaticMutexAutoLock lock(sGreDirMutex);
++          sGreDir = gre_dir;
++          ClearOnShutdown(&sGreDir);
++        }
++        nsAutoCString path;
++        if (gre_dir) {
+           nsAutoCString leaf;
+           nsCOMPtr<nsIFile> parent;
+           while (NS_SUCCEEDED(dir->GetNativeLeafName(leaf)) &&
