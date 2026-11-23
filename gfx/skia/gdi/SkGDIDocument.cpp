@@ -71,8 +71,6 @@ constexpr size_t kMaxGlyphsPerCall = 4096;
 // Text is emitted at this many GDI units per device pixel, for sub-pixel font sizes and glyph
 // positions. Same as cairo's WIN32_FONT_LOGICAL_SCALE.
 constexpr SkScalar kTextLogicalScale = 32;
-// Native strokes use pens this many GDI units wide per device pixel, for sub-pixel widths.
-constexpr SkScalar kStrokeLogicalScale = 32;
 
 LONG to_gdi(SkScalar v) { return (LONG)SkScalarRoundToInt(SkTPin(v, -kMaxCoord, kMaxCoord)); }
 
@@ -944,6 +942,9 @@ private:
     // that the output keeps the stroke semantics (e.g. minimum line widths). Returns false if
     // nothing was emitted and the path needs to be drawn some other way.
     bool emitStroke(const SkPath& path, const SkPaint& paint, bool flatten) {
+        // NOTE(emilio): Beware of some bugs in the XPS driver if you relax this
+        // check to let dashed path effects through, see
+        // https://bugzil.la/2066036
         if (paint.getStyle() == SkPaint::kFill_Style || paint.getStrokeWidth() <= 0 ||
             paint.getShader() || paint.getPathEffect() || path.isInverseFillType()) {
             return false;
@@ -954,12 +955,13 @@ private:
         }
         // GDI converts the path to device space when the path bracket is closed, but uses the
         // pen in the logical space that is current when stroking. Stroke in a logical space with
-        // the orientation of local space, but where a unit is roughly 1/kStrokeLogicalScale
-        // device pixels, so that the integer pen width is precise enough.
+        // the orientation of local space, but where a unit is roughly a device pixel.
+        //
+        // NOTE(emilio): Some drivers ignore the scale of the world transform for
+        // the pen width, see https://bugzil.la/2091728.
         const SkScalar scale =
                 std::max({SkScalarAbs(ctm.getScaleX()), SkScalarAbs(ctm.getSkewX()),
-                          SkScalarAbs(ctm.getSkewY()), SkScalarAbs(ctm.getScaleY())}) *
-                kStrokeLogicalScale;
+                          SkScalarAbs(ctm.getSkewY()), SkScalarAbs(ctm.getScaleY())});
         const SkScalar width = paint.getStrokeWidth() * scale;
         if (!SkIsFinite(scale, width) || scale <= 0 || width > kMaxCoord) {
             return false;

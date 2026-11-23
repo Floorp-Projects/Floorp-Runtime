@@ -657,8 +657,8 @@ bool GLContext::InitImpl() {
   // The order of these strings must match up with the order of the enum
   // defined in GLContext.h for vendor IDs.
   const char* vendorMatchStrings[size_t(GLVendor::Other) + 1] = {
-      "Intel",   "NVIDIA",  "ATI",          "Qualcomm", "Imagination",
-      "nouveau", "Vivante", "VMware, Inc.", "ARM",      "Unknown"};
+      "Intel",   "NVIDIA",       "ATI", "Qualcomm", "Imagination", "nouveau",
+      "Vivante", "VMware, Inc.", "ARM", "AMD",      "Unknown"};
 
   mVendor = GLVendor::Other;
   for (size_t i = 0; i < size_t(GLVendor::Other); ++i) {
@@ -690,7 +690,6 @@ bool GLContext::InitImpl() {
       "Gallium 0.4 on llvmpipe",
       "Microsoft Basic Render Driver",
       "Samsung Xclipse",
-      "AMD Radeon HD GFX10",
       "Unknown"};
 
   mRenderer = GLRenderer::Other;
@@ -2247,7 +2246,7 @@ GLBlitHelper* GLContext::BlitHelper() {
 
 GLReadTexImageHelper* GLContext::ReadTexImageHelper() {
   if (!mReadTexImageHelper) {
-    mReadTexImageHelper = MakeUnique<GLReadTexImageHelper>(this);
+    mReadTexImageHelper = std::make_unique<GLReadTexImageHelper>(this);
   }
 
   return mReadTexImageHelper.get();
@@ -2489,7 +2488,7 @@ UniquePtr<Texture> CreateTexture(GLContext& gl, const gfx::IntSize& size) {
   const GLenum target = LOCAL_GL_TEXTURE_2D;
   const GLenum format = LOCAL_GL_RGBA;
 
-  auto tex = MakeUnique<Texture>(gl);
+  auto tex = std::make_unique<Texture>(gl);
   ScopedBindTexture autoTex(&gl, tex->name, target);
 
   gl.fTexParameteri(target, LOCAL_GL_TEXTURE_MIN_FILTER, LOCAL_GL_LINEAR);

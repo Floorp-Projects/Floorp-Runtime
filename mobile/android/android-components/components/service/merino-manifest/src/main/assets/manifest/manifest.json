@@ -91,7 +91,7 @@
         0
       ],
       "url": "https://www.amazon.com/",
-      "title": "Amazon.com",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -413,8 +413,8 @@
         0
       ],
       "url": "https://www.nytimes.com/",
-      "title": "nytimes.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/94de5ae7e9bcf74727f45bb30ae37f553db4594012e2704336da5fbbf3357c3e_1648.ico"
+      "title": "The New York Times - Breaking News, US News, World News and Videos",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8200c64e7dd0416e869af94540a6249d9095ff2682605346fda5d57b14fd8cd9_1149.svg"
     },
     {
       "rank": 37,
@@ -427,7 +427,7 @@
       ],
       "url": "https://www.shopify.com/",
       "title": "Shopify: The All-in-One Commerce Platform for Businesses - Shopify",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6c07269a1a0e65019bee36f27a318ea11481f1441f9a42c4c4ededb977d9dc1a_3131.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/75f7cdd46421f5b2996f7642d798bf51ecd9dc61f1ed5fe54b87a684f4a58bc9_3011.oct"
     },
     {
       "rank": 38,
@@ -439,8 +439,8 @@
         0
       ],
       "url": "https://www.paypal.com/",
-      "title": "Pay, Send and Save Money with PayPal | PayPal US",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/eef960bbb6256de1e65f518e230bee7b073f030d5957bd18ba48d6e03237b6d3_2252.png"
+      "title": "paypal.com",
+      "icon": ""
     },
     {
       "rank": 39,
@@ -765,7 +765,7 @@
       ],
       "url": "https://bloomberg.com/",
       "title": "Bloomberg",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/3c7007a4baf73a9027bc870efa5d196a3ee04b1a82870dc66a7a97743abca77b_3417.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e815280dd737971700564e9558225d5d756b63a57802f041e71879123f50231a_3403.png"
     },
     {
       "rank": 64,
@@ -937,7 +937,7 @@
         0
       ],
       "url": "https://www.goodreads.com/",
-      "title": "Goodreads | Meet your next favorite book",
+      "title": "Goodreads",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/bd3695420d6ac4d6743fc3c950531a9897abed7bfa87a2973bcff695b62f6a67_29722.png"
     },
     {
@@ -1046,7 +1046,7 @@
         0
       ],
       "url": "https://shop.app/",
-      "title": "We ran into an issue - Shop",
+      "title": "Shop - Shopping designed around you",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/572faedc3eab8519ac4c403876b21bbe6752845b6a0aae4db39564d76c52b7a6_4003.png"
     },
     {
@@ -1122,11 +1122,11 @@
         "News & Media"
       ],
       "serp_categories": [
-        0
+        14
       ],
-      "url": "https://www.telegraph.co.uk/",
+      "url": "https://telegraph.co.uk/",
       "title": "Telegraph",
-      "icon": ""
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/77420c10134e6c20c868c0f265bc5124875069487536abcac45b4f28364737aa_2176.webp"
     },
     {
       "rank": 92,
@@ -1192,9 +1192,9 @@
       "serp_categories": [
         0
       ],
-      "url": "https://www.primevideo.com/",
-      "title": "Prime Video: Watch movies, TV shows, sports, and live TV",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/72be8641f790fc154653822cbdb0dc24169a7d9f050a6f87c0382ea5a248a481_2368.png"
+      "url": "https://www.amazon.com/",
+      "title": "Sorry! Something went wrong!",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
       "rank": 99,
@@ -1263,6 +1263,19 @@
       "url": "https://www.yelp.com/",
       "title": "yelp.com",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/87475e1d29fde7e5aa05422fda2010e2f2d39055cf1c9b12b9451748737ccd6d_21144.png"
+    },
+    {
+      "rank": 104,
+      "domain": "itch",
+      "categories": [
+        "Gaming"
+      ],
+      "serp_categories": [
+        12
+      ],
+      "url": "https://itch.io/",
+      "title": "Download the latest indie games - itch.io",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7d4ed9a969062044d1fc3d0c81d80c94e311eb2a6cd0fb1fba6f4b61917057b5_3161.png"
     },
     {
       "rank": 105,
@@ -1721,7 +1734,7 @@
       ],
       "url": "https://www.crazygames.com/",
       "title": "Free Online Games on CrazyGames | Play Now!",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/58ecc0432774437b9e86fba066abeebce7bd452de82b68021b1ee87e7c7721b0_6707.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/24fb39a86d00e08be506d75f49ed80f829e35279af34830f1f97e6234bc39ad6_41263.png"
     },
     {
       "rank": 150,
@@ -1815,7 +1828,7 @@
         0
       ],
       "url": "https://www.jw.org/",
-      "title": "Jehovah\u2019s Witnesses\u2014Official Website: jw.org | English",
+      "title": "Jw",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b2d73a848a6e83941f5c21c7140b422672f158b931673b2da5fbeedb7ab9f23d_4050.png"
     },
     {
@@ -2207,7 +2220,7 @@
         0
       ],
       "url": "https://www.fidelity.com/",
-      "title": "Fidelity Investments: Invest, Trade, Plan for Retirement &amp; Build Wealth",
+      "title": "Fidelity Investments: Invest, Trade, Plan for Retirement, and Build Wealth",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b49a9bca6908b2cb5f35cb1681b214664672462d4ea1a35331f970deb3ef4987_1500.oct"
     },
     {
@@ -2236,20 +2249,6 @@
       "url": "https://www.ticketmaster.com/",
       "title": "Ticketmaster",
       "icon": ""
-    },
-    {
-      "rank": 203,
-      "domain": "squareup",
-      "categories": [
-        "Business",
-        "Economy & Finance"
-      ],
-      "serp_categories": [
-        4
-      ],
-      "url": "https://squareup.com/",
-      "title": "Power your entire business | Square",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0963386166213f2d1c9c4c0c08d0f02738a38603b248687f7ffa290ebb2ce811_2465.png"
     },
     {
       "rank": 204,
@@ -2545,19 +2544,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/123d8d87d0decbe9d4611dcd9daba4f39c9870fa6b848754d998d581c5b6af27_13448.png"
     },
     {
-      "rank": 234,
-      "domain": "illinois",
-      "categories": [
-        "Educational Institutions"
-      ],
-      "serp_categories": [
-        6
-      ],
-      "url": "https://illinois.edu/",
-      "title": "Illinois",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ae14db859949d33027186e167613d76b04aef468132b2ae52ba1a94f366ba6a9_1197.png"
-    },
-    {
       "rank": 235,
       "domain": "usc",
       "categories": [
@@ -2715,7 +2701,7 @@
       ],
       "url": "https://nextdoor.com/",
       "title": "Nextdoor",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/27bd41fc4198694d0befb84b2a0ef1d4fb5a3e6390f3848edd7e2803bd3c913f_2852.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/201146d56f61223e848a6d4db5761401e287c0e4063ab11d980e160579264b75_3779.png"
     },
     {
       "rank": 251,
@@ -2905,6 +2891,19 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/984377f0ec2c26820fd9004eec59edf7f8e7e94d980dddeb514ed91d39cb8741_15406.oct"
     },
     {
+      "rank": 266,
+      "domain": "ubereats",
+      "categories": [
+        "Food & Drink"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://www.ubereats.com/",
+      "title": "Uber Eats | Food & Grocery Delivery | Order Groceries and Food Online",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/3a00989fb2146079fe8970505554f182470a80e6ed18b2e89752f8f9e6a01cf7_51268.png"
+    },
+    {
       "rank": 267,
       "domain": "alchemer",
       "categories": [
@@ -2941,7 +2940,7 @@
       ],
       "url": "https://www.dictionary.com/",
       "title": "Meanings & Definitions of English Words | Dictionary.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fedd3c186e3f32f5baa3b55e35e83c6a145af6508f221b6b1e6cff82f9c99cc4_2762.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5e190234e8b65b5492c3f2ee033fa48f033f4f88ed75c2dd56ff6a2e3034710c_1272.svg"
     },
     {
       "rank": 270,
@@ -3390,20 +3389,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d0b1d1b2a2f4e6ff35294ee5914e3985cea4d96e36d100a0586c9f487ebd6a8b_1272.oct"
     },
     {
-      "rank": 308,
-      "domain": "uniqlo",
-      "categories": [
-        "Clothing",
-        "Ecommerce"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.uniqlo.com/",
-      "title": "Women's, Men's and Kids' Clothing & Accessories | UNIQLO US",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/08c068d858e45c660080dc27015af6e10141137e4ee43007745b1179d2ae7954_1038.png"
-    },
-    {
       "rank": 309,
       "domain": "carfax",
       "categories": [
@@ -3644,7 +3629,7 @@
         0
       ],
       "url": "https://www.gmu.edu/",
-      "title": "George Mason University | A Top 50 Public R1 Research University",
+      "title": "A Top 50 Public R1 Research University | George Mason University",
       "icon": ""
     },
     {
@@ -3675,6 +3660,19 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/88b8d3f29c795c7d1e87130aa250401c018de227810e3edb08412491e0556eb8_3113.png"
     },
     {
+      "rank": 336,
+      "domain": "gamestop",
+      "categories": [
+        "Ecommerce"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://www.gamestop.com/",
+      "title": "Consoles, Collectibles, Video Games, and More \u2013 Buy, Sell or Trade | GameStop",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7cec81996be8b633761e26d02fa29a16ec11a3cc3739f78f071f8c0ac5e507c3_6687.png"
+    },
+    {
       "rank": 337,
       "domain": "progressive",
       "categories": [
@@ -3697,8 +3695,8 @@
         0
       ],
       "url": "https://www.trulia.com/",
-      "title": "Trulia: Real Estate Listings, Homes For Sale, Housing Data",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b05ff3545cc351f725b44f205d7a3e24ae691c1659a2abdd0003d14325e40597_20215.png"
+      "title": "Trulia",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a3f04c1b89f78bcc2d98245928f2865c9786418626698093d3bf708cb85463ae_2193.png"
     },
     {
       "rank": 340,
@@ -4094,7 +4092,7 @@
         0
       ],
       "url": "https://www.zappos.com/",
-      "title": "Shoes, Sneakers, Boots, & Clothing + FREE SHIPPING | Zappos.com",
+      "title": "Zappos",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8c88ce1d061c588b9872be75213107fc05bfcbeaefe158e464bbd841e3fe7cc2_509.svg"
     },
     {
@@ -4456,7 +4454,7 @@
       ],
       "url": "https://nationalpost.com/",
       "title": "National Post: Canadian and World News, Stories & Headlines",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b4c58a5426b52597648fb2c78150da2a8e2024ccb3f8c43c038629f6a3eb6ecd_2932.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cf52dd107287c785765ddaa1c653bcd7c454e6579dfa703dd54d232333f39c03_2624.webp"
     },
     {
       "rank": 409,
@@ -4537,7 +4535,7 @@
       ],
       "url": "https://www.skechers.com/",
       "title": "SKECHERS | The Comfort Technology Company",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7f35b3eb565a15dd30ffe961c8877c4c2b5ac77559b4e2c59e5f9f620def59ea_6190.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8d90550c0cedc9b20589e47e7cefcd380f1422bf5fc7f9d13a6bf10b510a4738_6280.webp"
     },
     {
       "rank": 419,
@@ -4631,8 +4629,8 @@
         0
       ],
       "url": "https://247sports.com/",
-      "title": "College Sports News and Recruiting",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c1255da4ef3fd7043d0932f94d7241c2988f179df9bf56466ecdedeb6ba1a2eb_10880.webp"
+      "title": "247Sports - College Sports News and Recruiting",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/510dd284c5a9ece63a175f92d6ed1ab3fb052ed47d917b068edd78179da40f05_18763.png"
     },
     {
       "rank": 428,
@@ -4781,8 +4779,8 @@
         0
       ],
       "url": "https://www.powerschool.com/",
-      "title": "Home | PowerSchool",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4d7e0d2514665db3c1870e2afbbec11409f24333e14f8dcbd03847aaaa0323af_2028.svg"
+      "title": "Powerschool",
+      "icon": ""
     },
     {
       "rank": 442,
@@ -4795,8 +4793,8 @@
         0
       ],
       "url": "https://ici.radio-canada.ca/",
-      "title": "Radio-Canada.ca | Information, radio, t\u00e9l\u00e9, sports, art",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8cd8d342036e2d4cac8d6831a3892f8643692b37599054e5dcf374e7b96253f6_15086.oct"
+      "title": "Radio-Canada | Information, radio, t\u00e9l\u00e9, sports, art",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/dbcb3bb33f757a6d1f7664ef8390fe99b4958b6263c674176114d22f67ada1f1_4015.png"
     },
     {
       "rank": 443,
@@ -4812,20 +4810,6 @@
       "url": "https://www.delish.com/",
       "title": "Recipes, Party Food, Cooking Guides, Dinner Ideas - Delish.com",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/09bc6221957445cce8038e35e4d376dca0c57b24613f6d373acda35a9bf35f95_2297.png"
-    },
-    {
-      "rank": 444,
-      "domain": "flightrising",
-      "categories": [
-        "Forums",
-        "Gaming"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www1.flightrising.com/",
-      "title": "Home | Flight Rising",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/edf7c3d4f92cbbb4239856201b6ad79484449e73774f8bc66b713e874869faa9_24838.ico"
     },
     {
       "rank": 445,
@@ -5122,7 +5106,7 @@
       ],
       "url": "https://www.grainger.com/",
       "title": "Whoops, we couldn't find that.",
-      "icon": ""
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a7ff1adfa3b406a8c4c9bb8f415b0b8ffdf82f20786bbb02cee46a7725af8257_3067.png"
     },
     {
       "rank": 472,
@@ -5283,7 +5267,7 @@
         12
       ],
       "url": "https://pbskids.org/",
-      "title": "PBS KIDS",
+      "title": "Whoops! | PBS KIDS",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/3a5449499e027745e3be6c64d37045370f5e54bfcf181b0ee323eece9ca0bd82_6780.oct"
     },
     {
@@ -5531,7 +5515,7 @@
       ],
       "url": "https://www.thesaurus.com/",
       "title": "Synonyms and Antonyms of Words | Thesaurus.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c39592443d19054713f35f5bb92ec11d4adff6fe28c9d0024b8913117733897e_1758.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cc28bb0a966b394e6ccaffc3dbacda0af6095de80b84088cd49688a45736a1ff_1840.svg"
     },
     {
       "rank": 510,
@@ -5702,7 +5686,7 @@
       "serp_categories": [
         0
       ],
-      "url": "https://kantimehealth.net/",
+      "url": "https://www.kantimehealth.net/",
       "title": "KanTime-Login",
       "icon": ""
     },
@@ -5743,7 +5727,7 @@
         0
       ],
       "url": "https://www.kleinisd.net/",
-      "title": "Klein ISD | Excellence in Education",
+      "title": "Client Challenge",
       "icon": ""
     },
     {
@@ -6120,7 +6104,7 @@
       ],
       "url": "https://www.llbean.com/",
       "title": "Llbean",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a30960aee923610100340a788fac838caeab048726d62b21d3e68532601707db_10990.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/85bb927f1c2c305e6f7b3e2dff98016455aad1a3ea14932391a3e6ebf739c623_11954.png"
     },
     {
       "rank": 573,
@@ -6146,7 +6130,7 @@
       ],
       "url": "https://www.ncl.com/",
       "title": "Vacation Cruises \u2013 Experience Norwegian Cruise Line | NCL",
-      "icon": ""
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0a87a284c5298d43deeae01cc40f68fc5b7feee6001d6f28cde8a0b4565ae607_7143.svg"
     },
     {
       "rank": 576,
@@ -6563,9 +6547,9 @@
         "Ecommerce"
       ],
       "serp_categories": [
-        13
+        0
       ],
-      "url": "https://ashleyfurniture.com/",
+      "url": "https://www.ashleyfurniture.com/",
       "title": "Ashleyfurniture",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/437390b5e80e65ad44d0ee6eeef03894d84f4e77536d1001d42fd6353a2c4776_375.oct"
     },
@@ -6581,7 +6565,7 @@
       ],
       "url": "https://americansongwriter.com/",
       "title": "American Songwriter: Artist, Songwriting, & Music Discovery",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/09aa11a09d0bc643257064bae8b2773b6a13d01aaa86af4e3f37e7634f318042_7236.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9991b23e40a48ef80b07a6d76e67c88ccc4795d2cd97cd9037ba0c1cfcbd4980_7170.png"
     },
     {
       "rank": 618,
@@ -6702,7 +6686,7 @@
       ],
       "url": "https://www.atitesting.com/",
       "title": "ATI Testing | Nursing Education | NCLEX Exam Review | TEAS Testing",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/291c252a97a398133a5911b037614b874f8cb1371e01ea6e3e19ac141fc50705_3923.png"
+      "icon": ""
     },
     {
       "rank": 630,
@@ -6968,7 +6952,7 @@
       ],
       "url": "https://www.ledevoir.com/",
       "title": "Le Devoir | Nouvelles, politique, \u00e9conomie, culture et chroniques",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1c97921b5cea480b0fbd2213c0dbc761e311d077b40cd39317470b3718575b0b_2299.png"
+      "icon": ""
     },
     {
       "rank": 655,
@@ -7559,7 +7543,7 @@
       ],
       "url": "https://9to5mac.com/",
       "title": "9to5Mac - Apple News & Mac Rumors Breaking All Day",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/64232121c9684a49e7af4f058ff05b6d31fbe4ee72ce47c92ae8740be9247aaa_5626.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/813d10bb8968c1548908a58388b6ec2f3da3b8e8716d000fa3d218b5c51cf6d0_5440.webp"
     },
     {
       "rank": 713,
@@ -7702,7 +7686,7 @@
       ],
       "url": "https://aethermug.com/",
       "title": "Aether Mug",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fb21a404d33475628a658cabf507de57e54b08042323a47a06771b5c250d77f1_2569.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ebe96373566c9c69c3400498aef460879d17a0584801de20971afd2d619cebc3_3883.svg"
     },
     {
       "rank": 729,
@@ -7770,19 +7754,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1c31d797189b6125f042f905b10e2de8bcb69453365459b7bb0f1ff1822f25be_6389.png"
     },
     {
-      "rank": 737,
-      "domain": "ahmedabadmirror",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.ahmedabadmirror.com/",
-      "title": "Ahmedabad News \u2013 Latest & Breaking Ahmedabad News | Ahmedabad Mirror",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9409c40d16f604ca8894f6f159848a69ca3274c960b819acb20c7b590b50c24f_66049.png"
-    },
-    {
       "rank": 739,
       "domain": "airmail",
       "categories": [
@@ -7806,7 +7777,7 @@
       ],
       "url": "https://www.ajc.com/",
       "title": "Atlanta news, Georgia news, Breaking news from The Atlanta Journal-Constitution - AJC.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/26431eb35d27170ef6dfb234902f4cf3b19b9c0b097204131a8b3737986ba459_1986.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/de65537c56310db7bfd4ac10de3d89774035a5b5465e80d9a5ddbfdc402c4f81_1990.svg"
     },
     {
       "rank": 741,
@@ -7846,6 +7817,19 @@
       "url": "https://algorithmwatch.org/",
       "title": "AlgorithmWatch",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e4f6ca05dcf19368ce71be8a7134905a702a1598a8001d22065a12e2649fdb0f_1896.svg"
+    },
+    {
+      "rank": 745,
+      "domain": "elconfidencial",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://www.elconfidencial.com/",
+      "title": "Noticias de Salud",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f62fe9ae2a7d1e608ca8cabc39e7759194571337d0f9ea8797e7dbac26e68822_15086.oct"
     },
     {
       "rank": 747,
@@ -7909,7 +7893,7 @@
         0
       ],
       "url": "https://www.amazon.ca/",
-      "title": "Amazon.ca",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -7922,7 +7906,7 @@
         0
       ],
       "url": "https://www.amazon.co.jp/",
-      "title": "Amazon | \u672c, \u30d5\u30a1\u30c3\u30b7\u30e7\u30f3, \u5bb6\u96fb\u304b\u3089\u98df\u54c1\u307e\u3067 | \u30a2\u30de\u30be\u30f3",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -7935,7 +7919,7 @@
         0
       ],
       "url": "https://www.amazon.co.uk/",
-      "title": "Amazon.co.uk",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -7948,7 +7932,7 @@
         0
       ],
       "url": "https://www.amazon.com.au/",
-      "title": "Server Busy",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -7961,7 +7945,7 @@
         0
       ],
       "url": "https://www.amazon.com.br/",
-      "title": "Amazon.com.br",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -7974,7 +7958,7 @@
         0
       ],
       "url": "https://www.amazon.com.mx/",
-      "title": "Amazon.com.mx",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -7987,8 +7971,8 @@
         0
       ],
       "url": "https://www.amazon.de/",
-      "title": "Amazon.de: G\u00fcnstige Preise f\u00fcr Elektronik & Foto, Filme, Musik, B\u00fccher, Games, Spielzeug & mehr",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
+      "title": "Amazon",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/17d02e2db6dbedb95dd449d06868c147ac2c3b5371497bcb9407e75336a99e09_17542.ico"
     },
     {
       "rank": 761,
@@ -8000,7 +7984,7 @@
         0
       ],
       "url": "https://www.amazon.es/",
-      "title": "Amazon.es",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -8013,7 +7997,7 @@
         0
       ],
       "url": "https://www.amazon.fr/",
-      "title": "Amazon.fr",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -8026,7 +8010,7 @@
         0
       ],
       "url": "https://www.amazon.in/",
-      "title": "Amazon.in",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -8039,7 +8023,7 @@
         0
       ],
       "url": "https://www.amazon.it/",
-      "title": "Amazon.it",
+      "title": "Amazon",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5866636f18764cd66366ae6eb682e972b4eae1771512cd76b304b6dd3c0f1d2d_15086.ico"
     },
     {
@@ -8080,19 +8064,6 @@
       "url": "https://www.amnesty.org/",
       "title": "Amnesty International",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/eb22ff27eeaeb64824c97e571db35eef978aa4ef5e06953b32e9c1164b9ac720_1918.webp"
-    },
-    {
-      "rank": 768,
-      "domain": "ouest-france",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://amphisciences.ouest-france.fr/",
-      "title": "Amphisciences - Ouest France : Le magazine scientifique.",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/803a116efcdb7b0bbe9838129bfda5d105311769a7a7e97dfd1b5d9a2cbb3a5e_11726.webp"
     },
     {
       "rank": 770,
@@ -8186,19 +8157,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/18e9275bd10e53a256e1f67d28ca8b25c36d35bacddf617f5d34a032d3653a28_1624.png"
     },
     {
-      "rank": 778,
-      "domain": "everyeye",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://anime.everyeye.it/",
-      "title": "Everyeye Anime - Fumetti, Cartoni e Comics",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a12aab9308ba3594d71f213a84d4ad7017f0cdf56d3a03bee9aa95ed171c767a_4628.png"
-    },
-    {
       "rank": 779,
       "domain": "annabelle",
       "categories": [
@@ -8207,9 +8165,9 @@
       "serp_categories": [
         0
       ],
-      "url": "https://annabelle.ch/",
-      "title": "One moment, please...",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e2f49fdc2bd0b726fd22ec206b2a8b14c117585cbcaa2874cc08c8db7bd04e83_7406.ico"
+      "url": "https://www.annabelle.ch/",
+      "title": "F\u00fcr alles, was wir sind - annabelle",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1c5a38b5a6c07de75390401fde74e8931a948210e9abf701a7887133c0e43223_2257.png"
     },
     {
       "rank": 780,
@@ -8467,9 +8425,9 @@
       "serp_categories": [
         0
       ],
-      "url": "https://as.com/",
-      "title": "as.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cfcd5252e7b677bb5a953b216d2d73a71a447d0dc22ceff05f39daa91bd74a46_5570.png"
+      "url": "https://en.as.com/",
+      "title": "AS USA | Soccer, NFL, NBA, MLB, golf, latest news and more",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c2c04f49586d5100c1b11466faea31ce38a4559085f07d472d9b6375622493e0_3119.svg"
     },
     {
       "rank": 810,
@@ -8639,19 +8597,6 @@
       "url": "https://austin.eater.com/",
       "title": "Eater Austin",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1662fccd0d8d3df1230ebfc35ea26d18455ad24f95e1480394ab08c6d5148b12_8508.png"
-    },
-    {
-      "rank": 827,
-      "domain": "everyeye",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://auto.everyeye.it/",
-      "title": "Everyeye Auto - Tecnologia e Motori",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6146b24ae44bfb1c10491ee6895d9e83066b46b91d5bc2604322f99fb42df5cc_4359.png"
     },
     {
       "rank": 828,
@@ -8845,7 +8790,7 @@
         0
       ],
       "url": "https://bakadesuyo.com/",
-      "title": "Barking Up the Wrong Tree - Homepage",
+      "title": "Eric Barker | Barking Up The Wrong Tree",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/835f9e5eac14549f70ea2338ed342676cde5f282519e87b77cc17eb87ba4e72d_9214.webp"
     },
     {
@@ -8875,19 +8820,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1b15257c53428e43bc73f4f85a21cfc5ce722c6d2e4cfc8f11539aab1aa7324d_7913.ico"
     },
     {
-      "rank": 847,
-      "domain": "barcelonasecreta",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://barcelonasecreta.com/",
-      "title": "Barcelona Secreta | Los mejores planes de Barcelona",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c06af44de1c0e8098f5090e772ec1cce6ace0bdd9bda54f9b5f2d5c57dce68aa_8085.png"
-    },
-    {
       "rank": 848,
       "domain": "barrons",
       "categories": [
@@ -8899,19 +8831,6 @@
       "url": "https://www.barrons.com/",
       "title": "barrons.com",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d6f5c6bb8d3c01a3ae2abe49a538e7ec2628d03694ab36f363ad788f981ab9ed_2449.png"
-    },
-    {
-      "rank": 853,
-      "domain": "basta",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://basta.media/",
-      "title": "Basta! - D\u00e9crypter, R\u00e9sister, Inventer",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/25c896782b7804ef34d201e5081f3861a7cb9de2da35ec2db7b2483985b9877a_1109.png"
     },
     {
       "rank": 854,
@@ -9223,7 +9142,7 @@
         17
       ],
       "url": "https://bleacherreport.com/",
-      "title": "Bleacher Report | Sports. Highlights. News. Now.",
+      "title": "Bleacher Report | Fans Make It Sports | Sports. Highlights. News. Now.",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/dd8a8565666a738e84867d663082fb4b1feed71f317c6cba59262dc02b6cc3a0_6586.png"
     },
     {
@@ -9653,7 +9572,7 @@
       ],
       "url": "https://www.businessinsider.de/",
       "title": "Aktuelle News von Business Insider Deutschland",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/973f6ebd51aaee044946d3834ae95fe99a0c71e9d09ffe24e45abad437e7dbb6_734.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/230101d83496ec06692601ccb538f2bb9142e8db85dbf3e4b97bac0cc26339c8_878.svg"
     },
     {
       "rank": 931,
@@ -9692,7 +9611,7 @@
       ],
       "url": "https://www.businesspost.ie/",
       "title": "Business Post - Independent journalism every day",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f216791c9544ba47a4888d3bbbefa9c1f71b388b601aff9860b109b3d8a5a966_3532.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6ff981c359ff42b5771a480b538d44f2fe99214ebcce5f960b99bdc0fb63e2ea_3458.webp"
     },
     {
       "rank": 936,
@@ -9834,8 +9753,8 @@
         0
       ],
       "url": "https://www.canadianliving.com/",
-      "title": "Canadian Living | Recipes and Lifestyle for Canadian Women",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0656f420a03293826ad5b2c1e8b3dac24bd31b963fa972b3d7eac9264dc56117_2976.png"
+      "title": "Recipes and Lifestyle for Canadian Women | Canadian Living",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7d50bc6f17d0195f7c577e52704a580d86d86b9a779051d977f13d9abe164efe_13756.svg"
     },
     {
       "rank": 952,
@@ -9873,8 +9792,8 @@
         0
       ],
       "url": "https://www.capital.de/",
-      "title": "Please wait/Bitte warten",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cff0989431702b5ead93387dd18f048c89a30acd5f1e0ce4d97a997a9b3e8b6c_67646.oct"
+      "title": "Wirtschaft ist Gesellschaft - Capital.de",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/30d87267a443e1ec22eb50709c0b398e67076d622c0817d08e62fa459a582b65_642.svg"
     },
     {
       "rank": 955,
@@ -10069,7 +9988,7 @@
       ],
       "url": "https://www.chip.de/",
       "title": "CHIP \u2013 News, Tests, Downloads, Tech- & Verbraucherberatung",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/694785160bdee80835c1392a5cd5279296edf2cdfd7ba8b738956d175f33b6d6_1317.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4805d8396427b373cc0c02cebf5770b885558717185a80e62ed4a76d125d2faa_1656.png"
     },
     {
       "rank": 975,
@@ -10096,19 +10015,6 @@
       "url": "https://www.cibotoday.it/",
       "title": "CiboToday - Notizie su cibo e dove mangiare",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/da0c86408ac35a6b6d3952017f60ea72510cb8787c3106ff69adbf070e98b689_19429.png"
-    },
-    {
-      "rank": 979,
-      "domain": "everyeye",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://cinema.everyeye.it/",
-      "title": "Everyeye Cinema - Film, Blu-Ray e Streaming",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/dba7d71f69d6a472bd71eeb0c7b67a59ece12a4d271bc13b44c45faaf3b649a8_4783.png"
     },
     {
       "rank": 980,
@@ -10251,7 +10157,7 @@
       ],
       "url": "https://www.cnet.com/",
       "title": "CNET: Product reviews, advice, how-tos and the latest news - CNET",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/750a9ebc3a94a1c38f8790aefd2954077a610cdecf1939cff8f546d91cc61da1_9840.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e9e98b735e27d1ce30e102b60345fb04063e98941990ee31fbf0055a433cfaae_10966.webp"
     },
     {
       "rank": 992,
@@ -10265,19 +10171,6 @@
       "url": "https://cnnespanol.cnn.com/",
       "title": "\u00daltimas noticias de Estados Unidos, Latinoam\u00e9rica y el mundo, hoy | CNN en Espa\u00f1ol | CNN",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0c9f9c97b3768f3b623e1f07e002f62082887e445fec3d1557b13d70763404aa_53158.ico"
-    },
-    {
-      "rank": 993,
-      "domain": "cnrs",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.cnrs.fr/",
-      "title": "Centre national de la recherche scientifique (CNRS)",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/94cb39768144ba25d44303b731c99e67dd4f178c9f53e4f314ff3597579ed4a2_15086.oct"
     },
     {
       "rank": 994,
@@ -10330,19 +10223,6 @@
       "url": "https://www.cntraveller.in/",
       "title": "Cond\u00e9 Nast Traveller India | The latest travel updates and advice for the Indian traveller | Cond\u00e9 Nast Traveller India",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ad09db8de55f4881fbc0257ada6bbecc5e7b4ad2125c265bd0e3fcdf655ccf41_8083.png"
-    },
-    {
-      "rank": 998,
-      "domain": "codastory",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.codastory.com/",
-      "title": "Coda Story",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/800e1eecf6581dfae6386d09d7346ec8ffb4df7a3b3c6b3b71be0fc6e5805be1_3261.png"
     },
     {
       "rank": 1000,
@@ -10692,7 +10572,7 @@
         0
       ],
       "url": "https://www.creativeboom.com/",
-      "title": "Art and design inspiration, advice and jobs | Creative Boom",
+      "title": "Art, design and advertising news | Creative Boom",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/2d331c6f1039664cd4def5023b0fba944edf2687651111158dcde1f9c3d84694_16891.png"
     },
     {
@@ -11047,19 +10927,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d0c5cb39a7f76947ed85fb22fa5a6cdee56d15b0a14e925673c90d1fc2cd7e36_2380.png"
     },
     {
-      "rank": 1070,
-      "domain": "euronews",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://de.euronews.com/",
-      "title": "Aktuelle Nachrichten kostenlos per Video-on-Demand | Euronews",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/48a60efb28f294b238bb34bf28bfc0893762529e42e97e70e6f3b4f24910c6b1_3504.png"
-    },
-    {
       "rank": 1071,
       "domain": "deadline",
       "categories": [
@@ -11187,7 +11054,7 @@
       ],
       "url": "https://delacortereview.org/",
       "title": "The Delacorte ReviewThe Delacorte Review - Real true stories (and how they happen)",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/08cb2b674d28479f4c03e98c30dc662b8d5827bb3fce5d5509b815a2e2b1bc3d_3316.jpeg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9dcc69d999157007a53bff71066014a0094d37abf230a49b1df86e2212b469b7_4174.jpeg"
     },
     {
       "rank": 1084,
@@ -11265,7 +11132,7 @@
       ],
       "url": "https://www.designboom.com/",
       "title": "designboom magazine | your first source for architecture, design & art news",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e5a2c934ec2c31aeacb9e3b396d4ac69f5a0b50556d8c10fba21f9d601a4ff93_4155.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5c6e509615819a503f12b7a54aa35bbc7d21f9796c85d15cabaa6f32676a9e2e_1030.webp"
     },
     {
       "rank": 1093,
@@ -11486,7 +11353,7 @@
       ],
       "url": "https://www.digit.in/",
       "title": "Digit: Technology Advice, Product Reviews, Latest News | Digit",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/564b3a2de0e757e01477bd3b446746dd4ad6e795c4bc10dccfeddcad45098a22_715.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/92569b8ab2d73a54233e8964235bf6332dab75c56a6d674d8af88f71e1cd83fa_1527.oct"
     },
     {
       "rank": 1112,
@@ -11551,7 +11418,7 @@
       ],
       "url": "https://www.dissapore.com/",
       "title": "Dissapore, niente di sacro tranne il cibo",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7f6f3387da8807b7faf18c86c5da7a2383e4d64435192453fccd6b75b0ff9efd_4063.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a99f6afc3473a0f6b81b490fc4248db1f92af254df4e0ffacf3ee6827b74d04d_3826.png"
     },
     {
       "rank": 1120,
@@ -11629,7 +11496,7 @@
       ],
       "url": "https://www.domino.com/",
       "title": "domino",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/062cca5057fad4ce7b209fa835976dbdfc070636d71008bf61068abb20a12d76_1270.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/55461c8510ec88dd6b9f2f87186d61b0caf6bd18330411eefcec92c1bb11147f_1180.webp"
     },
     {
       "rank": 1127,
@@ -11733,7 +11600,7 @@
       ],
       "url": "https://www.earthday.org/",
       "title": "Earth Day: The Official Site | EARTHDAY.ORG",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7d659bfe784eeb235b5f274882ce5055b799a8b0b199a73fc32522bec13cbd7c_8125.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ea91bd9e816fc47cab439288d1222414c5becbc24c40b78ddac021b4e7380979_5892.webp"
     },
     {
       "rank": 1140,
@@ -11773,19 +11640,6 @@
       "url": "https://www.echolive.ie/",
       "title": "The Echo: Cork news and sport - Echolive",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c06fb91b25eea6473eed9fd25b74fa17febb10d3a76170cdac226c86049f5fcf_6242.png"
-    },
-    {
-      "rank": 1146,
-      "domain": "economiadigital",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.economiadigital.es/",
-      "title": "Econom\u00eda Digital | \u00daltima hora econ\u00f3mica, empresarial y pol\u00edtica",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/12281e8e276188e3ed8920885a03817a9ad47ec8b9e97b54e3932e0863e1490e_10383.png"
     },
     {
       "rank": 1147,
@@ -11866,6 +11720,19 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/be207d9fe3b1e2c191951f03239848f2403f1d853727e2b81dba14c711cedc5b_1004.png"
     },
     {
+      "rank": 1155,
+      "domain": "educationtimes",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://educationtimes.com/",
+      "title": "Education News, Exams, Courses & Careers | Education Times",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/908ccaf788696256155869bb186d787ed466d68aa51cf3242670443df88ad94f_12090.png"
+    },
+    {
       "rank": 1156,
       "domain": "edweek",
       "categories": [
@@ -11876,7 +11743,7 @@
       ],
       "url": "https://www.edweek.org/",
       "title": "Education Week - K-12 education news and information",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/216e9cbdc56c3ae11e9ba09477a4edc51c3cfb6474d16b5bece1d56a7fc31a9b_7254.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/531141973348b097d42e470bd7b96c0bddde4c4e4bf7941e9c2a065b9583dda3_9229.oct"
     },
     {
       "rank": 1157,
@@ -11916,19 +11783,6 @@
       "url": "https://www.einfach-tasty.de/",
       "title": "Leckere Rezepte, Kochvideos & Food-Hacks | Einfach Tasty",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b15dbbf1041cac3a25b84d2a0de0108f4c5a90307134fde73433654f633a3082_100898.oct"
-    },
-    {
-      "rank": 1161,
-      "domain": "ekoru",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://ekoru.org/",
-      "title": "Ekoru - Every search helps remove plastic",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7b58af843329dff0ee0ca9ba6a813603d0f9e590f834cd2240211249f19a2515_21453.png"
     },
     {
       "rank": 1162,
@@ -12412,19 +12266,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c6f7ee2cadae2e121342a8c4245141175bfe887776206deb17149d46cf3aa827_2238.oct"
     },
     {
-      "rank": 1206,
-      "domain": "euronews",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://es.euronews.com/",
-      "title": "Noticias de \u00faltima hora disponibles como v\u00eddeos a la carta gratuitos | Euronews",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/48a60efb28f294b238bb34bf28bfc0893762529e42e97e70e6f3b4f24910c6b1_3504.png"
-    },
-    {
       "rank": 1207,
       "domain": "gizmodo",
       "categories": [
@@ -12449,6 +12290,19 @@
       "url": "https://es.ign.com/",
       "title": "Ign",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/64180a5085f1285e0f83bd284f8c6dd3b5ac3ffd2dbb6b7559c794564699f66d_9953.png"
+    },
+    {
+      "rank": 1210,
+      "domain": "rollingstone",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://es.rollingstone.com/",
+      "title": "Inicio - Rolling Stone en Espa\u00f1ol",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/82773b420b4298a857a2c8747bd88866bb9b4e58a468ea955911e6d569481959_12453.png"
     },
     {
       "rank": 1212,
@@ -12565,7 +12419,7 @@
       ],
       "url": "https://www.estadiodeportivo.com/",
       "title": "Estadio Deportivo - Diario online de informaci\u00f3n deportiva",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/afeeb2f461007d72e26a6ccc0d103501d6fb5c61fa1892e3fb52ab773d00f32f_2494.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ab6b990f8bc3479907d2573c69f5b06749e061755727aafa5c45e17cef94ebae_4703.png"
     },
     {
       "rank": 1225,
@@ -12698,19 +12552,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0e6ae6632514150741ba2eed7f75f2a5c8b50d9522af545964f33f3a01f1ba34_5647.png"
     },
     {
-      "rank": 1237,
-      "domain": "europapress",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.europapress.es/",
-      "title": "Europa Press | Agencia de noticias privada l\u00edder en Espa\u00f1a",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/78fb65cd55c217d49e2a5dcabf8140d135ef0a7efd64496f5dd38883f454c754_1948.svg"
-    },
-    {
       "rank": 1238,
       "domain": "eurozine",
       "categories": [
@@ -12737,19 +12578,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/2f893f454f0b6ae299fb197a11ff3134c966640d6377565b3d841b00649b5a26_5233.png"
     },
     {
-      "rank": 1240,
-      "domain": "everyeye",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.everyeye.it/",
-      "title": "Videogiochi per PC e console - Everyeye.it",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/72338703465927b5a4f2271424a82da8463f59eb2c9e62b5b6e860c83364e03b_5341.png"
-    },
-    {
       "rank": 1241,
       "domain": "evoke",
       "categories": [
@@ -12760,7 +12588,7 @@
       ],
       "url": "https://evoke.ie/",
       "title": "EVOKE | The premier website for women in Ireland",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e69fd02ee1859c9d5546d3d7baffaad7148c8ecf90c5f2c483f5cf9ad586ca4a_2968.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9ff1d47bf1c732206a980d6e1fbe14011c87ea67f08c181170150d2998e63199_2812.webp"
     },
     {
       "rank": 1242,
@@ -12774,19 +12602,6 @@
       "url": "https://ew.com/",
       "title": "Ew",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c198e1b463f75cdfedb1c439e7bddacee00f58f0333b9df72d88ed4e35a5c6ad_1960.oct"
-    },
-    {
-      "rank": 1246,
-      "domain": "expansion",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.expansion.com/",
-      "title": "Expansi\u00f3n - Diario Econ\u00f3mico e informaci\u00f3n de mercados",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4191013d13e6634581fcaf0cfbbe2ad4acf589c9b9ec5c817130083d619fa014_3474.png"
     },
     {
       "rank": 1247,
@@ -12864,7 +12679,7 @@
       ],
       "url": "https://extra.ie/",
       "title": "Home - Top Irish news, sport, entertainment & business",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/82dd8d3c1ecd47cbb6036afcdf2a2a653e802dbcc3445a1376ea2954c46922e9_6090.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a3668dadf0d666f6e07d38fabd419e1988e95e3a158f5a5cdbf7419eab3f68bb_5382.webp"
     },
     {
       "rank": 1253,
@@ -13021,19 +12836,6 @@
       "url": "https://www.femina.in/",
       "title": "Femina: Women's Magazine for Fashion, Beauty, Lifestyle, Relationships, Health & More",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/01d79395cf32bda596972e721d224c9291fd3e1851c26a219808e5ba9df7e794_3510.svg"
-    },
-    {
-      "rank": 1270,
-      "domain": "feminisminindia",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://feminisminindia.com/",
-      "title": "Feminism In India | Intersectional Feminism \u2013 Desi Style!",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/64a250a21a58482a374b3e3a9484fc883c0293d1b26ee1f0e74536c84cc97d84_707.png"
     },
     {
       "rank": 1271,
@@ -13267,7 +13069,20 @@
       ],
       "url": "https://www.focus.it/",
       "title": "Notizie, foto, video di Scienza, Animali, Ambiente e Tecnologia - Focus.it",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cdd4ccac67e2a31ad06f66f474d088b2ee50c30574ef506611105a2c204bbb03_828.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/744d2ff61cfc388f75dc12c1dd6899959af9d2bda50f38782a3a9414d6b29bf6_2042.png"
+    },
+    {
+      "rank": 1298,
+      "domain": "ndtv",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://food.ndtv.com/",
+      "title": "Ndtv",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/62815a40e350c3705eef641086f1865b5e641258959fed6cbcc7fed55d77e89d_4286.ico"
     },
     {
       "rank": 1301,
@@ -13332,7 +13147,7 @@
       ],
       "url": "https://www.forbes.at/",
       "title": "Forbes Austria",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/118a457280ce6df697c39a35d3790e487c21ca894ee40a1231169219cf415712_4404.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9fb22478507e0c5eafb5f82847fca7451e9af066e121cbdc60739357cf1e4283_7406.ico"
     },
     {
       "rank": 1307,
@@ -13346,19 +13161,6 @@
       "url": "https://forbes.es/",
       "title": "Forbes Espa\u00f1a: Nada personal, solo negocios - Forbes Espa\u00f1a",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f1f1642043142d2c8d8aa3403f39e4e177724aee1023eb260aa5cd627d15128e_1946.png"
-    },
-    {
-      "rank": 1309,
-      "domain": "forbes",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://forbes.it/",
-      "title": "Forbes Italia \u2014 Business, Lists, leader",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5f9c7b1155e8c845771f0f415ff085b9774240f1034d7275c375dd3152348ca9_1204.webp"
     },
     {
       "rank": 1311,
@@ -13518,19 +13320,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/625e309d7b25adf65dba43d7d57eda0e85193e6e6598656631ebc844344f3834_103977.oct"
     },
     {
-      "rank": 1323,
-      "domain": "euronews",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://fr.euronews.com/",
-      "title": "Toute l'information internationale en direct | Euronews",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/48a60efb28f294b238bb34bf28bfc0893762529e42e97e70e6f3b4f24910c6b1_3504.png"
-    },
-    {
       "rank": 1324,
       "domain": "fragdenstaat",
       "categories": [
@@ -13554,7 +13343,7 @@
       ],
       "url": "https://www.france24.com/",
       "title": "France24",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0e339506ee98fbfdcbee29992790132aa948a4be1ce07038814356619c9ece3f_2734.ico"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/274d8e91a5471bed87c013cc09acc07894ab560929ccbaaf8b9199a531d63186_2742.png"
     },
     {
       "rank": 1326,
@@ -13775,7 +13564,7 @@
       ],
       "url": "https://futurezone.at/",
       "title": "Futurezone",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a1a89ede00202d1b4bf96e6b609d8bc60ad1d2da7a8abba9d0fd19a05a7347f9_8706.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/18566692925cb984a8e09e792ff81c471963e80b98ac3402d8afa24bf54691eb_8532.webp"
     },
     {
       "rank": 1348,
@@ -13788,7 +13577,7 @@
       ],
       "url": "https://futurism.com/",
       "title": "Futurism | Science and Technology News",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7b825211daf4a8acea588b936360ba05a93eedbc540826c103a8b2a1429049ec_476.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6ff5d60aea4a9ced3c08f8751655a48d9fc0361386a6a178352762a2443ff914_452.webp"
     },
     {
       "rank": 1349,
@@ -13904,8 +13693,8 @@
         0
       ],
       "url": "https://gamergen.com/",
-      "title": "GAMERGEN : Maintenance du site",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9ae87ac6433b642879c01418381442f425af59d8bb996d49e14eb2f026ed316d_8424.png"
+      "title": "GAMERGEN : La r\u00e9f\u00e9rence de la high-tech et du jeu vid\u00e9o pour les joueurs et geeks sur consoles, PC et mobiles - GAMERGEN.COM",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cffdc7c386c2874920f6811fa16e4745df86a13a4a69794026d93874f4a0198e_14134.png"
     },
     {
       "rank": 1360,
@@ -14831,19 +14620,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f651d2b54684dedeb46316d6488d8e6ddfc996cca283f3563166d65496d7ce2f_742.webp"
     },
     {
-      "rank": 1453,
-      "domain": "hedgehogreview",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://hedgehogreview.com/",
-      "title": "The Hedgehog Review",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/778f7588a0c8b38dfd0290381e54b531f235835c613b15fa8c49cbdd7a221328_48517.jpeg"
-    },
-    {
       "rank": 1454,
       "domain": "heidi",
       "categories": [
@@ -14867,7 +14643,7 @@
       ],
       "url": "https://www.heise.de/",
       "title": "heise online - IT-News, Nachrichten und Hintergr\u00fcnde | heise online",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a46b0dadab9695632c7f4bb7203e9a17f5a96d741ea6b22b84ae9e3c3572b344_701.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8c3bf2cb64ac81d547a5c69d24c72a21f2225e7153b495769140112287ff952a_6118.png"
     },
     {
       "rank": 1456,
@@ -14919,7 +14695,7 @@
       ],
       "url": "https://www.heraldscotland.com/",
       "title": "Scotland News, Politics, Sport, Events and Comment - The Herald",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/16262ab11e94da07f86c6826363ca2701856683aa8af8576aba9ce862e75f744_1964.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/57ba3d32f2a63799d0f396f66d629fc5dd57ae5cf96fbd8804bf9cabb4fc650a_5812.png"
     },
     {
       "rank": 1460,
@@ -14997,7 +14773,7 @@
       ],
       "url": "https://www.hilltimes.com/",
       "title": "People. Policy. Politics - The Hill Times",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4693b43f2a73b3ba3fdff1eb7ac88e19ac05a0b48ecb9cc28805d8b8f12a1eba_6478.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e88ebeaa454496e7474c883a3d301204eb13daff939bd34afcf1d51406b9c853_12179.png"
     },
     {
       "rank": 1467,
@@ -15360,8 +15136,8 @@
         0
       ],
       "url": "https://www.houseandhome.ie/",
-      "title": "Houseandhome",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/772a6fe1b14f5e99429751ff774e2fc0c31a6418fca1eb061cd2b8755720eab4_15086.ico"
+      "title": "Irish home design and interiors inspiration",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a9349dadc8aaf7b1c570340d1fcded5e2d0d9be51252fd8ea0ff3c40beaa9265_897.png"
     },
     {
       "rank": 1498,
@@ -15582,7 +15358,7 @@
       ],
       "url": "https://www.iconmagazine.it/",
       "title": "Tendenze, moda, bellezza e lifestyle per l'uomo | Icon",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8c92dbab4b71c44d3fa6a787fd58de30a756f9ee7a93d1905cb8ffcf7f1f4b47_160.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0ef112c2a9cf03f16fd7b5dd0998632484b0ada5dc4f9f756b24adb7821707df_826.png"
     },
     {
       "rank": 1517,
@@ -15790,7 +15566,7 @@
       ],
       "url": "https://in.mashable.com/",
       "title": "Mashable India",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fecd55554f5277c5a1ea2ff060fbb6e74ac73426fb2b4eee8297223f8bba3a28_16172.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a28e270f7406515132e7593ce75270a8553af379d744d70e1892051be0c1dfdf_15872.webp"
     },
     {
       "rank": 1539,
@@ -15806,19 +15582,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e322a5a0637ea81d85035fecf3feeec1f9c82819cd907f524ec5e9e6cf614082_5551.png"
     },
     {
-      "rank": 1541,
-      "domain": "inc",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.inc.com/",
-      "title": "inc.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4fb37c8498130ded14416660d5242cdc6ce3e66ab111b71f8b85667807c926ba_15086.ico"
-    },
-    {
       "rank": 1542,
       "domain": "inc42",
       "categories": [
@@ -15830,6 +15593,19 @@
       "url": "https://inc42.com/",
       "title": "Inc42: Latest Indian Tech & Startup News, Analysis & Stories",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c567a039495439e59b7fc95eb2439075d430826b9ba5ac4f4c86cf99e222f4d0_6708.png"
+    },
+    {
+      "rank": 1545,
+      "domain": "mongabay",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://india.mongabay.com/",
+      "title": "Environmental news and information in India - Landing",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4316ce3c7897ab703de77d2932db9ad1e56575a2856f473c458205b893113a17_4927.svg"
     },
     {
       "rank": 1547,
@@ -15934,19 +15710,6 @@
       "url": "https://www.infodata.ilsole24ore.com/",
       "title": "Info Data - Le notizie raccontate con i numeri",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/216de5a4738dbc0206a3d4f644ed6e5c7f6d716e71d36d671425b6e23273687c_32895.png"
-    },
-    {
-      "rank": 1559,
-      "domain": "infosalus",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.infosalus.com/",
-      "title": "Infosalus: Noticias de salud, enfermedades y nutrici\u00f3n",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a8fc9ac9b4dbd9aeb3911bf6a3118a39101b6287e452a45d5f95ccad84b51d73_5667.png"
     },
     {
       "rank": 1560,
@@ -16115,7 +15878,7 @@
       ],
       "url": "https://www.iodonna.it/",
       "title": "iO Donna: il femminile su moda beauty e benessere del Corriere della Sera",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6108f76ce92b1e8bc4f5c1c7aaafb5f1e56e0d1ab55085893b0d630e77dd2503_2845.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1218d438b8e282fb40486df441fa11d1d9785fde2b4da5ae94c2ded8cd2bdf12_2889.oct"
     },
     {
       "rank": 1581,
@@ -16128,7 +15891,7 @@
       ],
       "url": "https://www.iowapublicradio.org/",
       "title": "Iowa Public Radio: Your Trusted Source Of News & Music From Iowa & NPR | Iowa Public Radio",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/98d925cff42d6e7a6def3919a80b2b66bfe7a060ab56f409e9d660a921193378_7291.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ef50b766ffa5d37b121034fb535b9cd9f501dc08541d2d6d302b2b01c31e926b_7304.oct"
     },
     {
       "rank": 1582,
@@ -16222,32 +15985,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/657f68bfd98bbea2979035fdba943eb5c7c438c33f0ab9f586ca70692f647ab7_34494.ico"
     },
     {
-      "rank": 1590,
-      "domain": "irpi",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://irpimedia.irpi.eu/",
-      "title": "IrpiMedia",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/33583a0c2ebb389eddc4aa45df9dbb0850b50ec6507187a686f92adb21354b7e_2262.png"
-    },
-    {
-      "rank": 1592,
-      "domain": "euronews",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://it.euronews.com/",
-      "title": "Le ultime notizie e le notizie del giorno nei nostri video on demand gratuiti | Euronews",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/48a60efb28f294b238bb34bf28bfc0893762529e42e97e70e6f3b4f24910c6b1_3504.png"
-    },
-    {
       "rank": 1593,
       "domain": "itsnicethat",
       "categories": [
@@ -16322,7 +16059,7 @@
         0
       ],
       "url": "https://www.lemonde.fr/",
-      "title": "Client Challenge",
+      "title": "Acc\u00e8s restreint - Le Monde",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/60020297e849f118df6d6f305be9aad92280ba5abc2e4f6d25b93adeb1ba2de2_1890.png"
     },
     {
@@ -16401,7 +16138,7 @@
       ],
       "url": "https://www.joblo.com/",
       "title": "Joblo",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/49828dd8b2b2eb097d23804c322028b40ecdb6019053fce5777bd80abefd6165_7876.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/93ff7fff590f4a9a5db1fe1a14a158d70794902f872689ecfec49dd8e223021f_7662.webp"
     },
     {
       "rank": 1609,
@@ -16924,19 +16661,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/2ba1655a1a839146a1e0776a6cb819fd11a273dcd08a38d68589b64d0ecddb98_2506.svg"
     },
     {
-      "rank": 1660,
-      "domain": "lasvolta",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://lasvolta.it/",
-      "title": "Casin\u00f2 non AAMS in Italia 2026: piattaforme di casin\u00f2 sicure per i giocatori italiani",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f41d79aa1d2f3b5b7fbcb61b711a7566e8b7cdb8e5a15653a9737cc23eb4463d_1859.svg"
-    },
-    {
       "rank": 1661,
       "domain": "latribune",
       "categories": [
@@ -17051,7 +16775,7 @@
       ],
       "url": "https://lebonbon.fr/",
       "title": "Le Bonbon | Il a bon go\u00fbt \ud83c\udf6c | News \u2022 Food \u2022 Culture",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5379d1ffe11b9cbf776091daff2537e4f8709b5c08f7a9ef1111ce077a1e82de_5986.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c229976d76bd042258ea97598f5bca99bd698d1abbf5be4aa48e5298392906d4_27068.png"
     },
     {
       "rank": 1674,
@@ -17220,7 +16944,7 @@
       ],
       "url": "https://www.letemps.ch/",
       "title": "Le Temps: actualit\u00e9s et informations en Suisse et dans le Monde",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ffc3c1d2c86111e8f21ba5136a41e25c0596b6a0dd714db1a6238d8c940f50d1_8078.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6df609a537e8b4672713fd5bbff80c7ddae034ed21b1c7aad14bd59774e77392_16561.png"
     },
     {
       "rank": 1696,
@@ -17310,8 +17034,8 @@
         0
       ],
       "url": "https://www.lifegate.it/",
-      "title": "LifeGate - Notizie dal mondo della sostenibilit\u00e0",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/feb1819df8767c1a2b80ac19f7edebcc135aa5a29c18558548e60caaa4558687_128.webp"
+      "title": "Sostenibilit\u00e0, letta, cercata, ascoltata \u00b7 LifeGate Daily",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/028895df65cb3aa6a35edb0bc2e7fb9729d97230546203d9860fdbc7e4c71a28_674.webp"
     },
     {
       "rank": 1705,
@@ -17364,32 +17088,6 @@
       "url": "https://www.vox.com/",
       "title": "Vox",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0231ffd69a50956893bc799e788dc610a7036d990f44876a9106179d987aeca1_14472.png"
-    },
-    {
-      "rank": 1710,
-      "domain": "linkideeperlatv",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.linkideeperlatv.it/",
-      "title": "Link - Idee per la tv",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ac2ed16936633376f65df486051d0f75207e15ab4a1eec1ca2e49ddd41cbec99_32038.ico"
-    },
-    {
-      "rank": 1711,
-      "domain": "linkiesta",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.linkiesta.it/",
-      "title": "Homepage - Linkiesta.it",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0e105ec8f5ee034aaf5bb48bce1e22698fc900f5f51f5ad337cedf3b5919d2dd_9066.png"
     },
     {
       "rank": 1715,
@@ -17730,19 +17428,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c6d85de75df64c8d5655ba68c106703c9da5f311995a927ff075bb69a1705b7e_1471.png"
     },
     {
-      "rank": 1743,
-      "domain": "madridsecreto",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://madridsecreto.co/",
-      "title": "Madrid Secreto | Los mejores planes de Madrid",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/dff64b169902e92a694604f4d1910440587847e57c25db454bd8e6f1e34c310e_8226.png"
-    },
-    {
       "rank": 1746,
       "domain": "atavist",
       "categories": [
@@ -17805,7 +17490,7 @@
       ],
       "url": "https://makronom.de/",
       "title": "Makronom - Online-Magazin f\u00fcr Wirtschaftspolitik",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9f00dba8f7681c1695083fa6bd4ee0baf815e69c5341686b9edf3ba17cbab49b_798.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d2f7b22216d651986b65378974bae0cba624460085f66f20fb942bb48e036854_702.png"
     },
     {
       "rank": 1753,
@@ -18000,7 +17685,7 @@
       ],
       "url": "https://mashable.com/",
       "title": "Mashable",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d55bd3b97cb0aa3e5be6f4015c32d46e6637f59946d169e402799eb3c2a1b476_3724.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/59c7118a2ffc43369821959caba4ed6f67941e6de4aa14609df92edc3940ff36_3620.webp"
     },
     {
       "rank": 1770,
@@ -18104,7 +17789,7 @@
       ],
       "url": "https://mediasetinfinity.mediaset.it/",
       "title": "Mediaset Infinity: Guarda Gratis Programmi, Fiction e Dirette TV",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/32ea8ef6fc86604ad4f8536af75d51cc57e3f7d36da61ef1211c6004bd24a8e9_2576.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f4e12baa209c3ec882346612a1615809cb75f115e784679dc4b95012a6e6b288_2578.oct"
     },
     {
       "rank": 1779,
@@ -18549,19 +18234,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b4ab280e5e9a1bff4b6123c8aa1b6876b32ac070698180c78c5eda7bd2fe3a83_1310.svg"
     },
     {
-      "rank": 1822,
-      "domain": "mongabay",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://news.mongabay.com/",
-      "title": "Conservation and environmental science news - Mongabay",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4316ce3c7897ab703de77d2932db9ad1e56575a2856f473c458205b893113a17_4927.svg"
-    },
-    {
       "rank": 1823,
       "domain": "monocle",
       "categories": [
@@ -18637,7 +18309,7 @@
       ],
       "url": "https://montrealgazette.com/",
       "title": "Montreal Gazette | Montreal News, Stories and Headlines",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d686461909928465f2f5c38f4f71b82f2fbd08d7facf6bb06794013d4f3a3f47_6428.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1ba2363671f5cb8f2efe597c0a2018dc3b969882d168396b26d9ede49c564d0e_6488.webp"
     },
     {
       "rank": 1830,
@@ -18741,7 +18413,7 @@
       ],
       "url": "https://www.moviepilot.de/",
       "title": "Moviepilot - Filme nach deinem Geschmack",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8c8e0db06475903feae58062bc350788b7ed952d6b4ccec6fea467f820b973ca_1886.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/dcdf174fe92bff8811583e6e4e8e4a1369836cadfa093c43af57ea85a1908055_1834.webp"
     },
     {
       "rank": 1839,
@@ -18884,7 +18556,7 @@
       ],
       "url": "https://www.rfi.fr/",
       "title": "Rfi",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1d67082ba83ea2640314aefb86fddb3d16ed264f0cdcb71141d6b7c2b6ce5836_18094.ico"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/288927686bacbfb2b0bd853860d491c69870ad7d1526e9131aaf51ad6d7dac54_778.png"
     },
     {
       "rank": 1853,
@@ -19013,7 +18685,7 @@
         0
       ],
       "url": "https://nationalgeographic.de/",
-      "title": "Nationalgeographic",
+      "title": "National Geographic",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b64f6796791e9262f8541f5dbba6ee477b68cd254754dfa2b81ef3711e25a4ff_330.svg"
     },
     {
@@ -19132,6 +18804,19 @@
       "url": "https://www.ndr.de/",
       "title": "NDR.de - Das Beste am Norden - Radio - Fernsehen - Nachrichten | ndr.de",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5e77cae4a83ac049236ccb716bfcb3ac6f92746ce935e25943a4c12db42266f9_919.svg"
+    },
+    {
+      "rank": 1878,
+      "domain": "ndtv",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        14
+      ],
+      "url": "https://ndtv.com/",
+      "title": "Ndtv",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/62815a40e350c3705eef641086f1865b5e641258959fed6cbcc7fed55d77e89d_4286.ico"
     },
     {
       "rank": 1880,
@@ -19381,19 +19066,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4c0b65516ef902a3874f24cb01aa0e086e9ca9ad9f9bd29711f540ef970aeba9_3774.ico"
     },
     {
-      "rank": 1910,
-      "domain": "newscientist",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.newscientist.com/",
-      "title": "New Scientist | Science news, articles, and features",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c4a051bbbcb95aa62769c1cced5e1cc4af4231fbc1bfa250af2095249f56a846_1541.svg"
-    },
-    {
       "rank": 1911,
       "domain": "newslab",
       "categories": [
@@ -19404,7 +19076,7 @@
       ],
       "url": "https://newslab.org/",
       "title": "Home - NewsLab",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/39e295188b60870cba0e18212192278889425f34fe3333158a41e16b59130bdf_3646.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/36aa29998f7efdc28d7d36ba206df2305b8ac5cb1b1bc5ed01e07521ec8b2a3b_5538.png"
     },
     {
       "rank": 1912,
@@ -19443,7 +19115,7 @@
       ],
       "url": "https://www.newstalk.com/",
       "title": "HOME | Newstalk",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0865f72fe61b61d835b4d37011a7b335794830b6fae320118882d2d350b8ebf5_1152.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/398817118f731c3844d3bbe58a189b6d77c31fe12487de904e6f54e906a1789e_1150.webp"
     },
     {
       "rank": 1915,
@@ -19535,6 +19207,19 @@
       "url": "https://nicenews.com/",
       "title": "Sign Up - Nice News",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6450c019033d7c6c85899840b7fca58b8db426ad6eda5b8b2cefa97c716e5b61_6163.webp"
+    },
+    {
+      "rank": 1924,
+      "domain": "niemanlab",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://www.niemanlab.org/",
+      "title": "Nieman Journalism Lab",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fc1e43bc40d804e643e1c9eae4717dfc8430e5b317a82f953db9b740d9dcdf7c_9719.png"
     },
     {
       "rank": 1925,
@@ -19898,7 +19583,7 @@
       ],
       "url": "https://observers.france24.com/",
       "title": "France24",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5d81a1203b3da429301221b65971f2552a479a21672d0baed24197c2232812ad_15086.ico"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/666d5a4b954243635c64a79663c754e2508d770a9e36bbaf581d438fb1368b7d_2715.png"
     },
     {
       "rank": 1957,
@@ -20184,7 +19869,7 @@
       ],
       "url": "https://www.outdoorlife.com/",
       "title": "Outdoor Life: Hunting, Fishing, Gear Reviews, Survival Tips",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f48d530d6aebaee511d9bc3be452d0a80228ae2fa6ba4274d99532cdd5a0dbe1_1646.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/07b7b44463d310f5d0ea9cd4be06b4ef9420ff79c5974e84b2a0fad318f5e8b5_1816.webp"
     },
     {
       "rank": 1986,
@@ -20236,7 +19921,7 @@
       ],
       "url": "https://www.outsideonline.com/",
       "title": "Outside Magazine",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1001c894a14977012f05fa80299cf9de394f2f2567ae70265c96406159799bba_9384.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/001e59c455845d16eb72aca8af2ee35920049e7f27da1654d966ff16fd54c3f0_5986.webp"
     },
     {
       "rank": 1991,
@@ -20249,7 +19934,7 @@
       ],
       "url": "https://www.padresehijos.com.mx/",
       "title": "Padres e hijos. Embarazo, parto, beb\u00e9. Gu\u00edas \u00fatiles, expertos, y consejos para la etapa m\u00e1s hermosa de tu vida.",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/dd63c20400ed62df61665da03dd5de1f97235c6f329bb741d752235a6e90d03d_5304.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fc247115ec286f9819ae19595a62dd060118a0264f995cb3e5b1fe709b9d1b24_5132.webp"
     },
     {
       "rank": 1992,
@@ -20262,7 +19947,7 @@
       ],
       "url": "https://www.palabranahj.org/",
       "title": "palabra.",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1b6668fac76b1349080696ddc74468510b0f026fe1214d9853e30f05b24f9eae_1729.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d1b1e43150a1391109895f7920c01f3392b962de6d231606ec9739796e418a4b_5624.webp"
     },
     {
       "rank": 1993,
@@ -20473,19 +20158,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d89870f1faa015b3f41c9b5e021036f194ba247f3c8af6ffdea1c07a251af3bd_8800.png"
     },
     {
-      "rank": 2012,
-      "domain": "pepperdine-graphic",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://pepperdine-graphic.com/",
-      "title": "Pepperdine Graphic - Pepperdine Graphic",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6c51c3bdf25f3770b4d854d731a369af4de7aeda64cfacf17fb874793a4dec17_5606.png"
-    },
-    {
       "rank": 2013,
       "domain": "perspectivemedia",
       "categories": [
@@ -20599,8 +20271,8 @@
         0
       ],
       "url": "https://phys.org/",
-      "title": "Checking your connection",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/2a627d603251ee4ebc9cf36dd0cc02e49ca2444d0b0d8104f8584a04afbf9f77_15086.oct"
+      "title": "Phys.org - News and Articles on Science and Technology",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/36799561cd68699a391614ef887af0ccb649a9f8af7eab7cff2aaa61a92a14f1_173087.svg"
     },
     {
       "rank": 2023,
@@ -20817,11 +20489,11 @@
         "Inconclusive"
       ],
       "serp_categories": [
-        10
+        0
       ],
-      "url": "https://politico.eu/",
-      "title": "Politico",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cf273825591ab830d659780e57d54fb1716b01ac1ab9a018c6d203cb0c0ec698_6577.oct"
+      "url": "https://www.politico.eu/",
+      "title": "POLITICO \u2013 European Politics, Policy, Government News",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a6e2d9317198dbf4294d5aec13fd2ad72d94d3c3adca1a98c98f4fc416b83bc1_2701.png"
     },
     {
       "rank": 2044,
@@ -20949,9 +20621,9 @@
       "serp_categories": [
         0
       ],
-      "url": "https://www.positive.news/",
-      "title": "Positive News | Good journalism about good things - Positive News",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9f0632810e18f122b366bb0814cc6d9a663853c6352dd60b18567777c30dbda4_2206.png"
+      "url": "https://positive.news/",
+      "title": "Positive",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7685d192c042d1144cd52b1feb16af2db884a9da56c1202b0c2fc006875c1a15_15406.ico"
     },
     {
       "rank": 2055,
@@ -21003,7 +20675,7 @@
       ],
       "url": "https://www.chip.de/",
       "title": "Ratgeber: Praktische Hilfe & L\u00f6sungen f\u00fcr Ihren Alltag",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/694785160bdee80835c1392a5cd5279296edf2cdfd7ba8b738956d175f33b6d6_1317.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4805d8396427b373cc0c02cebf5770b885558717185a80e62ed4a76d125d2faa_1656.png"
     },
     {
       "rank": 2061,
@@ -21835,7 +21507,7 @@
       ],
       "url": "https://www.rfi.fr/",
       "title": "Rfi",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1d67082ba83ea2640314aefb86fddb3d16ed264f0cdcb71141d6b7c2b6ce5836_18094.ico"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/288927686bacbfb2b0bd853860d491c69870ad7d1526e9131aaf51ad6d7dac54_778.png"
     },
     {
       "rank": 2144,
@@ -21848,7 +21520,7 @@
       ],
       "url": "https://www.riffreporter.de/",
       "title": "RiffReporter Autor\u00efnnen-Magazin: Analysen, Hintergr\u00fcnde, Berichte",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/35f87798104418c653af94d0943b25668f477e4e824ec367367b8e2691f3daf5_432.svg"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/4f06efa40794ae3a27b5cc429c612f7d59c85e4c90a7fd9ca154ed575613d471_432.svg"
     },
     {
       "rank": 2146,
@@ -22264,7 +21936,7 @@
       ],
       "url": "https://www.saturdayeveningpost.com/",
       "title": "The Saturday Evening Post | Home of The Saturday Evening Post",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9d05e12b0329cbe3ae98cbd26d1b9f5903abe1a5e6fb4406388127d7cceec8e3_3800.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/706d0fc2ef5062cdcd3b8e9e984828514f6d20eb8b4a8f6bdce6050cc9527fe0_3782.webp"
     },
     {
       "rank": 2184,
@@ -22368,7 +22040,7 @@
       ],
       "url": "https://www.sciencealert.com/",
       "title": "ScienceAlert : The Best in Science News And Amazing Breakthroughs",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/ce127dd0c75524a53a7f9d8f19d53c42f33acfb7c98a2dcfcc9b848a0fc6b922_4842.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/372b06e7da328bc83b975be27a86c7e3c1913a0b9823a3cc6a7f0a0814820359_4782.webp"
     },
     {
       "rank": 2195,
@@ -22709,19 +22381,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/884fdf2413ae6cfc1028ccece82b21c0c92315bb60cd1e5fbb2589f930da07e0_2567.png"
     },
     {
-      "rank": 2231,
-      "domain": "everyeye",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://serial.everyeye.it/",
-      "title": "Everyeye Serie TV - Telefilm, notizie, uscite, recensioni",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d30b2e12816a28cb092a9d9c854ae09de4e3409f5d727bd6fb6061b772f3d5e5_4741.png"
-    },
-    {
       "rank": 2232,
       "domain": "serienjunkies",
       "categories": [
@@ -22758,7 +22417,7 @@
       ],
       "url": "https://www.serpadres.es/",
       "title": "SerPadres.es. Embarazo, parto, beb\u00e9. Gu\u00edas \u00fatiles, expertos, y consejos para la etapa m\u00e1s hermosa de tu vida",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7abd11a1155bf990a1f60dc9a139bf67bc1f97652e41e5199e8ff9f458cadaaf_4878.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1e5d65d4c641352272609b57c86edf94dcb8243c433c1e687d42833e0d11b0d8_5216.webp"
     },
     {
       "rank": 2236,
@@ -22954,19 +22613,6 @@
       "url": "https://www.siasat.com/",
       "title": "Latest News from Hyderabad, Telangana, Bollywood, India | The Siasat Daily",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b017ed52847d3dd660b3c61eab8847d0952ae0849d493dc26f22406ebc41a91a_21666.png"
-    },
-    {
-      "rank": 2253,
-      "domain": "siegfried-unseld-chronik",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.siegfried-unseld-chronik.de/",
-      "title": "Siegfried Unseld Chronik: Originaldokumente, Beitr\u00e4ge, Veranstaltungen",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0280ff5629702607d35d9dcf8cb7eb96d4d550ad7af436b2553d977d66b79f56_5572.webp"
     },
     {
       "rank": 2255,
@@ -23425,6 +23071,19 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/de1b8a1ab1440f837422e902b752b331f7ce7f0f2058c9fd58fdbcbc73d8ad5b_9662.oct"
     },
     {
+      "rank": 2301,
+      "domain": "ndtv",
+      "categories": [
+        "Inconclusive"
+      ],
+      "serp_categories": [
+        0
+      ],
+      "url": "https://sports.ndtv.com/",
+      "title": "Ndtv",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/62815a40e350c3705eef641086f1865b5e641258959fed6cbcc7fed55d77e89d_4286.ico"
+    },
+    {
       "rank": 2302,
       "domain": "yahoo",
       "categories": [
@@ -23486,8 +23145,8 @@
         0
       ],
       "url": "https://squirrel-news.net/",
-      "title": "Squirrel News \u2013 Your Constructive News Service",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e1e383aefeb963bf2873223580fbe2621b2e1ecc83dc8c0ecb5bd5189572b507_4352.webp"
+      "title": "Squirrel News - Your constructive news service",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b7e464e43804c3167038005454e90b617d0b21a0f5d08075e75640108a40f170_19493.png"
     },
     {
       "rank": 2308,
@@ -23696,19 +23355,6 @@
       "url": "https://style.corriere.it/",
       "title": "Style Magazine - La rivista per l'uomo | Style",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d4f7e51b1411854a101f67b7e6e3ba750ae1dd5c5d2db58ec860e1a81da43eb8_2022.png"
-    },
-    {
-      "rank": 2330,
-      "domain": "styleathome",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.styleathome.com/",
-      "title": "Style at Home | Canada's Top Resource For Fabulous Decorating",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/bfced06a8c2bbbc7915b791aa7229b11216d46f51d72e2b880951a3c85b61135_2392.png"
     },
     {
       "rank": 2331,
@@ -24062,19 +23708,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/eec694b67dc9117e7385238698ada3eee0049b801bef57f81d802ecf18df0003_3336.webp"
     },
     {
-      "rank": 2362,
-      "domain": "everyeye",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://tech.everyeye.it/",
-      "title": "Everyeye Tech - Tecnologia e Scienza",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cc8eb662755ab0cce1c90189099611da802a70ad68a2a0d1e3683d1b3bbada91_4358.png"
-    },
-    {
       "rank": 2364,
       "domain": "techcrunch",
       "categories": [
@@ -24085,7 +23718,7 @@
       ],
       "url": "https://techcrunch.com/",
       "title": "TechCrunch | Startup and Technology News",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e1efab5afb3d796cc05020681b3b0c86efc11a1f39423950c1b5c5f5fdf54d9e_9159.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6b2baff24c59791bc34a1369200047267168a44506ca72b5a0af8fd1f4e434b1_9914.webp"
     },
     {
       "rank": 2365,
@@ -24579,7 +24212,7 @@
       ],
       "url": "https://thebulletin.org/",
       "title": "Bulletin of the Atomic Scientists",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/b19749214a0f7e8583818e87321d01d8db95c7b2b347ddc19b8f359d84a9325b_8097.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cb9c55ad5f1644555696dc23155f8f2c80f8c94670a46eb126ca9207eebe5849_2540.webp"
     },
     {
       "rank": 2413,
@@ -24800,7 +24433,7 @@
       ],
       "url": "https://thegloss.ie/",
       "title": "THE GLOSS \u2014 Ireland\u2019s magazine of style, beauty, interiors and considered living",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/503b0e42d44a621fb4054d5f888fb5882a578b04cd4efcb405da954274727633_5979.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f2e2af6c1825c6ffea177e1700d27c1923f91e51e28cae182b6828417b9ba02e_2044.webp"
     },
     {
       "rank": 2437,
@@ -24878,7 +24511,7 @@
       ],
       "url": "https://thehustle.co/",
       "title": "Subscribe to The Hustle Daily Newsletter - The Hustle",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c3a146f431d8d1a3de57cc99e8edd85ee2e37517ca4b8cf03900cbdab0519016_1536.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/57c891235fc0ace02f4ff5f15528ad25baff06f92d4cd72f9d7522d30949f3d2_1498.webp"
     },
     {
       "rank": 2446,
@@ -25333,7 +24966,7 @@
       ],
       "url": "https://www.theroot.com/",
       "title": "The Root \u2013 Black News, Opinions, Politics and Culture",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f001b078d004d6415da80ca4cf501f769bc84881e71531c0841a311ff4c8b6af_1912.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6b0c76ea240d8b6f14cbaa1b44598ad024f48e08f8b8d5610db399d878491cbb_2351.png"
     },
     {
       "rank": 2489,
@@ -25879,7 +25512,7 @@
       ],
       "url": "https://www.tpr.org/",
       "title": "Texas Public Radio | TPR",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fa5bd7790c2296cb6cad6d01d031c4418c1233325bf53b05b594cd2633bd690f_6783.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f494c70674f0a2c3415b4c759aa851710fa20007aa26dfee9fccb50cee5a64a5_6796.oct"
     },
     {
       "rank": 2539,
@@ -26100,7 +25733,7 @@
       ],
       "url": "https://tvshowsace.com/",
       "title": "TV Shows Ace - Your Latest in TV Show News",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6d2d2700c88639768d92eedaa545e34e50ede883bbcec67398e52cfe916efeed_33762.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/02fa469d56057947cafc3e54483c3f1a22066b68f22641630fc139d4bc983dda_21286.webp"
     },
     {
       "rank": 2560,
@@ -26246,19 +25879,6 @@
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/3277ce3374d59f9bfd7eb89ef6fc539465f3b6ad34fd16b4f7f5a880bc35e798_1851.png"
     },
     {
-      "rank": 2573,
-      "domain": "unesco",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.unesco.org/",
-      "title": "UNESCO : Building Peace through Education, Science and Culture, communication and information",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/3cb81fb0b1b19d60bdea12ad93937224d88be168d8f684c6e81a74c109a0d62f_9298.png"
-    },
-    {
       "rank": 2574,
       "domain": "unherd",
       "categories": [
@@ -26307,8 +25927,8 @@
         0
       ],
       "url": "https://www.upday.com/",
-      "title": "The latest National and International News - upday News",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e8204884d4a4cfef7e5fa96e8b56842a77b573a8f56be5f2ddd6eb5f824b602d_3214.png"
+      "title": "upday News \u2013 Aktuelle Nachrichten aus Deutschland und der Welt",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/f4d75b89252512771af467dd102384139e38bd308719f664e8db863e6170f84e_14522.png"
     },
     {
       "rank": 2578,
@@ -26347,7 +25967,7 @@
       ],
       "url": "https://www.upworthy.com/",
       "title": "The Best In Us - Upworthy",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8742b88121b63e4c2c9df2beef54798dcd36da3b300636b990239aa548d2170f_4204.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e01565869b2ba65daef8f3baaab9f1fd9be7e3df9cd675f1b141600d7df00656_4588.webp"
     },
     {
       "rank": 2581,
@@ -26358,9 +25978,9 @@
       "serp_categories": [
         0
       ],
-      "url": "https://en.as.com/",
-      "title": "AS USA | Soccer, NFL, NBA, MLB, golf, latest news and more",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/c2c04f49586d5100c1b11466faea31ce38a4559085f07d472d9b6375622493e0_3119.svg"
+      "url": "https://as.com/",
+      "title": "as.com",
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/cfcd5252e7b677bb5a953b216d2d73a71a447d0dc22ceff05f39daa91bd74a46_5570.png"
     },
     {
       "rank": 2583,
@@ -26399,20 +26019,7 @@
       ],
       "url": "https://utopia.de/",
       "title": "Utopia.de: Der Ort f\u00fcr Nachhaltigkeit - seit 2007",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/7bd2275ff825e542207ecebc852d2049e0e35e3df6543659be0249bf866e7be7_3548.webp"
-    },
-    {
-      "rank": 2587,
-      "domain": "valenciasecreta",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://valenciasecreta.com/",
-      "title": "Valencia Secreta | Los mejores planes de Valencia",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/39e6bbc8b7bc5415f1771e1f7ad861ac889cb00d2ef5990d1a184e996f86cf9d_7976.png"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d8cf0b640c07b3e88e7cbca7b2b5b8402396b3a4c297cb59afa7d4817b8ea7a6_3450.webp"
     },
     {
       "rank": 2588,
@@ -26541,7 +26148,7 @@
         0
       ],
       "url": "https://www.verdict.co.uk/",
-      "title": "Home - Verdict",
+      "title": "Verdict | News and Industry Analysis",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/d4f7e72d074c6834ba85f6db8ae4db979fbd363e9a7d033b76aa308d561f0e66_2463.oct"
     },
     {
@@ -26750,7 +26357,7 @@
       ],
       "url": "https://viewthevibe.com/",
       "title": "View the VIBE: Toronto's VIBE authority on what to do, where to eat, drink + enjoy life (magazine)",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/0302fae28a7f3b3d4214990828d540d126dc734972f02acf3bafd80615116d4a_948.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/254464d1eef80514226d4875384ea890eb09d9c45446cbac2fc26c077456364d_1165.png"
     },
     {
       "rank": 2620,
@@ -26788,7 +26395,7 @@
         0
       ],
       "url": "https://www.vitonica.com/",
-      "title": "Vit\u00f3nica - Deporte y actividad f\u00edsica, fitness, nutrici\u00f3n y vida sana",
+      "title": "Vit\u00f3nica - Bienestar, fitness, nutrici\u00f3n, belleza, hogar y m\u00e1s",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/9071974191a36f77ef3ef273c734ff429b39aa342fe9aa753bdb496b62baaa49_2727.png"
     },
     {
@@ -27049,7 +26656,7 @@
       ],
       "url": "https://web.de/",
       "title": "WEB.DE - kostenlose E-Mail-Adresse, FreeMail & Nachrichten",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fc68b906543280a143ec95215f32825db7a580b38955886d101fc1ba1dd0b6fd_15086.ico"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/fc68b906543280a143ec95215f32825db7a580b38955886d101fc1ba1dd0b6fd_15086.oct"
     },
     {
       "rank": 2654,
@@ -27192,7 +26799,7 @@
       ],
       "url": "https://www.winnipegfreepress.com/",
       "title": "Winnipeg Free Press \u2013 Breaking News, Sports, Manitoba, Canada",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/1a0a89db3df7cadcf800916e75670519f1de7e762881972ae05b88d43b53a9ed_854.webp"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/00a93bba4569480add9140723b2c8ee90394d1037018433df73d8a0b374c9280_834.webp"
     },
     {
       "rank": 2669,
@@ -27232,19 +26839,6 @@
       "url": "https://wissenschaft.de/",
       "title": "Bild der Wissenschaft - Aktuelle Nachrichten aus Wissenschaft und Forschung",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/db5a61603d5b2635a5b3841e41987559b85cc73b09bf5c0ffe18989e76b3418b_3786.png"
-    },
-    {
-      "rank": 2673,
-      "domain": "wiwo",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.wiwo.de/",
-      "title": "WirtschaftsWoche: Das f\u00fchrende Wirtschaftsmagazin | WiWo",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/a06e41e273a89b7db02eb652e41ad4a42b48489d0fc924df9ea0d4ddccb16ec4_635.png"
     },
     {
       "rank": 2674,
@@ -27582,7 +27176,7 @@
       ],
       "url": "https://www.yogajournal.com/",
       "title": "Yoga Journal | Yoga Poses - Sequences - Philosophy - Events",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/5b03e6df3b585f3d9dac5113eaf25cbda2a119b808c19afa3186d40efebf8f90_2068.oct"
+      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/8b7b04aab9686aa33530b477db9c3865a3a1d27be83d5d4b0401d8146d6e563b_3548.png"
     },
     {
       "rank": 2706,
@@ -27635,19 +27229,6 @@
       "url": "https://www.youtube.com/",
       "title": "YouTube",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/e39dc3d8c2f82ad2375132a8efcf521c232d5e2cf08abeb9bebe1ad94afb2157_5020.png"
-    },
-    {
-      "rank": 2712,
-      "domain": "zapmeta",
-      "categories": [
-        "Inconclusive"
-      ],
-      "serp_categories": [
-        0
-      ],
-      "url": "https://www.zapmeta.com/",
-      "title": "ZapMeta | zapmeta.com",
-      "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/6ed1cf8811ed51d04f16f587aa83f9c2f6a1f6c909bb9b2434b94509c7761d6e_15086.ico"
     },
     {
       "rank": 2713,
@@ -27750,7 +27331,7 @@
         0
       ],
       "url": "https://zoe.com/",
-      "title": "ZOE",
+      "title": "ZOE | Fix your gut. Fix your health",
       "icon": "https://prod-images.merino.prod.webservices.mozgcp.net/favicons/2033dcc79693f49473c4f9827c7d8a32a59a6902a39cb12fb83176bdbbc07871_8089.png"
     },
     {

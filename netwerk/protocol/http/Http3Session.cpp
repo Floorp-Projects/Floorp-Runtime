@@ -121,7 +121,10 @@ nsresult Http3Session::Init(nsHttpConnectionInfo* aConnInfo,
   bool isOuterConnection = false;
   if (!aIsTunnel) {
     if (auto* proxyInfo = aConnInfo->ProxyInfo()) {
-      isOuterConnection = proxyInfo->IsHttp3Proxy();
+      // MASQUE, or an HTTPS CONNECT proxy reached over HTTP/3 via its HTTPS RR.
+      isOuterConnection =
+          proxyInfo->IsHttp3Proxy() ||
+          (aConnInfo->UsingHttpsProxy() && aConnInfo->UsingConnect());
     }
   }
 
@@ -132,8 +135,16 @@ nsresult Http3Session::Init(nsHttpConnectionInfo* aConnInfo,
       isOuterConnection ? aConnInfo->ProxyInfo()->Port()
                         : aConnInfo->OriginPort(),
       aProviderFlags, aConnInfo->GetOriginAttributes(), this);
-  const nsCString& alpn = isOuterConnection ? aConnInfo->GetProxyNPNToken()
-                                            : aConnInfo->GetNPNToken();
+  // An HTTPS proxy has no proxy NPN token; default the outer ALPN to "h3".
+  nsAutoCString alpn;
+  if (isOuterConnection) {
+    alpn = aConnInfo->GetProxyNPNToken();
+    if (alpn.IsEmpty()) {
+      alpn.AssignLiteral("h3");
+    }
+  } else {
+    alpn = aConnInfo->GetNPNToken();
+  }
 
   NetAddr selfAddr;
   MOZ_ALWAYS_SUCCEEDS(aSelfAddr->GetNetAddr(&selfAddr));
@@ -229,7 +240,7 @@ nsresult Http3Session::Init(nsHttpConnectionInfo* aConnInfo,
         mConnInfo->EndToEndSSL(), !mConnInfo->GetEchConfig().IsEmpty(),
         mConnInfo->IsHttp3());
     gHttpHandler->ObserveHttpActivityWithArgs(
-        activity, NS_ACTIVITY_TYPE_HTTP_CONNECTION,
+        HttpActivityArgs(activity), NS_ACTIVITY_TYPE_HTTP_CONNECTION,
         NS_HTTP_ACTIVITY_SUBTYPE_ECH_SET, PR_Now(), 0, ""_ns);
   } else {
     mEchExtensionStatus = EchExtensionStatus::kNotPresent;
@@ -1706,6 +1717,9 @@ nsresult Http3Session::TryActivating(
     }
     rv = mHttp3Connection->CreateWebTransport(aAuthorityHeader, aPathQuery,
                                               aHeaders, aStreamId);
+    if (NS_SUCCEEDED(rv)) {
+      ApplyAnticipatedWebTransportStreams(aStream, *aStreamId);
+    }
   }
 
   if (NS_FAILED(rv)) {
@@ -1752,6 +1766,25 @@ nsresult Http3Session::TryActivating(
   mTransactionCount++;
 
   return NS_OK;
+}
+
+void Http3Session::ApplyAnticipatedWebTransportStreams(Http3StreamBase* aStream,
+                                                       uint64_t aSessionId) {
+  nsHttpTransaction* trans = aStream->Transaction()->QueryHttpTransaction();
+  if (!trans) {
+    return;
+  }
+  uint16_t uni = 0;
+  uint16_t bidi = 0;
+  trans->GetWebTransportAnticipatedStreams(&uni, &bidi);
+  if (uni > 0) {
+    SetWebTransportAnticipatedConcurrentIncomingUnidirectionalStreams(
+        aSessionId, uni);
+  }
+  if (bidi > 0) {
+    SetWebTransportAnticipatedConcurrentIncomingBidirectionalStreams(aSessionId,
+                                                                     bidi);
+  }
 }
 
 // This is called by Http3WebTransportStream::OnReadSegment.
@@ -3206,26 +3239,31 @@ void Http3Session::SendDatagram(Http3WebTransportSession* aSession,
        this, static_cast<uint32_t>(rv), belowHighWaterMark, aSendGroupId,
        aSendOrder));
 
-  // Per spec section 4.3 step 9: if queue is below high water mark,
-  // resolve promise immediately (send OnDatagramReady now).
-  // neqo will also emit a DatagramOutcome event for this datagram once it is
-  // actually sent/dropped, which results in a second, redundant
-  // OnDatagramReady/DatagramReady for the same tracking ID. This is
-  // intentional: the content-process side treats an unknown tracking ID as a
-  // harmless no-op (the promise was already resolved by the first
-  // notification), so we accept the extra IPC round-trip rather than track
-  // per-ID dedup state here.
-  if (aTrackingId && NS_SUCCEEDED(rv) && belowHighWaterMark) {
+  // Settle the write as soon as neqo has accepted or refused the datagram,
+  // whether or not the queue is above its high water mark.  neqo reports no
+  // later outcome for a queued datagram that expires or is evicted, and
+  // Http3Client doesn't forward the ones it does report, so a write left
+  // waiting for one would never settle, and content would stop writing once
+  // outgoingMaxBufferedDatagrams of them were outstanding.
+  //
+  // This knowingly departs from writeDatagrams
+  // (https://w3c.github.io/webtransport/#writedatagrams), which holds a write
+  // made while the send queue is full until queued datagrams are dequeued;
+  // bug 1818883 restores backpressure by pacing writes against neqo's queue
+  // capacity.
+  if (aTrackingId && NS_SUCCEEDED(rv)) {
     aSession->OnOutgoingDatagramOutCome(
         aTrackingId, WebTransportSessionEventListener::DatagramOutcome::SENT);
   }
 
-  // Only report immediate failures if queuing itself failed.
   if (aTrackingId && NS_FAILED(rv)) {
     WebTransportSessionEventListener::DatagramOutcome outcome;
     if (rv == NS_ERROR_NOT_AVAILABLE) {
       outcome = WebTransportSessionEventListener::DatagramOutcome::
           DROPPED_TOO_MUCH_DATA;
+    } else if (rv == NS_BASE_STREAM_WOULD_BLOCK) {
+      outcome =
+          WebTransportSessionEventListener::DatagramOutcome::DROPPED_QUEUE_FULL;
     } else {
       outcome = WebTransportSessionEventListener::DatagramOutcome::UNKNOWN;
     }
@@ -3277,6 +3315,39 @@ nsresult Http3Session::GetWebTransportSessionProtocol(uint64_t aSessionId,
   return mHttp3Connection->GetWebTransportSessionProtocol(aSessionId,
                                                           aProtocol);
 }
+
+void Http3Session::
+    SetWebTransportAnticipatedConcurrentIncomingUnidirectionalStreams(
+        uint64_t aSessionId, uint16_t aValue) {
+  LOG(
+      ("Http3Session::SetWebTransportAnticipatedConcurrentIncoming"
+       "UnidirectionalStreams %p sessionId=0x%" PRIx64 " value=%u",
+       this, aSessionId, aValue));
+  nsresult rv =
+      mHttp3Connection
+          ->SetWebTransportAnticipatedConcurrentIncomingUnidirectionalStreams(
+              aSessionId, aValue);
+  if (NS_FAILED(rv)) {
+    LOG(("  failed, no live WebTransport session for that id"));
+  }
+}
+
+void Http3Session::
+    SetWebTransportAnticipatedConcurrentIncomingBidirectionalStreams(
+        uint64_t aSessionId, uint16_t aValue) {
+  LOG(
+      ("Http3Session::SetWebTransportAnticipatedConcurrentIncoming"
+       "BidirectionalStreams %p sessionId=0x%" PRIx64 " value=%u",
+       this, aSessionId, aValue));
+  nsresult rv =
+      mHttp3Connection
+          ->SetWebTransportAnticipatedConcurrentIncomingBidirectionalStreams(
+              aSessionId, aValue);
+  if (NS_FAILED(rv)) {
+    LOG(("  failed, no live WebTransport session for that id"));
+  }
+}
+
 void Http3Session::SendHTTPDatagram(uint64_t aStreamId,
                                     nsTArray<uint8_t>& aData,
                                     uint64_t aTrackingId) {

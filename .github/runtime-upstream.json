@@ -2,13 +2,13 @@
   "schema_version": 1,
   "upstream": {
     "repository": "mozilla-firefox/firefox",
-    "version": "160.0.1",
+    "version": "161.0",
     "tag": null,
     "tracking_ref": "refs/heads/release",
-    "commit": "b59ea98ffcd5707003e24c773f7a81eaca13a625",
-    "tree": "03286ceb59e870e01862375e02538eb3f88cb90f",
+    "commit": "9c70d5d48c866afc2e581d6b7ff6de98a1371d99",
+    "tree": "2fb72f4dc9e429ee2d51f5879021cf6555a60291",
     "previous_tag": null,
-    "previous_commit": "67d16dfe994bc03dc903466b064974ddecc95afe"
+    "previous_commit": "d4afbfccd4414dac20dd9ba9a82c3a348cd7ab7c"
   },
   "floorp_patch": {
     "repository": "Floorp-Projects/Floorp",
@@ -17,18 +17,18 @@
     "runtime_path": ".github/patches/upstream/macos-app-shim-pwa-input-and-compositor.patch",
     "sha256": "571a545a9cda7d71cd73af766b71e4e00aba0dd50b21c949f95e67b387383dfc",
     "patched_files": {
-      "gfx/webrender_bindings/RenderCompositorNative.cpp": "042a14b15959665041ed55e8acbd890811bf64994525ec39f25f1cc632bc45d5",
+      "gfx/webrender_bindings/RenderCompositorNative.cpp": "0101e4df8347ead06f6f1708c6a338de4eb08a1f1b3a85f4d7497edc330516d2",
       "widget/cocoa/NativeMenuSupport.mm": "a1f724e706bd9366e6d368d5239bca56babeebcdc521f64d879a25895e60d94d",
       "widget/cocoa/appshim/MacWebAppInput.h": "f11f765719eebb0750ef984ad51e94c0c9ae197279a99f75c984548caf40e954",
       "widget/cocoa/appshim/MacWebAppInput.mm": "7fd3d83b6e98f6639caf532950088786db557413383cbcbbc142539a04026593",
       "widget/cocoa/appshim/MacWebAppWidget.h": "9b1df8468cd1cc6bcac75bb2e4439e12e567d775b8a0fb268533d486918927a3",
       "widget/cocoa/appshim/MacWebAppWidget.mm": "ca795ee6418cce8378d3ecc102c3ca833afdec6119e3a7738ef0bfc5383845b5",
       "widget/cocoa/appshim/shim/ShimView.mm": "fb3abdb31c5d91b7b5bac3f3f5c8c44ed5df224cf4607ee7d9d423b4b53d01d6",
-      "widget/cocoa/nsCocoaUtils.h": "71c4ca85bcda46dbf5753b28c40e551923800b2010407f7f1871bf1bdcd7422b",
-      "widget/cocoa/nsCocoaUtils.mm": "209a3ca48b671aeb2f793f85d94fb360216e5c4f78940aa8a7cb7941e52b5943",
-      "widget/nsIWidget.cpp": "e6f1e08400c75c9010606c024372698fc5c705001e165b3ceb452642d8bc11bd",
+      "widget/cocoa/nsCocoaUtils.h": "e5055dd9dbe23c103927f12168f2c0b086bdea9009f8af5eecc83d46346938af",
+      "widget/cocoa/nsCocoaUtils.mm": "a0dee835ddfde49190408e25bd0e34981e33df4c0a5ca13390cb30bc160ad7b0",
+      "widget/nsIWidget.cpp": "39ca22028dc4ec1c8eb770e5f7e179d9bf244e0c92a4b9939ed59e8582258c82",
       "widget/tests/gtest/TestMacWebAppPanGesture.mm": "03de4ce729d8a2ee6b752890eb231904df1246e004dd2d0ede9ddfb55b24a7cb",
-      "widget/tests/gtest/moz.build": "1c5375f808de2269c020f2ab3caa7df5373c246cac2ac57a2629b91fc4cc316f"
+      "widget/tests/gtest/moz.build": "5b221dac9f45e257849bc406e8b7207a8173b6d4c634d9f20f24a8be9f4b6bfe"
     }
   }
 }
