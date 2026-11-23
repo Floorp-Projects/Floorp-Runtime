@@ -1362,8 +1362,7 @@ def acquire(args):
         pull_head = event.get("pull_request", {}).get("head", {}).get("sha")
         require(
             payload.get("head_sha") == pull_head
-            and payload.get("head_commit", {}).get("id")
-            == context["runtimeRecipe"],
+            and payload.get("head_commit", {}).get("id") == pull_head,
             "REST run differs from original same-workflow producer",
         )
     else:
