@@ -1,0 +1,37 @@
+diff --git a/intl/l10n/rust/fluent-ffi/src/bundle.rs b/intl/l10n/rust/fluent-ffi/src/bundle.rs
+--- a/intl/l10n/rust/fluent-ffi/src/bundle.rs
++++ b/intl/l10n/rust/fluent-ffi/src/bundle.rs
+@@ -32,12 +32,22 @@
+     pub value: FluentArgument<'s>,
+ }
+
++fn transform_brand(s: &str) -> Cow<'_, str> {
++    if s.contains("Firefox") || s.contains("Mozilla") {
++        Cow::Owned(s.replace("Firefox", "Floorp").replace("Mozilla", "Ablaze"))
++    } else {
++        Cow::Borrowed(s)
++    }
++}
++
+ fn transform_accented(s: &str) -> Cow<'_, str> {
+-    transform_dom(s, false, true, true)
++    let branded = transform_brand(s);
++    Cow::Owned(transform_dom(&branded, false, true, true).into_owned())
+ }
+
+ fn transform_bidi(s: &str) -> Cow<'_, str> {
+-    transform_dom(s, false, false, false)
++    let branded = transform_brand(s);
++    Cow::Owned(transform_dom(&branded, false, false, false).into_owned())
+ }
+
+ fn format_numbers(num: &FluentValue, intls: &IntlLangMemoizer) -> Option<String> {
+@@ -144,7 +154,7 @@
+     match strategy_kind {
+         PseudoStrategy::Accented => bundle.set_transform(Some(transform_accented)),
+         PseudoStrategy::Bidi => bundle.set_transform(Some(transform_bidi)),
+-        PseudoStrategy::None => bundle.set_transform(None),
++        PseudoStrategy::None => bundle.set_transform(Some(transform_brand)),
+     }
+
+     // Temporarily disable bidi isolation due to Microsoft not supporting FSI/PDI.

@@ -1,0 +1,37 @@
+name: Validate Fluent branding arguments
+on:
+  push:
+    paths:
+      - '.github/patches/upstream/*[Ll]ocal*'
+      - '.github/patches/upstream/fluent-brand-*.patch'
+      - '.github/tests/test_fluent_branding.py'
+      - '.github/tests/fluent_branding_cases.rs'
+      - '.github/workflows/validate-fluent-branding.yml'
+  pull_request:
+    paths:
+      - '.github/patches/upstream/*[Ll]ocal*'
+      - '.github/patches/upstream/fluent-brand-*.patch'
+      - '.github/tests/test_fluent_branding.py'
+      - '.github/tests/fluent_branding_cases.rs'
+      - '.github/workflows/validate-fluent-branding.yml'
+permissions:
+  contents: read
+jobs:
+  resolver:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            intl/l10n/rust/fluent-ffi
+            intl/l10n/test
+      - name: Apply maintained patches and test the actual resolver transforms
+        run: |
+          set -euo pipefail
+          test ! -f .github/patches/upstream/LocalizationCpp.patch
+          test ! -f .github/patches/upstream/localizeFfiLib.patch
+          git apply --check .github/patches/upstream/fluent-brand-text.patch
+          git apply .github/patches/upstream/fluent-brand-text.patch
+          git apply --check .github/patches/upstream/fluent-brand-test.patch
+          python3 .github/tests/test_fluent_branding.py --source intl/l10n/rust/fluent-ffi/src/bundle.rs
