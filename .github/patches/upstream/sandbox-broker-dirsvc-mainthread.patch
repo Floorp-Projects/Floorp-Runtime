@@ -1,0 +1,185 @@
+diff --git a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp
+index da9fc8dbd10..3a7e291df6a 100644
+--- a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp
++++ b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp
+@@ -82,6 +82,42 @@ static const int deny = SandboxBroker::FORCE_DENY;
+ using CacheE = std::pair<nsCString, int>;
+ using FileCacheT = nsTArray<CacheE>;
+ 
++// dirsvc (and therefore NS_GetSpecialDirectory) may only be used on the
++// main thread, but the policies below are built on process-spawn threads.
++// The needed paths are resolved once on the main thread, when the factory
++// is created, and reused afterwards.
++static StaticMutex sSpecialDirMutex;
++static nsCString sGreDirPath;
++static nsCString sProfileDirPath;
++
++static void CacheSpecialDirectories() {
++  MOZ_ASSERT(NS_IsMainThread());
++  nsCOMPtr<nsIFile> dir;
++  if (NS_SUCCEEDED(NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(dir)))) {
++    (void)dir->GetNativePath(sGreDirPath);
++  }
++  if (NS_SUCCEEDED(NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR,
++                                          getter_AddRefs(dir)))) {
++    (void)dir->GetNativePath(sProfileDirPath);
++  }
++}
++
++static nsCString GreDirPath() {
++  StaticMutexAutoLock lock(sSpecialDirMutex);
++  if (sGreDirPath.IsEmpty() && NS_IsMainThread()) {
++    CacheSpecialDirectories();
++  }
++  return sGreDirPath;
++}
++
++static nsCString ProfileDirPath() {
++  StaticMutexAutoLock lock(sSpecialDirMutex);
++  if (sProfileDirPath.IsEmpty() && NS_IsMainThread()) {
++    CacheSpecialDirectories();
++  }
++  return sProfileDirPath;
++}
++
+ static void AddDriPaths(SandboxBroker::Policy* aPolicy) {
+   // Bug 1401666: Mesa driver loader part 2: Mesa <= 12 using libudev
+   // Used by libdrm, which is used by Mesa, and
+@@ -478,6 +514,12 @@ const char* PathFromEnvIfAbsolute(const char* aPath) {
+   return nullptr;
+ }
+ 
++SandboxBrokerPolicyFactory::SandboxBrokerPolicyFactory() {
++  if (NS_IsMainThread()) {
++    CacheSpecialDirectories();
++  }
++}
++
+ void SandboxBrokerPolicyFactory::InitContentPolicy() {
+   const int level = GetEffectiveContentSandboxLevel();
+   const bool headless = level >= 5;
+@@ -689,13 +731,10 @@ void SandboxBrokerPolicyFactory::InitContentPolicy() {
+   // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
+   // system, which may not be the case for some tests. For querying for the
+   // location of XPCOM things, we can use it anyway.
+-  nsCOMPtr<nsIFile> ffDir;
+-  rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(ffDir));
+-  if (NS_SUCCEEDED(rv)) {
+-    nsAutoCString tmpPath;
+-    rv = ffDir->GetNativePath(tmpPath);
+-    if (NS_SUCCEEDED(rv)) {
+-      policy->AddTree(rdonly, tmpPath.get());
++  {
++    nsCString ffPath = GreDirPath();
++    if (!ffPath.IsEmpty()) {
++      policy->AddTree(rdonly, ffPath.get());
+     }
+   }
+ 
+@@ -750,33 +789,12 @@ void SandboxBrokerPolicyFactory::InitContentPolicy() {
+ 
+   // userContent.css and the extensions dir sit in the profile, which is
+   // normally blocked.
+-  nsCOMPtr<nsIFile> profileDir;
+-  rv = NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR,
+-                              getter_AddRefs(profileDir));
+-  if (NS_SUCCEEDED(rv)) {
+-    nsCOMPtr<nsIFile> workDir;
+-    rv = profileDir->Clone(getter_AddRefs(workDir));
+-    if (NS_SUCCEEDED(rv)) {
+-      rv = workDir->AppendNative("chrome"_ns);
+-      if (NS_SUCCEEDED(rv)) {
+-        nsAutoCString tmpPath;
+-        rv = workDir->GetNativePath(tmpPath);
+-        if (NS_SUCCEEDED(rv)) {
+-          policy->AddTree(rdonly, tmpPath.get());
+-        }
+-      }
+-    }
+-    rv = profileDir->Clone(getter_AddRefs(workDir));
+-    if (NS_SUCCEEDED(rv)) {
+-      rv = workDir->AppendNative("extensions"_ns);
+-      if (NS_SUCCEEDED(rv)) {
+-        nsAutoCString tmpPath;
+-        rv = workDir->GetNativePath(tmpPath);
+-        if (NS_SUCCEEDED(rv)) {
+-          policy->AddFutureDir(rdonly, tmpPath.get());
+-        }
+-      }
+-    }
++  nsCString profilePath = ProfileDirPath();
++  if (!profilePath.IsEmpty()) {
++    nsCString chromePath = profilePath + "/chrome"_ns;
++    policy->AddTree(rdonly, chromePath.get());
++    nsCString extensionsPath = profilePath + "/extensions"_ns;
++    policy->AddFutureDir(rdonly, extensionsPath.get());
+   }
+ 
+   bool allowPulse = false;
+@@ -1033,13 +1051,10 @@ SandboxBrokerPolicyFactory::GetRDDPolicy(int aPid) {
+   // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
+   // system, which may not be the case for some tests. For querying for the
+   // location of XPCOM things, we can use it anyway.
+-  nsCOMPtr<nsIFile> ffDir;
+-  nsresult rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(ffDir));
+-  if (NS_SUCCEEDED(rv)) {
+-    nsAutoCString tmpPath;
+-    rv = ffDir->GetNativePath(tmpPath);
+-    if (NS_SUCCEEDED(rv)) {
+-      policy->AddTree(rdonly, tmpPath.get());
++  {
++    nsCString ffPath = GreDirPath();
++    if (!ffPath.IsEmpty()) {
++      policy->AddTree(rdonly, ffPath.get());
+     }
+   }
+ 
+@@ -1159,13 +1174,10 @@ SandboxBrokerPolicyFactory::GetUtilityProcessPolicy(int aPid) {
+   // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
+   // system, which may not be the case for some tests. For querying for the
+   // location of XPCOM things, we can use it anyway.
+-  nsCOMPtr<nsIFile> ffDir;
+-  nsresult rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(ffDir));
+-  if (NS_SUCCEEDED(rv)) {
+-    nsAutoCString tmpPath;
+-    rv = ffDir->GetNativePath(tmpPath);
+-    if (NS_SUCCEEDED(rv)) {
+-      policy->AddTree(rdonly, tmpPath.get());
++  {
++    nsCString ffPath = GreDirPath();
++    if (!ffPath.IsEmpty()) {
++      policy->AddTree(rdonly, ffPath.get());
+     }
+   }
+ 
+@@ -1215,13 +1227,10 @@ SandboxBrokerPolicyFactory::GetHWInferencePolicy(int aPid) {
+   // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
+   // system, which may not be the case for some tests. For querying for the
+   // location of XPCOM things, we can use it anyway.
+-  nsCOMPtr<nsIFile> ffDir;
+-  nsresult rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(ffDir));
+-  if (NS_SUCCEEDED(rv)) {
+-    nsAutoCString tmpPath;
+-    rv = ffDir->GetNativePath(tmpPath);
+-    if (NS_SUCCEEDED(rv)) {
+-      policy->AddTree(rdonly, tmpPath.get());
++  {
++    nsCString ffPath = GreDirPath();
++    if (!ffPath.IsEmpty()) {
++      policy->AddTree(rdonly, ffPath.get());
+     }
+   }
+ 
+diff --git a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h
+index 381fe123953..25f5a56f861 100644
+--- a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h
++++ b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h
+@@ -13,7 +13,7 @@ namespace mozilla {
+ 
+ class SandboxBrokerPolicyFactory {
+  public:
+-  SandboxBrokerPolicyFactory() = default;
++  SandboxBrokerPolicyFactory();
+ 
+   UniquePtr<SandboxBroker::Policy> GetContentPolicy(int aPid,
+                                                     bool aFileProcess);
