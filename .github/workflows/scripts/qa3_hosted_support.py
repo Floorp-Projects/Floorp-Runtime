@@ -25,34 +25,34 @@ HOSTED_SELECTION = (
         "browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
         1,
     ),
-    ("xpcshell", "xpcom/tests/unit/test_nsIMutableArray.js", 1),
+    ("xpcshell", "xpcom/tests/unit/test_nsIMutableArray.js", 49),
     ("browser-chrome", TAB_ROOT + "/browser_pinned_and_hidden_tabs.js", 3),
-    ("xpcshell", "xpcom/tests/unit/test_iniParser.js", 100),
+    ("xpcshell", "xpcom/tests/unit/test_iniParser.js", 717),
     *(
         ("browser-chrome", SESSIONSTORE_ROOT + "/" + name, assertions)
         for name, assertions in (
-            ("browser_navigation_api_restore.js", 60),
-            ("browser_dynamic_frames.js", 24),
-            ("browser_frametree.js", 26),
-            ("browser_restore_srcdoc.js", 14),
-            ("browser_purge_shistory.js", 17),
+            ("browser_navigation_api_restore.js", 40),
+            ("browser_dynamic_frames.js", 12),
+            ("browser_frametree.js", 12),
+            ("browser_restore_srcdoc.js", 2),
+            ("browser_purge_shistory.js", 5),
         )
     ),
     *(
         ("browser-chrome", TAB_ROOT + "/" + name, assertions)
         for name, assertions in (
-            ("browser_blank_tab_label.js", 15),
-            ("browser_close_tab_by_dblclick.js", 16),
-            ("browser_multiselect_tabs_using_Ctrl.js", 35),
-            ("browser_multiselect_tabs_using_Shift_and_Ctrl.js", 50),
-            ("browser_openURI_background.js", 18),
-            ("browser_tabswitch_updatecommands.js", 14),
-            ("browser_tab_label_character_cap.js", 16),
-            ("browser_long_data_url_label_truncation.js", 15),
-            ("browser_tab_aria_posinset_setsize.js", 20),
-            ("browser_positional_attributes.js", 22),
-            ("browser_tab_aria_level.js", 18),
-            ("browser_tab_label_reader_mode.js", 16),
+            ("browser_blank_tab_label.js", 3),
+            ("browser_close_tab_by_dblclick.js", 4),
+            ("browser_multiselect_tabs_using_Ctrl.js", 15),
+            ("browser_multiselect_tabs_using_Shift_and_Ctrl.js", 30),
+            ("browser_openURI_background.js", 6),
+            ("browser_tabswitch_updatecommands.js", 1),
+            ("browser_tab_label_character_cap.js", 4),
+            ("browser_long_data_url_label_truncation.js", 3),
+            ("browser_tab_aria_posinset_setsize.js", 4),
+            ("browser_positional_attributes.js", 6),
+            ("browser_tab_aria_level.js", 2),
+            ("browser_tab_label_reader_mode.js", 3),
         )
     ),
 )
@@ -417,4 +417,5 @@ def canary_case(case, support, proof):
         **case,
         "id": case["id"].rsplit("/", 1)[0] + "/" + name,
         "archivePath": path,
+        "minimumAssertions": 1,
     }

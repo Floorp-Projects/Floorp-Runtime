@@ -1650,7 +1650,7 @@ class OriginalConsumerEvidence(unittest.TestCase):
                     "rawLog": {"path": "logs/" + raw_path.name, **identity},
                     "mozlog": verify_mozlog(
                         raw_path,
-                        case,
+                        dict(case, minimumAssertions=1) if canary else case,
                         self.support,
                         command,
                         canary=canary,
@@ -1675,7 +1675,9 @@ class OriginalConsumerEvidence(unittest.TestCase):
         with mock.patch.object(
             hosted, "verify_support", return_value=self.plan
         ), mock.patch.object(
-            hosted, "canary_case", side_effect=lambda case, *_: case
+            hosted,
+            "canary_case",
+            side_effect=lambda case, *_: dict(case, minimumAssertions=1),
         ), mock.patch.object(hosted, "worker_boot_identity", return_value="d" * 64):
             return hosted.verify_consumer(
                 self.root, self.support, producer(), context()

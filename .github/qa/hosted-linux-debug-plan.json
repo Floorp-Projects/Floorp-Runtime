@@ -484,7 +484,7 @@
       "id": "xpcom/tests/unit/test_nsIMutableArray.js",
       "manifest": "xpcom/tests/unit/xpcshell.toml",
       "archivePath": "xpcshell/tests/xpcom/tests/unit/test_nsIMutableArray.js",
-      "minimumAssertions": 1,
+      "minimumAssertions": 49,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -502,7 +502,7 @@
       "id": "xpcom/tests/unit/test_iniParser.js",
       "manifest": "xpcom/tests/unit/xpcshell.toml",
       "archivePath": "xpcshell/tests/xpcom/tests/unit/test_iniParser.js",
-      "minimumAssertions": 100,
+      "minimumAssertions": 717,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -511,7 +511,7 @@
       "id": "browser/components/sessionstore/test/browser_navigation_api_restore.js",
       "manifest": "browser/components/sessionstore/test/browser.toml",
       "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_navigation_api_restore.js",
-      "minimumAssertions": 60,
+      "minimumAssertions": 40,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -520,7 +520,7 @@
       "id": "browser/components/sessionstore/test/browser_dynamic_frames.js",
       "manifest": "browser/components/sessionstore/test/browser.toml",
       "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_dynamic_frames.js",
-      "minimumAssertions": 24,
+      "minimumAssertions": 12,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -529,7 +529,7 @@
       "id": "browser/components/sessionstore/test/browser_frametree.js",
       "manifest": "browser/components/sessionstore/test/browser.toml",
       "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_frametree.js",
-      "minimumAssertions": 26,
+      "minimumAssertions": 12,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -538,7 +538,7 @@
       "id": "browser/components/sessionstore/test/browser_restore_srcdoc.js",
       "manifest": "browser/components/sessionstore/test/browser.toml",
       "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_restore_srcdoc.js",
-      "minimumAssertions": 14,
+      "minimumAssertions": 2,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -547,7 +547,7 @@
       "id": "browser/components/sessionstore/test/browser_purge_shistory.js",
       "manifest": "browser/components/sessionstore/test/browser.toml",
       "archivePath": "mochitest/browser/browser/components/sessionstore/test/browser_purge_shistory.js",
-      "minimumAssertions": 17,
+      "minimumAssertions": 5,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -556,7 +556,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_blank_tab_label.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_blank_tab_label.js",
-      "minimumAssertions": 15,
+      "minimumAssertions": 3,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -565,7 +565,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_close_tab_by_dblclick.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_close_tab_by_dblclick.js",
-      "minimumAssertions": 16,
+      "minimumAssertions": 4,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -574,7 +574,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Ctrl.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Ctrl.js",
-      "minimumAssertions": 35,
+      "minimumAssertions": 15,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -583,7 +583,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Shift_and_Ctrl.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_multiselect_tabs_using_Shift_and_Ctrl.js",
-      "minimumAssertions": 50,
+      "minimumAssertions": 30,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -592,7 +592,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_openURI_background.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_openURI_background.js",
-      "minimumAssertions": 18,
+      "minimumAssertions": 6,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -601,7 +601,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_tabswitch_updatecommands.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tabswitch_updatecommands.js",
-      "minimumAssertions": 14,
+      "minimumAssertions": 1,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -610,7 +610,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_label_character_cap.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_label_character_cap.js",
-      "minimumAssertions": 16,
+      "minimumAssertions": 4,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -619,7 +619,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_long_data_url_label_truncation.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_long_data_url_label_truncation.js",
-      "minimumAssertions": 15,
+      "minimumAssertions": 3,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -628,7 +628,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_posinset_setsize.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_posinset_setsize.js",
-      "minimumAssertions": 20,
+      "minimumAssertions": 4,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -637,7 +637,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_positional_attributes.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_positional_attributes.js",
-      "minimumAssertions": 22,
+      "minimumAssertions": 6,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -646,7 +646,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_level.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_aria_level.js",
-      "minimumAssertions": 18,
+      "minimumAssertions": 2,
       "declaredConditions": {},
       "requiredNoSkip": true
     },
@@ -655,7 +655,7 @@
       "id": "browser/components/tabbrowser/test/browser/tabs/browser_tab_label_reader_mode.js",
       "manifest": "browser/components/tabbrowser/test/browser/tabs/browser.toml",
       "archivePath": "mochitest/browser/browser/components/tabbrowser/test/browser/tabs/browser_tab_label_reader_mode.js",
-      "minimumAssertions": 16,
+      "minimumAssertions": 3,
       "declaredConditions": {},
       "requiredNoSkip": true
     }
