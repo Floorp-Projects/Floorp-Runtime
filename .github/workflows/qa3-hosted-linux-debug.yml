@@ -8,6 +8,7 @@ name: QA3 Hosted Debug to Cold Consumer
     branches: [codex/qa3-actions-native-proof-qa337-17]
   pull_request:
     branches: [nora-0.2.0]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
