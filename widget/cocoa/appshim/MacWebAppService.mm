@@ -469,7 +469,7 @@ struct MacWebAppService::Impl {
 
 NS_IMPL_ISUPPORTS(MacWebAppService, nsIMacWebAppService, nsIObserver)
 
-MacWebAppService::MacWebAppService() : mImpl(MakeUnique<Impl>(this)) {}
+MacWebAppService::MacWebAppService() : mImpl(std::make_unique<Impl>(this)) {}
 MacWebAppService::~MacWebAppService() = default;
 
 already_AddRefed<MacWebAppService> MacWebAppService::GetSingleton() {
