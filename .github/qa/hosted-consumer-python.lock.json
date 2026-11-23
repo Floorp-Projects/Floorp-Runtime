@@ -2,10 +2,10 @@
   "publicationAuthorized": false,
   "pythonABI": "cp312",
   "readiness": "INPUTS_LOCKED_NOT_TARGET_QUALIFIED",
-  "requirementsSha256": "39c1b7080fed5a691a5eeae7cb2009564e433ed84058dd7886df18547eb57f1d",
-  "runtimeBaseline": "056a4b545dab5ce047a82d035d5cc16f7a1908ca",
+  "requirementsSha256": "b480f00b91cde1866779f79bc09ce833b0d931afd44ab1137fd3a8e2ba8ca935",
+  "runtimeBaseline": "43845085c5071b8efe6ff7443f8f0b00d051ef85",
   "schema": "qa3-hosted-consumer-python-lock-v1",
-  "seedSha256": "e084ba7bb4b62a0581266319bfefd7f671bdeb3e39e7f7149de9657cb97a718c",
+  "seedSha256": "5e9159d4b0e9d099125bf0b12bae9577f8da096f484ddd2a5d0ed5c334f103c9",
   "target": "x86_64-pc-linux-gnu",
   "wheels": [
     {
@@ -44,153 +44,153 @@
       "url": "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl"
     },
     {
-      "bytes": 39518,
+      "bytes": 39907,
       "filename": "manifestparser-2.4.0-py3-none-any.whl",
-      "sha256": "8e9d334909941fb1505ba933be4fe0a81f592c7648340c020d2bc89a28dd8e73",
+      "sha256": "546847afa496612d9c6b9ce9311c7455a741cf44f481c117426f13988fedb3d5",
       "source": "source-wheels/manifestparser-2.4.0-py3-none-any.whl"
     },
     {
-      "bytes": 54516,
+      "bytes": 54778,
       "filename": "marionette_driver-3.7.1-py3-none-any.whl",
-      "sha256": "cb8edf0cca22fd73f06be2914dfb0d9113dbe29ab392bee51f7ceccf9e724f78",
+      "sha256": "a30730af9b3ebcb63236009a14baa9c562222ba29981a79b31e382af8964dfec",
       "source": "source-wheels/marionette_driver-3.7.1-py3-none-any.whl"
     },
     {
-      "bytes": 12034,
+      "bytes": 12055,
       "filename": "mozcrash-2.2.1-py2.py3-none-any.whl",
-      "sha256": "f678a9521077889db07b9aa268f2612d67eaeb1d98bece28dae66619c7a3256f",
+      "sha256": "98acd4e88beafa778d0fe160330c9ed35d29841b953f24e0cfa1757bfa11f44b",
       "source": "source-wheels/mozcrash-2.2.1-py2.py3-none-any.whl"
     },
     {
-      "bytes": 6518,
+      "bytes": 6460,
       "filename": "mozdebug-0.4.0-py2.py3-none-any.whl",
-      "sha256": "77d8862cf0665f3909f044d8bc4c61d402961d25ed854e3af84d03397869f0a2",
+      "sha256": "6518ee542a17183c626742db4c783f0a03e15db561caa8ffe8bb98cd614e171d",
       "source": "source-wheels/mozdebug-0.4.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 48887,
+      "bytes": 49256,
       "filename": "mozdevice-4.2.0-py2.py3-none-any.whl",
-      "sha256": "bda364ee147ba73a2f5ec90147d44927bc2973550d2cb89325701261a2e4e700",
+      "sha256": "317a97e7e9998b6a6a0a2721b1ff51b29de875e5069f5e828e252505cc0168e8",
       "source": "source-wheels/mozdevice-4.2.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 9672,
+      "bytes": 9607,
       "filename": "mozfile-3.0.0-py2.py3-none-any.whl",
-      "sha256": "5a906ee4507028f677c59447b6000bf690e547cf45ffb0c176321f4b1339bbee",
+      "sha256": "971ff75afff8822894d85ca63c60e2832738fe517ccf4e8f5b27394d3a35a29c",
       "source": "source-wheels/mozfile-3.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 18312,
+      "bytes": 9257,
       "filename": "mozgeckoprofiler-1.0.0-py3-none-any.whl",
-      "sha256": "760684018dfda0da3eb4e8f64d164c88056d53eab12f773e22bb279e421c7af9",
+      "sha256": "2e73d4ee0b4a9979999fab5b97dab0fae737539e81c5cf9392f0663229054f55",
       "source": "source-wheels/mozgeckoprofiler-1.0.0-py3-none-any.whl"
     },
     {
-      "bytes": 7188,
+      "bytes": 7124,
       "filename": "mozhttpd-0.7.1-py3-none-any.whl",
-      "sha256": "4340cc8ecd494b31e4fe8ca4e65788d33b7f7fd5f7a5314bc825ff25eb92d0a2",
+      "sha256": "25975e88fcfe4ee957d3448883c38a86b009aeb2c1f7cf399efb001ffcd6e625",
       "source": "source-wheels/mozhttpd-0.7.1-py3-none-any.whl"
     },
     {
-      "bytes": 10364,
+      "bytes": 10255,
       "filename": "mozinfo-1.2.3-py2.py3-none-any.whl",
-      "sha256": "ec5ef275c66b489839d3bf3b922efad676dab6414a342756b0b3a68128216021",
+      "sha256": "6ddf12bc805de0668827684551a4fff2af27908c5fc47c78e163a525a6463d8e",
       "source": "source-wheels/mozinfo-1.2.3-py2.py3-none-any.whl"
     },
     {
-      "bytes": 7869,
-      "filename": "mozinstall-2.1.0-py2.py3-none-any.whl",
-      "sha256": "79f7bf678a9eff67cd0acd36b4581052cd4bf040c69c39bbb3e1770dbdf5be6b",
-      "source": "source-wheels/mozinstall-2.1.0-py2.py3-none-any.whl"
+      "bytes": 8432,
+      "filename": "mozInstall-2.1.0-py2.py3-none-any.whl",
+      "sha256": "df38c1eb9c5e5886804689f555a627a2f2a3b4c4ca3e059b63c96dec321760b1",
+      "source": "source-wheels/mozInstall-2.1.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 8009,
+      "bytes": 7953,
       "filename": "mozleak-2.0.0-py2.py3-none-any.whl",
-      "sha256": "d701f0baf426ed501dbabf42fbd3d8b94f4394f6d0995636189e82b426a4d489",
+      "sha256": "78c32d14dd276a2b36f8e0568481b924122214f160360af17c22d47dc0458524",
       "source": "source-wheels/mozleak-2.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 74967,
+      "bytes": 76218,
       "filename": "mozlog-9.0.0-py2.py3-none-any.whl",
-      "sha256": "1112a09be2b3f5067f2baa0fdac0b62c03b813cf6ea9b3f157b7fbfb92456c42",
+      "sha256": "35edaf6f5f69a08ad5d8b39b954b199ab1de44dd94c620fedb7ccf8390b62168",
       "source": "source-wheels/mozlog-9.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 4563,
+      "bytes": 4502,
       "filename": "moznetwork-1.1.0-py3-none-any.whl",
-      "sha256": "91b54f6d7cd7cadbed145f696f6d5904d855733e7a2ecaf009438fb5c9ba1300",
+      "sha256": "4c7a4276348e8d6245791b6333c04375e8b7781c9cc61dda54b2aeae37597a87",
       "source": "source-wheels/moznetwork-1.1.0-py3-none-any.whl"
     },
     {
-      "bytes": 17757,
+      "bytes": 17693,
       "filename": "mozpower-1.1.2-py2.py3-none-any.whl",
-      "sha256": "54185f5ba57731fab5a73cc0d1d98339d231e8a0e3ebd678bab1e437646a0cd4",
+      "sha256": "9dd55024a4b18fea87f9aef265ac040eab03f8e57a19322dd8644ce9017bb8c6",
       "source": "source-wheels/mozpower-1.1.2-py2.py3-none-any.whl"
     },
     {
-      "bytes": 24095,
+      "bytes": 24032,
       "filename": "mozprocess-1.4.0-py2.py3-none-any.whl",
-      "sha256": "349b1981bfad5dfb39badb28cf84cd9913537c0a5e7b47f02ed787f03acd263d",
+      "sha256": "8aab062a3cf1e83d50990bd09af932955f04d91fe0e81b5642eac206148d0039",
       "source": "source-wheels/mozprocess-1.4.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 22078,
+      "bytes": 22011,
       "filename": "mozprofile-3.0.0-py2.py3-none-any.whl",
-      "sha256": "c316637b6385dc107046a5947ecce3bad889fc0c83278838c0870691958fd938",
+      "sha256": "fcffd304b5b80aef1c4e9df3b1497cec7efb45f39315dcd948a25c15bfa6f4f0",
       "source": "source-wheels/mozprofile-3.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 53042,
+      "bytes": 53879,
       "filename": "mozproxy-1.0-py3-none-any.whl",
-      "sha256": "23d1db5545f2fe80510c38f5a43993d160da76e65244144558e0fdd5223ac318",
+      "sha256": "4c4c2e85ff7a912c83b90e0ade9131188ee67c54f2ef3df67618cca0fccdf221",
       "source": "source-wheels/mozproxy-1.0-py3-none-any.whl"
     },
     {
-      "bytes": 47339,
+      "bytes": 47500,
       "filename": "mozrunner-8.4.0-py2.py3-none-any.whl",
-      "sha256": "41f3b20436ab685aedfa20d740fef18a547e5484cc3f2ee0a74214ac9ed7f216",
+      "sha256": "bf4674954ca013dcdf92c330f0148adf05d76260d7f3c571368e3958fe2f044b",
       "source": "source-wheels/mozrunner-8.4.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 3307,
+      "bytes": 3245,
       "filename": "mozscreenshot-1.0.0-py2.py3-none-any.whl",
-      "sha256": "fdd2c0dcd5ad4474ec2159e66c6883ca7bc87c3f2c249bb2cdacbeaa06744e9b",
+      "sha256": "36be00b166ba3b7f770a1a9c127c2c9a77d8aea484d1388ec23229cb631abc56",
       "source": "source-wheels/mozscreenshot-1.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 4613,
+      "bytes": 4304,
       "filename": "mozserve-0.1-py3-none-any.whl",
-      "sha256": "345440b32b8f7062c71478a270a461e9a7673a2933b2f8b87a4384d6d228224b",
+      "sha256": "22c47d2ca18e567f5e24bf1ee56e7d2ba026ca05612de6be8f7daac729389168",
       "source": "source-wheels/mozserve-0.1-py3-none-any.whl"
     },
     {
-      "bytes": 4135,
+      "bytes": 4077,
       "filename": "mozshellutil-1.0.0-py2.py3-none-any.whl",
-      "sha256": "38d8d4a014187fb42052ffed85ccdf60b1136f3d6d153cf77da72620a525a8f0",
+      "sha256": "b8d8f0b8dc330e5e8d7a2321c4d5286acbae460eefa5e14841e3902dfe90ca5d",
       "source": "source-wheels/mozshellutil-1.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 27859,
+      "bytes": 30367,
       "filename": "mozsystemmonitor-1.0.1-py2.py3-none-any.whl",
-      "sha256": "8b6bf9421451e6ee8d3c6943d6904293e5abe816a5c32b8ebf62770b12587ac9",
+      "sha256": "ef382399c47029469d688fa969bff389a59d5438b3bbcf411774556be97afabf",
       "source": "source-wheels/mozsystemmonitor-1.0.1-py2.py3-none-any.whl"
     },
     {
-      "bytes": 2299,
+      "bytes": 2265,
       "filename": "mozterm-1.0.0-py2.py3-none-any.whl",
-      "sha256": "ab067baca38672044442d72215a9ea4a080c8480feb3d5892e6373e45108aff8",
+      "sha256": "a9d2bab95e3ab9bf16034b42bdb5d40005bdaca2aa41406cba7ba6917696ac3a",
       "source": "source-wheels/mozterm-1.0.0-py2.py3-none-any.whl"
     },
     {
-      "bytes": 24250,
+      "bytes": 30467,
       "filename": "moztest-1.1.0-py3-none-any.whl",
-      "sha256": "7070b857d012d413563a803c4576fdd8173060e8ac10670ec67ca116f9def651",
+      "sha256": "a20d08740f18856d72853bb9805977a57ee571ce3dd299623d3369a69bfa3eb1",
       "source": "source-wheels/moztest-1.1.0-py3-none-any.whl"
     },
     {
-      "bytes": 4304,
+      "bytes": 4240,
       "filename": "mozversion-2.4.0-py2.py3-none-any.whl",
-      "sha256": "d8479683d6999283637efc20b9562aa23695d3842fc7b1738405d44a55a5b9b5",
+      "sha256": "744939d15d0e1ce692d4b4d1292cad331ce8dba8c5bf40319d8efe96c1710255",
       "source": "source-wheels/mozversion-2.4.0-py2.py3-none-any.whl"
     },
     {

@@ -5,6 +5,7 @@
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import platform
@@ -16,7 +17,7 @@ import sys
 import urllib.parse
 import urllib.request
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qa3_hosted_support import (
@@ -54,7 +55,7 @@ REPOSITORY = "Floorp-Projects/Floorp-Runtime"
 BRANCH = "codex/qa3-actions-native-proof-qa337-17"
 WORKFLOW = ".github/workflows/qa3-hosted-linux-debug.yml"
 PROFILE = "github-hosted-debug-to-blacksmith-consumer"
-SEED_SHA = "e084ba7bb4b62a0581266319bfefd7f671bdeb3e39e7f7149de9657cb97a718c"
+SEED_SHA = "5e9159d4b0e9d099125bf0b12bae9577f8da096f484ddd2a5d0ed5c334f103c9"
 MAX_TRANSFER = 20 * GIB
 MAX_ARTIFACT_STORAGE = 40 * GIB
 WRAPPER_FILES = {"runtime.tar.xz", "test-support.tar.gz", "producer.json"}
@@ -110,6 +111,9 @@ def validate_mode(platform_name, arch, debug, pgo, mode=""):
 
 
 def context_from_environment(build_id):
+    if os.environ.get("RUNTIME_NATIVE_DEBUG_ARTIFACTS") == "true":
+        from runtime_native_debug import context_from_environment as normal_context
+        return normal_context(build_id)
     require(re.fullmatch(r"[0-9]{14}", build_id), "invalid BuildID")
     sha = hash_value(os.environ["GITHUB_SHA"], 40)
     require(
@@ -143,6 +147,9 @@ def context_from_environment(build_id):
 
 
 def validate_context(value):
+    if value.get("profile") in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
+        from runtime_native_debug import validate_context as normal_validate
+        return normal_validate(value)
     require(
         set(value)
         == {
@@ -276,6 +283,68 @@ def source_stamp_environment(source, context):
     return values
 
 
+def read_seed_metadata(raw):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, "duplicate seed JSON key")
+            result[key] = value
+        return result
+    return json.loads(raw, object_pairs_hook=unique)
+
+
+def verify_seed_archive(path, lock):
+    require(not path.is_symlink() and path.is_file(), "seed is not a regular file")
+    raw = path.read_bytes()
+    require(len(raw) <= 8 * 1024**2 and hashlib.sha256(raw).hexdigest() == lock["seedSha256"], "seed pin mismatch")
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        entries = archive.infolist()
+        names = [entry.filename for entry in entries]
+        require(0 < len(names) <= 256 and len(set(names)) == len(names), "duplicate or excessive seed entries")
+        require(len({name.casefold() for name in names}) == len(names), "case-alias seed entries")
+        for entry in entries:
+            name = entry.filename
+            require(name and not name.startswith("/") and "\\" not in name and ":" not in name and all(part not in ("", ".", "..") for part in name.split("/")), "unsafe seed entry path")
+            require(not entry.is_dir() and stat.S_ISREG(entry.external_attr >> 16) and not entry.flag_bits & 1, "nonregular or encrypted seed entry")
+        require(sum(entry.file_size for entry in entries) <= 16 * 1024**2, "oversized seed payload")
+        data = {name: archive.read(name) for name in names}
+    digest = lambda value: hashlib.sha256(value).hexdigest()
+    manifest = read_seed_metadata(data["manifest.json"])
+    rows = manifest["payloads"]
+    require(manifest["schema"] == "qa335-static-seed-manifest-v1" and manifest["publicationAuthorized"] is False, "seed manifest schema")
+    require(len(rows) == len({row["path"] for row in rows}) and {row["path"] for row in rows} == set(names) - {"manifest.json"}, "seed manifest inventory mismatch")
+    for row in rows:
+        payload = data[row["path"]]
+        require(type(row["bytes"]) is int and row["bytes"] == len(payload) and row["sha256"] == digest(payload), "seed payload digest mismatch")
+    inputs = read_seed_metadata(data["inputs.json"])
+    require(inputs["runtimeBaseline"] == lock["runtimeBaseline"] and re.fullmatch(r"[0-9a-f]{40}", inputs["runtimeBaseline"]), "seed runtime provenance mismatch")
+    require(inputs["schema"] == "qa335-static-preparation-seed-v1" and inputs["publicationAuthorized"] is False, "seed inputs schema")
+    source = read_seed_metadata(data["reference/source-wheels.provenance.json"])
+    marionette = read_seed_metadata(data["reference/marionette-source-wheel.provenance.json"])
+    require(source["runtimeSource"] == marionette["runtime"] == inputs["runtimeBaseline"] and all(row["runtimeSource"] == inputs["runtimeBaseline"] for row in source["packages"]), "source provenance identity mismatch")
+    source_names = {name for name in names if name.startswith("source-wheels/")}
+    require(inputs["sourceWheels"]["count"] == len(source_names) and inputs["sourceWheels"]["bytes"] == sum(len(data[name]) for name in source_names), "source wheel aggregate mismatch")
+    profiles = inputs["profiles"]
+    require(len(profiles) == len({p["profile"] for p in profiles}) and {p["profile"] for p in profiles} == {"build", "taskgraph", "consumer"}, "seed profile inventory mismatch")
+    for profile in profiles:
+        requirements = data["profiles/" + profile["profile"] + "/requirements.lock"]
+        require(profile["requirementsSha256"] == digest(requirements), "seed requirements hash mismatch")
+        wheels = profile["wheels"]
+        require(len(wheels) == len({w["filename"] for w in wheels}), "duplicate profile wheel")
+        require(set(re.findall(r"--hash=sha256:([0-9a-f]{64})", requirements.decode())) == {w["sha256"] for w in wheels}, "profile requirement wheel mismatch")
+        for wheel in wheels:
+            if wheel["source"].startswith("source-wheels/"):
+                require(wheel["source"] in source_names and PurePosixPath(wheel["source"]).name == wheel["filename"], "source wheel filename mismatch")
+                payload = data[wheel["source"]]
+                require(wheel["bytes"] == len(payload) and wheel["sha256"] == digest(payload), "source wheel digest mismatch")
+        if profile["profile"] == "consumer":
+            require(profile["requirementsSha256"] == lock["requirementsSha256"], "consumer requirements lock mismatch")
+            fields = ("filename", "bytes", "sha256", "source")
+            require([{k: w[k] for k in fields} for w in wheels] == [{k: w[k] for k in fields} for w in lock["wheels"]], "consumer wheel lock mismatch")
+            require({w["source"] for w in wheels if w["source"].startswith("source-wheels/")} == source_names, "unbound source wheel")
+    return {"entries": len(names), "sourceWheels": len(source_names), "sha256": digest(raw)}
+
+
 def python_inputs(source, runtime, destination):
     lock = read_json(source / ".github/qa/hosted-consumer-python.lock.json")
     seed = source / ".github/qa/hosted-consumer-seed.zip"
@@ -297,6 +366,7 @@ def python_inputs(source, runtime, destination):
     )
     fresh(destination)
     (destination / "wheelhouse").mkdir()
+    verify_seed_archive(seed, lock)
     with zipfile.ZipFile(seed) as z:
         provenance = [
             read_seed_json(z, "reference/source-wheels.provenance.json"),
@@ -406,6 +476,10 @@ def verify_compiled_source(value, pin, runtime):
 
 
 def verify_recipe_metadata(recipe, value):
+    if value.get("context", {}).get("profile") in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
+        from runtime_native_debug import assertion_source_identity
+        require(value.get("assertionSourceSha256") == assertion_source_identity(recipe, working_tree=False),
+                "assertion source differs from trusted Runtime recipe")
     require(
         read_json(recipe / ".github/runtime-upstream.json") == value["runtimeUpstream"]
         and read_json(recipe / ".github/qa/source-policy.json") == value["sourcePolicy"]
@@ -667,7 +741,17 @@ def run_diagnosed(argv, cwd, env, logs, name, timeout, **kwargs):
         raise
 
 
+def verify_source_patch_policy(source):
+    policy = read_json(source / ".github/qa/source-policy.json")
+    for field, directory in (("commonPatches", "upstream"), ("debugPatches", "debug")):
+        verify_patches(source, policy[field], ".github/patches/" + directory)
+    return policy
+
+
 def packaging_preflight(args):
+    verify_seed_archive(args.source / ".github/qa/hosted-consumer-seed.zip",
+                        read_json(args.source / ".github/qa/hosted-consumer-python.lock.json"))
+    verify_source_patch_policy(args.source)
     context = context_from_environment(args.build_id)
     env = producer_environment(args.source, args.objdir, context["buildID"])
     env.update(source_stamp_environment(args.source, context))
@@ -1103,9 +1187,7 @@ def produce(args):
     source_record = read_json(args.primary / "runtime-source-provenance.json")
     upstream = read_json(args.source / ".github/runtime-upstream.json")
     verify_compiled_source(source_record, upstream, context["runtimeRecipe"])
-    policy = read_json(args.source / ".github/qa/source-policy.json")
-    for field, directory in (("commonPatches", "upstream"), ("debugPatches", "debug")):
-        verify_patches(args.source, policy[field], ".github/patches/" + directory)
+    policy = verify_source_patch_policy(args.source)
     changes = raw_git(
         args.source, "diff", "--binary", "HEAD", "--", ".", ":(exclude).github"
     )
@@ -1146,6 +1228,11 @@ def produce(args):
         "publicationAuthorized": False,
         "artifactStorageBudget": artifact_storage_budget(args.primary, output),
     }
+    if context["profile"] in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
+        from runtime_native_debug import verify_product_profile
+        receipt["productProfile"] = verify_product_profile(args.source)
+        from runtime_native_debug import assertion_source_identity
+        receipt["assertionSourceSha256"] = assertion_source_identity(args.source)
     verify_support(support, receipt)
     write_json(output / "producer.json", receipt)
     require(
@@ -1171,6 +1258,12 @@ def validate_producer(value, context):
         and value.get("publicationAuthorized") is False,
         "foreign or incomplete producer",
     )
+    if context["profile"] in {"runtime-native-debug-artifact-v2", "runtime-native-debug-validation-v2"}:
+        from runtime_native_debug import PRODUCT_PROFILE
+        require(value.get("productProfile") == PRODUCT_PROFILE, "native product profile mismatch")
+        from runtime_native_debug import ASSERTION_SOURCE_FILES
+        require(set(value.get("assertionSourceSha256", {})) == set(ASSERTION_SOURCE_FILES), "missing assertion source identity")
+        for digest in value["assertionSourceSha256"].values(): hash_value(digest)
     hash_value(value["bootSha256"])
     require(
         value["bootSha256"] != worker_boot_identity(), "consumer reused producer boot"
