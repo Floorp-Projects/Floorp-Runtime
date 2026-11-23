@@ -195,6 +195,13 @@ class SourceCohortTests(unittest.TestCase):
                 "path": path.relative_to(self.root).as_posix(),
                 "sha256": file_digest(path),
             })
+        new_patch = directory / "build-moz.configure-update-programs.configure.patch"
+        new_patch.write_text("new production helper trust patch fixture\n")
+        common.append({
+            "path": new_patch.relative_to(self.root).as_posix(),
+            "sha256": file_digest(new_patch),
+        })
+        common.sort(key=lambda entry: entry["path"].encode())
         debug = list(self.patches)
         for number in range(2):
             path = self.patch_dir / f"extra-{number}.patch"
@@ -247,6 +254,17 @@ class SourceCohortTests(unittest.TestCase):
             ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True
         ).strip()
         self.assertIs(preflight(self.root, head)["publicationAuthorized"], False)
+        # The added trust patch is part of this exact cohort: neither omission
+        # nor changed bytes can pass the same inventory policy.
+        original = new_patch.read_bytes()
+        new_patch.unlink()
+        with self.assertRaises(ValueError):
+            verify_patches(self.root, common, ".github/patches/upstream")
+        new_patch.write_bytes(original + b"modified\n")
+        with self.assertRaises(ValueError):
+            verify_patches(self.root, common, ".github/patches/upstream")
+        new_patch.write_bytes(original)
+        verify_patches(self.root, common, ".github/patches/upstream")
         for name in ("untracked-input", "ignored-input"):
             path = self.root / ".github" / name
             path.write_text("undeclared recipe\n")
