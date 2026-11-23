@@ -60,6 +60,9 @@ MAX_EXPORT = 128 * 1024**2
 MAX_NETWORK_JSON = 16384
 FALLBACK_TUNNELS = {
     "tunl0": ("ipip", "ipip"),
+    "gre0": ("gre", "gre"),
+    "gretap0": ("gretap", "ether"),
+    "erspan0": ("erspan", "ether"),
     "sit0": ("sit", "sit"),
     "ip6tnl0": ("ip6tnl", "tunnel6"),
     "ip6gre0": ("ip6gre", "gre6"),
@@ -225,7 +228,7 @@ def network_checks(value, interfaces):
         require(
             isinstance(links, list)
             and isinstance(addresses, list)
-            and 1 <= len(links) <= 5
+            and 1 <= len(links) <= 1 + len(FALLBACK_TUNNELS)
             and len(addresses) == len(links)
             and all(isinstance(row, dict) for row in [*links, *addresses]),
             "invalid network inventory",
