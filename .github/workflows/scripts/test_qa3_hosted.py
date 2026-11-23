@@ -784,10 +784,12 @@ class HostedContracts(unittest.TestCase):
 
         # Preserve the shared function signature available in PR84, before QA334.
         def original_transport(
-            ctx, artifact_id, kind, digest, destination, opener=None, budget=None
+            ctx, artifact_id, kind, digest, destination, opener=None, budget=None,
+            head_sha=None,
         ):
             self.assertEqual(ctx, context())
             self.assertEqual((artifact_id, kind, digest), (12, "support", DIGEST))
+            self.assertIsNone(head_sha)
             raise TransferReached
 
         payload = {

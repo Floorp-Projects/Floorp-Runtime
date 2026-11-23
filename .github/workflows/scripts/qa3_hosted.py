@@ -1357,6 +1357,7 @@ def acquire(args):
         workflow_run_id=str(context["run"]),
         github_token=os.environ["GITHUB_TOKEN"],
     )
+    head_sha = None
     if os.environ["GITHUB_EVENT_NAME"] == "pull_request":
         event = read_json(Path(os.environ["GITHUB_EVENT_PATH"]))
         pull_head = event.get("pull_request", {}).get("head", {}).get("sha")
@@ -1365,6 +1366,7 @@ def acquire(args):
             and payload.get("head_commit", {}).get("id") == pull_head,
             "REST run differs from original same-workflow producer",
         )
+        head_sha = pull_head
     else:
         require(
             payload.get("head_sha") == context["runtimeRecipe"],
@@ -1395,6 +1397,7 @@ def acquire(args):
         "support",
         args.artifact_sha256,
         archive,
+        head_sha=head_sha,
     )
     destination = fresh(args.output / "inputs")
     unpack_wrapper(archive, destination)

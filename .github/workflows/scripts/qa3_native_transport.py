@@ -116,7 +116,7 @@ def request_json(url, token, opener=None):
     return dict(parse_rest_json(data))
 
 
-def verify_artifact_metadata(metadata, context, artifact_id, kind, digest):
+def verify_artifact_metadata(metadata, context, artifact_id, kind, digest, head_sha=None):
     hash_value(digest)
     if (
         type(artifact_id) is not int
@@ -138,14 +138,15 @@ def verify_artifact_metadata(metadata, context, artifact_id, kind, digest):
     subject = metadata.get("workflow_run", {})
     if (
         subject.get("id") != context["run"]
-        or subject.get("head_sha") != context["controllerHead"]
+        or subject.get("head_sha") != (head_sha or context["controllerHead"])
     ):
         raise ValueError("artifact producer run or controller mismatch")
     return size
 
 
 def download_artifact(
-    context, artifact_id, kind, digest, destination, opener=None, budget=None
+    context, artifact_id, kind, digest, destination, opener=None, budget=None,
+    head_sha=None,
 ):
     if (
         type(artifact_id) is not int
@@ -159,7 +160,9 @@ def download_artifact(
     active = opener or urllib.request.build_opener(NoRedirect())
     endpoint = API + f"/repos/{repo}/actions/artifacts/{artifact_id}"
     metadata = request_json(endpoint, token, active)
-    size = verify_artifact_metadata(metadata, context, artifact_id, kind, digest)
+    size = verify_artifact_metadata(
+        metadata, context, artifact_id, kind, digest, head_sha=head_sha
+    )
     request = urllib.request.Request(
         endpoint + "/zip",
         headers={
