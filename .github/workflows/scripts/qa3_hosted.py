@@ -110,6 +110,9 @@ def validate_mode(platform_name, arch, debug, pgo, mode=""):
 
 
 def context_from_environment(build_id):
+    if os.environ.get("RUNTIME_NATIVE_DEBUG_ARTIFACTS") == "true":
+        from runtime_native_debug import context_from_environment as normal_context
+        return normal_context(build_id)
     require(re.fullmatch(r"[0-9]{14}", build_id), "invalid BuildID")
     sha = hash_value(os.environ["GITHUB_SHA"], 40)
     require(
@@ -143,6 +146,9 @@ def context_from_environment(build_id):
 
 
 def validate_context(value):
+    if value.get("profile") in {"runtime-native-debug-artifact-v1", "runtime-native-debug-validation-v1"}:
+        from runtime_native_debug import validate_context as normal_validate
+        return normal_validate(value)
     require(
         set(value)
         == {
@@ -1146,6 +1152,9 @@ def produce(args):
         "publicationAuthorized": False,
         "artifactStorageBudget": artifact_storage_budget(args.primary, output),
     }
+    if context["profile"] in {"runtime-native-debug-artifact-v1", "runtime-native-debug-validation-v1"}:
+        from runtime_native_debug import verify_product_profile
+        receipt["productProfile"] = verify_product_profile(args.source)
     verify_support(support, receipt)
     write_json(output / "producer.json", receipt)
     require(
@@ -1171,6 +1180,9 @@ def validate_producer(value, context):
         and value.get("publicationAuthorized") is False,
         "foreign or incomplete producer",
     )
+    if context["profile"] in {"runtime-native-debug-artifact-v1", "runtime-native-debug-validation-v1"}:
+        from runtime_native_debug import PRODUCT_PROFILE
+        require(value.get("productProfile") == PRODUCT_PROFILE, "native product profile mismatch")
     hash_value(value["bootSha256"])
     require(
         value["bootSha256"] != worker_boot_identity(), "consumer reused producer boot"
