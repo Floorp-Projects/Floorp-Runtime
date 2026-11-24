@@ -55,7 +55,7 @@ REPOSITORY = "Floorp-Projects/Floorp-Runtime"
 BRANCH = "codex/qa3-actions-native-proof-qa337-17"
 WORKFLOW = ".github/workflows/qa3-hosted-linux-debug.yml"
 PROFILE = "github-hosted-debug-to-blacksmith-consumer"
-SEED_SHA = "5e9159d4b0e9d099125bf0b12bae9577f8da096f484ddd2a5d0ed5c334f103c9"
+SEED_SHA = "cf6f37e4071638188140153c044cbbe250824885fc9a410e4e1f82929c9bc7b7"
 MAX_TRANSFER = 20 * GIB
 MAX_ARTIFACT_STORAGE = 40 * GIB
 WRAPPER_FILES = {"runtime.tar.xz", "test-support.tar.gz", "producer.json"}
@@ -118,19 +118,32 @@ def context_from_environment(build_id):
     sha = hash_value(os.environ["GITHUB_SHA"], 40)
     require(
         os.environ.get("GITHUB_REPOSITORY") == REPOSITORY
-        and os.environ.get("GITHUB_EVENT_NAME") == "push"
-        and os.environ.get("GITHUB_REF") == "refs/heads/" + BRANCH
         and os.environ.get("GITHUB_RUN_ATTEMPT") == "1"
         and os.environ.get("GITHUB_WORKFLOW_SHA") == sha
         and os.environ.get("GITHUB_WORKFLOW_REF")
-        == REPOSITORY + "/" + WORKFLOW + "@refs/heads/" + BRANCH,
+        == REPOSITORY + "/" + WORKFLOW + "@" + os.environ["GITHUB_REF"],
         "foreign hosted workflow, source, branch or attempt",
     )
     event = read_json(Path(os.environ["GITHUB_EVENT_PATH"]))
-    require(
-        event.get("created") is True and event.get("deleted") is False,
-        "proof is limited to first branch creation",
-    )
+    event_name = os.environ.get("GITHUB_EVENT_NAME")
+    if event_name == "push":
+        require(
+            os.environ.get("GITHUB_REF") == "refs/heads/" + BRANCH
+            and event.get("created") is True
+            and event.get("deleted") is False,
+            "proof is limited to first branch creation",
+        )
+    else:
+        require(
+            event_name == "pull_request"
+            and re.fullmatch(
+                r"refs/pull/[1-9][0-9]*/(merge|head)",
+                os.environ.get("GITHUB_REF", ""),
+            )
+            and event.get("action")
+            in {"opened", "synchronize", "reopened", "ready_for_review"},
+            "foreign hosted event or pull_request action",
+        )
     run = os.environ["GITHUB_RUN_ID"]
     require(re.fullmatch(r"[1-9][0-9]*", run), "invalid run")
     return {
@@ -1344,13 +1357,32 @@ def acquire(args):
         workflow_run_id=str(context["run"]),
         github_token=os.environ["GITHUB_TOKEN"],
     )
+    head_sha = None
+    if os.environ["GITHUB_EVENT_NAME"] == "pull_request":
+        event = read_json(Path(os.environ["GITHUB_EVENT_PATH"]))
+        pull_head = event.get("pull_request", {}).get("head", {}).get("sha")
+        require(
+            payload.get("head_sha") == pull_head
+            and payload.get("head_commit", {}).get("id") == pull_head,
+            "REST run differs from original same-workflow producer",
+        )
+        head_sha = pull_head
+    else:
+        require(
+            payload.get("head_sha") == context["runtimeRecipe"],
+            "REST run differs from original same-workflow producer",
+        )
     require(
         payload.get("id") == context["run"]
-        and payload.get("head_sha") == context["runtimeRecipe"]
         and payload.get("run_attempt") == 1
-        and payload.get("event") == "push"
+        and payload.get("event") == os.environ["GITHUB_EVENT_NAME"]
         and payload.get("path") == WORKFLOW
-        and payload.get("head_branch") == BRANCH,
+        and payload.get("head_branch")
+        == (
+            os.environ["GITHUB_HEAD_REF"]
+            if os.environ["GITHUB_EVENT_NAME"] == "pull_request"
+            else BRANCH
+        ),
         "REST run differs from original same-workflow producer",
     )
     require(
@@ -1365,6 +1397,7 @@ def acquire(args):
         "support",
         args.artifact_sha256,
         archive,
+        head_sha=head_sha,
     )
     destination = fresh(args.output / "inputs")
     unpack_wrapper(archive, destination)

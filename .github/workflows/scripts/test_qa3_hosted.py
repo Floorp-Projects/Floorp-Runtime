@@ -48,8 +48,7 @@ PHASES = [
     "native-0-assertion-canary",
     "native-1-required",
     "native-1-assertion-canary",
-    "native-2-required",
-    "native-3-required",
+    *[f"native-{index}-required" for index in range(2, 21)],
 ]
 
 
@@ -785,10 +784,12 @@ class HostedContracts(unittest.TestCase):
 
         # Preserve the shared function signature available in PR84, before QA334.
         def original_transport(
-            ctx, artifact_id, kind, digest, destination, opener=None, budget=None
+            ctx, artifact_id, kind, digest, destination, opener=None, budget=None,
+            head_sha=None,
         ):
             self.assertEqual(ctx, context())
             self.assertEqual((artifact_id, kind, digest), (12, "support", DIGEST))
+            self.assertIsNone(head_sha)
             raise TransferReached
 
         payload = {
@@ -1649,7 +1650,7 @@ class OriginalConsumerEvidence(unittest.TestCase):
                     "rawLog": {"path": "logs/" + raw_path.name, **identity},
                     "mozlog": verify_mozlog(
                         raw_path,
-                        case,
+                        dict(case, minimumAssertions=1) if canary else case,
                         self.support,
                         command,
                         canary=canary,
@@ -1674,7 +1675,9 @@ class OriginalConsumerEvidence(unittest.TestCase):
         with mock.patch.object(
             hosted, "verify_support", return_value=self.plan
         ), mock.patch.object(
-            hosted, "canary_case", side_effect=lambda case, *_: case
+            hosted,
+            "canary_case",
+            side_effect=lambda case, *_: dict(case, minimumAssertions=1),
         ), mock.patch.object(hosted, "worker_boot_identity", return_value="d" * 64):
             return hosted.verify_consumer(
                 self.root, self.support, producer(), context()
@@ -1867,7 +1870,7 @@ class OriginalConsumerEvidence(unittest.TestCase):
         with mock.patch.object(boundary, "protected", side_effect=lambda p: p):
             rows = boundary.export_after_stop(campaign, False, context())
         self.assertIn("logs/native-3-required.mozlog", {row["path"] for row in rows})
-        self.assertEqual(len(rows), 33)
+        self.assertEqual(len(rows), 101)
         shutil.rmtree(campaign / "export")
         (output / "untrusted-output").write_text("not a permitted native receipt")
         with mock.patch.object(
@@ -2573,6 +2576,7 @@ class HostedMozbaseArchiveShape(unittest.TestCase):
             "testing/mozbase/moz.build",
             "testing/mozbase/setup_development.py",
             "browser/base/content/test/browser-performance/browser.toml",
+            "browser/components/sessionstore/test/browser.toml",
             "browser/components/tabbrowser/test/browser/tabs/browser.toml",
             "xpcom/tests/unit/xpcshell.toml",
         }

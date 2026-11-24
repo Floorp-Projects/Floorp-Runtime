@@ -6,6 +6,9 @@ name: QA3 Hosted Debug to Cold Consumer
 "on":
   push:
     branches: [codex/qa3-actions-native-proof-qa337-17]
+  pull_request:
+    branches: [nora-0.2.0]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -15,12 +18,14 @@ jobs:
   contracts:
     if: >-
       github.repository == 'Floorp-Projects/Floorp-Runtime' &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/codex/qa3-actions-native-proof-qa337-17'
+      ((github.event_name == 'push' &&
+        github.ref == 'refs/heads/codex/qa3-actions-native-proof-qa337-17') ||
+       github.event_name == 'pull_request')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Reject updates, deletion and reruns
+        if: github.event_name == 'push'
         run: |
           python3.12 - <<'PY'
           import json, os
@@ -37,6 +42,7 @@ jobs:
           sparse-checkout: |
             /.github/**
             /browser/base/content/test/browser-performance/browser.toml
+            /browser/components/sessionstore/test/browser.toml
             /browser/components/tabbrowser/test/browser/tabs/browser.toml
             /xpcom/tests/unit/xpcshell.toml
             /testing/mozbase/moz.build

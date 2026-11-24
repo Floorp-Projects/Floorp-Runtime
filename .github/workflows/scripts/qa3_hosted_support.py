@@ -18,15 +18,43 @@ from qa3_source_cohort import file_digest, hash_value
 
 PLAN_PATH = ".github/qa/hosted-linux-debug-plan.json"
 TAB_ROOT = "browser/components/tabbrowser/test/browser/tabs"
+SESSIONSTORE_ROOT = "browser/components/sessionstore/test"
 HOSTED_SELECTION = (
     (
         "browser-chrome",
         "browser/base/content/test/browser-performance/browser_hiddenwindow_existence.js",
         1,
     ),
-    ("xpcshell", "xpcom/tests/unit/test_nsIMutableArray.js", 1),
+    ("xpcshell", "xpcom/tests/unit/test_nsIMutableArray.js", 49),
     ("browser-chrome", TAB_ROOT + "/browser_pinned_and_hidden_tabs.js", 3),
-    ("xpcshell", "xpcom/tests/unit/test_iniParser.js", 100),
+    ("xpcshell", "xpcom/tests/unit/test_iniParser.js", 717),
+    *(
+        ("browser-chrome", SESSIONSTORE_ROOT + "/" + name, assertions)
+        for name, assertions in (
+            ("browser_navigation_api_restore.js", 40),
+            ("browser_dynamic_frames.js", 12),
+            ("browser_frametree.js", 12),
+            ("browser_restore_srcdoc.js", 2),
+            ("browser_purge_shistory.js", 5),
+        )
+    ),
+    *(
+        ("browser-chrome", TAB_ROOT + "/" + name, assertions)
+        for name, assertions in (
+            ("browser_blank_tab_label.js", 3),
+            ("browser_close_tab_by_dblclick.js", 4),
+            ("browser_multiselect_tabs_using_Ctrl.js", 15),
+            ("browser_multiselect_tabs_using_Shift_and_Ctrl.js", 30),
+            ("browser_openURI_background.js", 6),
+            ("browser_tabswitch_updatecommands.js", 1),
+            ("browser_tab_label_character_cap.js", 4),
+            ("browser_long_data_url_label_truncation.js", 3),
+            ("browser_tab_aria_posinset_setsize.js", 4),
+            ("browser_positional_attributes.js", 6),
+            ("browser_tab_aria_level.js", 2),
+            ("browser_tab_label_reader_mode.js", 3),
+        )
+    ),
 )
 
 
@@ -64,8 +92,7 @@ def native_schedule(plan):
             (0, True),
             (1, False),
             (1, True),
-            (2, False),
-            (3, False),
+            *((index, False) for index in range(2, len(selection))),
         )
     )
 
@@ -81,6 +108,45 @@ def extra_packaged_materials():
         "file_about_srcdoc.html",
         "file_reader_mode_article.html",
     )
+    sessionstore = (
+        "browser.toml",
+        "head.js",
+        "browser_formdata_format_sample.html",
+        "browser_formdata_sample.html",
+        "browser_formdata_xpath_sample.html",
+        "browser_frame_history_a.html",
+        "browser_frame_history_b.html",
+        "browser_frame_history_c.html",
+        "browser_frame_history_c1.html",
+        "browser_frame_history_c2.html",
+        "browser_frame_history_index.html",
+        "browser_frame_history_index2.html",
+        "browser_frame_history_index_blank.html",
+        "browser_frametree_sample.html",
+        "browser_frametree_sample_frameset.html",
+        "browser_frametree_sample_iframes.html",
+        "browser_policy_container_sample.html",
+        "browser_policy_container_sample_frame.html",
+        "browser_scrollPositions_readerModeArticle.html",
+        "browser_scrollPositions_sample.html",
+        "browser_scrollPositions_sample2.html",
+        "browser_scrollPositions_sample_frameset.html",
+        "browser_sessionHistory_slow.sjs",
+        "browser_sessionStorage.html",
+        "browser_speculative_connect.html",
+        "coopHeaderCommon.sjs",
+        "coop_coep.html",
+        "coop_coep.html^headers^",
+        "empty.html",
+        "empty_frame.html",
+        "entry1.html",
+        "entry2.html",
+        "entry3.html",
+        "restore_redirect_http.html",
+        "restore_redirect_http.html^headers^",
+        "restore_redirect_js.html",
+        "restore_redirect_target.html",
+    )
     ini = (
         *(f"iniparser{index:02}.ini" for index in range(1, 18)),
         *(f"iniparser{index:02}-utf8BOM.ini" for index in range(1, 17)),
@@ -89,6 +155,13 @@ def extra_packaged_materials():
         *(
             (TAB_ROOT + "/" + name, "mochitest/browser/" + TAB_ROOT + "/" + name)
             for name in tabs
+        ),
+        *(
+            (
+                SESSIONSTORE_ROOT + "/" + name,
+                "mochitest/browser/" + SESSIONSTORE_ROOT + "/" + name,
+            )
+            for name in sessionstore
         ),
         (
             "browser/components/tabbrowser/test/TabGroupTestUtils.sys.mjs",
@@ -344,4 +417,5 @@ def canary_case(case, support, proof):
         **case,
         "id": case["id"].rsplit("/", 1)[0] + "/" + name,
         "archivePath": path,
+        "minimumAssertions": 1,
     }
