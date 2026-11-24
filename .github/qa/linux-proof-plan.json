@@ -10,11 +10,11 @@
     },
     {
       "path": "browser/base/content/test/browser-performance/browser.toml",
-      "sha256": "56624db4dc6ba79d2e944ee85fba181d248fe82e4368a7e10f2820adfffce96d"
+      "sha256": "f5660f7add0f9a55121c3f5b5f79cf457f6dd76bcf150b8aeb9906ca10b7e639"
     },
     {
       "path": "browser/base/content/test/browser-performance/head.js",
-      "sha256": "83692c6ab4cb6dede35eb9497924d6d387cb38d083c6457145cca283fed0af81"
+      "sha256": "1ff3ce994e16eed38a8f10f28cd35056c6afb591b8bf4896c8cd1b89b892c480"
     },
     {
       "path": "xpcom/tests/unit/test_nsIMutableArray.js",
@@ -22,7 +22,7 @@
     },
     {
       "path": "xpcom/tests/unit/xpcshell.toml",
-      "sha256": "8c8b3a801d7dde873b26d79ea60a925ef224991d65cac4ab8d420b89ee5dd909"
+      "sha256": "d832951e54c511b237bed6fa7379689478e49c481a8e81bd00ff2896a59b5643"
     },
     {
       "path": "xpcom/tests/unit/head_xpcom.js",
@@ -38,7 +38,7 @@
     },
     {
       "path": "testing/mochitest/runtests.py",
-      "sha256": "e49ee0292aeb5e5aa58f62fd6d25906802b30e28abe5313b91142cd5d79ab203"
+      "sha256": "ef64091aa96e0a9020fcd2748591202d434f5a0ac3e3b7e009b2cab2cfa665ce"
     },
     {
       "path": "testing/mochitest/mochitest_options.py",
@@ -46,7 +46,7 @@
     },
     {
       "path": "testing/xpcshell/runxpcshelltests.py",
-      "sha256": "9ee02f854eabd1684ef9e3f400b5ce373f4b6086bd1ad5c5e53baecb8afa887b"
+      "sha256": "10914185bf99c34073bef9fda68a2c2adc16f5b3e576dada2e96c5481fecdd57"
     },
     {
       "path": "testing/xpcshell/xpcshellcommandline.py",
@@ -66,7 +66,7 @@
     },
     {
       "path": "xpcom/geckoprocesstypes_generator/geckoprocesstypes/__init__.py",
-      "sha256": "cff1552b15589f162be4af7adf46bb2a58526ac268740ec8debddb53bbeae6f2"
+      "sha256": "bbe5bf93cffa23fe0c2677dada5171dcf30c7af6ecf79c84e56a7919d106b210"
     },
     {
       "path": "testing/mozbase/moz.build",
