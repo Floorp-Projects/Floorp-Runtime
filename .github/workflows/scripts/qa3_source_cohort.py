@@ -448,7 +448,7 @@ def preflight(root, expected_runtime):
         or policy["schemaVersion"] != 1
     ):
         raise ValueError("unsupported source comparison policy")
-    if len(policy["commonPatches"]) != 29 or len(policy["debugPatches"]) != 3:
+    if len(policy["commonPatches"]) != 31 or len(policy["debugPatches"]) != 3:
         raise ValueError("reduced Runtime patch policy")
     verify_patches(root, policy["commonPatches"], ".github/patches/upstream")
     verify_patches(root, policy["debugPatches"], ".github/patches/debug")

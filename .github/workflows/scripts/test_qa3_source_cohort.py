@@ -188,7 +188,7 @@ class SourceCohortTests(unittest.TestCase):
         common = []
         directory = self.root / ".github/patches/upstream"
         directory.mkdir()
-        for number in range(28):
+        for number in range(30):
             path = directory / f"{number:02}.patch"
             path.write_text(f"common fixture {number}\n")
             common.append({
