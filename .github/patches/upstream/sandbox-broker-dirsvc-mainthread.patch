@@ -1,8 +1,8 @@
 diff --git a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp
-index da9fc8dbd10..3a7e291df6a 100644
+index da9fc8d..83c3b71 100644
 --- a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp
 +++ b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.cpp
-@@ -82,6 +82,42 @@ static const int deny = SandboxBroker::FORCE_DENY;
+@@ -82,6 +82,49 @@ static const int deny = SandboxBroker::FORCE_DENY;
  using CacheE = std::pair<nsCString, int>;
  using FileCacheT = nsTArray<CacheE>;
  
@@ -11,41 +11,48 @@ index da9fc8dbd10..3a7e291df6a 100644
 +// The needed paths are resolved once on the main thread, when the factory
 +// is created, and reused afterwards.
 +static StaticMutex sSpecialDirMutex;
-+static nsCString sGreDirPath;
-+static nsCString sProfileDirPath;
++static char sGreDirPath[4096];
++static char sProfileDirPath[4096];
++
++static void CachePath(nsIFile* aDir, char* aOut, size_t aOutSize) {
++  nsAutoCString path;
++  if (NS_SUCCEEDED(aDir->GetNativePath(path)) && path.Length() < aOutSize) {
++    memcpy(aOut, path.get(), path.Length() + 1);
++  }
++}
 +
 +static void CacheSpecialDirectories() {
 +  MOZ_ASSERT(NS_IsMainThread());
 +  nsCOMPtr<nsIFile> dir;
 +  if (NS_SUCCEEDED(NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(dir)))) {
-+    (void)dir->GetNativePath(sGreDirPath);
++    CachePath(dir, sGreDirPath, sizeof(sGreDirPath));
 +  }
 +  if (NS_SUCCEEDED(NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR,
 +                                          getter_AddRefs(dir)))) {
-+    (void)dir->GetNativePath(sProfileDirPath);
++    CachePath(dir, sProfileDirPath, sizeof(sProfileDirPath));
 +  }
 +}
 +
 +static nsCString GreDirPath() {
 +  StaticMutexAutoLock lock(sSpecialDirMutex);
-+  if (sGreDirPath.IsEmpty() && NS_IsMainThread()) {
++  if (sGreDirPath[0] == '\0' && NS_IsMainThread()) {
 +    CacheSpecialDirectories();
 +  }
-+  return sGreDirPath;
++  return nsCString(sGreDirPath);
 +}
 +
 +static nsCString ProfileDirPath() {
 +  StaticMutexAutoLock lock(sSpecialDirMutex);
-+  if (sProfileDirPath.IsEmpty() && NS_IsMainThread()) {
++  if (sProfileDirPath[0] == '\0' && NS_IsMainThread()) {
 +    CacheSpecialDirectories();
 +  }
-+  return sProfileDirPath;
++  return nsCString(sProfileDirPath);
 +}
 +
  static void AddDriPaths(SandboxBroker::Policy* aPolicy) {
    // Bug 1401666: Mesa driver loader part 2: Mesa <= 12 using libudev
    // Used by libdrm, which is used by Mesa, and
-@@ -478,6 +514,12 @@ const char* PathFromEnvIfAbsolute(const char* aPath) {
+@@ -478,6 +521,12 @@ const char* PathFromEnvIfAbsolute(const char* aPath) {
    return nullptr;
  }
  
@@ -58,7 +65,7 @@ index da9fc8dbd10..3a7e291df6a 100644
  void SandboxBrokerPolicyFactory::InitContentPolicy() {
    const int level = GetEffectiveContentSandboxLevel();
    const bool headless = level >= 5;
-@@ -689,13 +731,10 @@ void SandboxBrokerPolicyFactory::InitContentPolicy() {
+@@ -689,13 +738,10 @@ void SandboxBrokerPolicyFactory::InitContentPolicy() {
    // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
    // system, which may not be the case for some tests. For querying for the
    // location of XPCOM things, we can use it anyway.
@@ -76,7 +83,7 @@ index da9fc8dbd10..3a7e291df6a 100644
      }
    }
  
-@@ -750,33 +789,12 @@ void SandboxBrokerPolicyFactory::InitContentPolicy() {
+@@ -750,33 +796,12 @@ void SandboxBrokerPolicyFactory::InitContentPolicy() {
  
    // userContent.css and the extensions dir sit in the profile, which is
    // normally blocked.
@@ -116,7 +123,7 @@ index da9fc8dbd10..3a7e291df6a 100644
    }
  
    bool allowPulse = false;
-@@ -1033,13 +1051,10 @@ SandboxBrokerPolicyFactory::GetRDDPolicy(int aPid) {
+@@ -1033,13 +1058,10 @@ SandboxBrokerPolicyFactory::GetRDDPolicy(int aPid) {
    // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
    // system, which may not be the case for some tests. For querying for the
    // location of XPCOM things, we can use it anyway.
@@ -134,7 +141,7 @@ index da9fc8dbd10..3a7e291df6a 100644
      }
    }
  
-@@ -1159,13 +1174,10 @@ SandboxBrokerPolicyFactory::GetUtilityProcessPolicy(int aPid) {
+@@ -1159,13 +1181,10 @@ SandboxBrokerPolicyFactory::GetUtilityProcessPolicy(int aPid) {
    // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
    // system, which may not be the case for some tests. For querying for the
    // location of XPCOM things, we can use it anyway.
@@ -152,7 +159,7 @@ index da9fc8dbd10..3a7e291df6a 100644
      }
    }
  
-@@ -1215,13 +1227,10 @@ SandboxBrokerPolicyFactory::GetHWInferencePolicy(int aPid) {
+@@ -1215,13 +1234,10 @@ SandboxBrokerPolicyFactory::GetHWInferencePolicy(int aPid) {
    // instead of GetSpecialSystemDirectory. The former requires a working XPCOM
    // system, which may not be the case for some tests. For querying for the
    // location of XPCOM things, we can use it anyway.
@@ -171,7 +178,7 @@ index da9fc8dbd10..3a7e291df6a 100644
    }
  
 diff --git a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h
-index 381fe123953..25f5a56f861 100644
+index 381fe12..25f5a56 100644
 --- a/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h
 +++ b/security/sandbox/linux/broker/SandboxBrokerPolicyFactory.h
 @@ -13,7 +13,7 @@ namespace mozilla {

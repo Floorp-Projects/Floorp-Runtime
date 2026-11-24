@@ -48,7 +48,7 @@
   },
   {
    "path": ".github/patches/upstream/macos-app-shim-pwa-input-and-compositor.patch",
-   "sha256": "571a545a9cda7d71cd73af766b71e4e00aba0dd50b21c949f95e67b387383dfc"
+   "sha256": "fa96b4837799ae355cd6f7e712d26d389502f30ccc535f7d9fcca27d7ac4dffd"
   },
   {
    "path": ".github/patches/upstream/moz.build.patch",
@@ -80,7 +80,7 @@
   },
   {
    "path": ".github/patches/upstream/sandbox-broker-dirsvc-mainthread.patch",
-   "sha256": "e1cbd706cf3517f80f2acdf29cd80579146510879620ee084aa4bcef6d693dbc"
+   "sha256": "e887336c0487c795c93a6262886c6d566ad8a25cf67b9b6a2989cf887b223a40"
   },
   {
    "path": ".github/patches/upstream/toolkit-crashreporter-google-breakpad-.gitignore.patch",
