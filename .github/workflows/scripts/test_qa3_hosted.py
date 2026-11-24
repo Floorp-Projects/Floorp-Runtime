@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -892,7 +893,7 @@ class HostedContracts(unittest.TestCase):
     def test_existing_build_steps_and_default_route_are_preserved(self):
         current = (SOURCE / ".github/workflows/common-build.yml").read_text()
         current = current.replace(
-            "          retention-days: ${{ inputs.qa3-debug-tests && 1 || 0 }}\n", ""
+            "          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}\n", ""
         )
 
         def steps(text):
@@ -2515,6 +2516,13 @@ class HostedBootstrapPrerequisites(unittest.TestCase):
 
     def test_bootstrap_metadata_failure_prevents_decoder_and_build(self):
         with tempfile.TemporaryDirectory() as directory:
+            seed_dir = Path(directory) / ".github/qa"
+            seed_dir.mkdir(parents=True)
+            for name in ("hosted-consumer-seed.zip", "hosted-consumer-python.lock.json", "source-policy.json"):
+                (seed_dir / name).write_bytes((SOURCE / ".github/qa" / name).read_bytes())
+            for directory_name in ("upstream", "debug"):
+                shutil.copytree(SOURCE / ".github/patches" / directory_name,
+                                Path(directory) / ".github/patches" / directory_name)
             args = SimpleNamespace(
                 source=Path(directory),
                 objdir=Path(directory) / "obj",

@@ -1,8 +1,8 @@
 diff --git a/toolkit/mozapps/update/UpdateService.sys.mjs b/toolkit/mozapps/update/UpdateService.sys.mjs
-index 61a7a589cf..daa6e02a6b 100644
+index 61a7a589cf..c4c74407ea938257160781ca0aaf74fc2cfff76e 100644
 --- a/toolkit/mozapps/update/UpdateService.sys.mjs
 +++ b/toolkit/mozapps/update/UpdateService.sys.mjs
-@@ -16,6 +16,21 @@ import {
+@@ -16,6 +16,26 @@ import {
  import { FileUtils } from "resource://gre/modules/FileUtils.sys.mjs";
  import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
  
@@ -12,7 +12,12 @@ index 61a7a589cf..daa6e02a6b 100644
 + * * (add version2 for updating source without rebuilding binary)
 + * * START
 + */
-+import { NoranekoConstants } from "resource://noraneko/modules/NoranekoConstants.sys.mjs"
++let NoranekoConstants = null;
++try {
++  ({ NoranekoConstants } = ChromeUtils.importESModule(
++    "resource://noraneko/modules/NoranekoConstants.sys.mjs"
++  ));
++} catch {}
 +/**
 + * * NORANEKO PATCH - 0.1.0
 + * * [UPDATER]
@@ -24,7 +29,7 @@ index 61a7a589cf..daa6e02a6b 100644
  const lazy = {};
  
  ChromeUtils.defineESModuleGetters(lazy, {
-@@ -1935,15 +1950,150 @@ function pingStateAndStatusCodes(aUpdate, aStartup, aStatus) {
+@@ -1935,15 +1955,150 @@ function pingStateAndStatusCodes(aUpdate, aStartup, aStatus) {
    AUSTLMY.pingStateCode(suffix, stateCode);
  }
  
@@ -176,7 +181,7 @@ index 61a7a589cf..daa6e02a6b 100644
    return (
      versionComparison < 0 ||
      (versionComparison == 0 && update.buildID == buildID)
-@@ -1959,6 +2109,19 @@ function updateIsAtLeastAsOldAsCurrentVersion(update) {
+@@ -1959,6 +2114,19 @@ function updateIsAtLeastAsOldAsCurrentVersion(update) {
      update,
      Services.appinfo.version,
      Services.appinfo.appBuildID
@@ -186,8 +191,8 @@ index 61a7a589cf..daa6e02a6b 100644
 +     * * (add version2 for updating source without rebuilding binary)
 +     * * START
 +     */
-+    , NoranekoConstants.version2
-+    , NoranekoConstants.buildID2
++    , NoranekoConstants?.version2
++    , NoranekoConstants?.buildID2
 +    /**
 +     * * NORANEKO PATCH - 0.1.0
 +     * * [UPDATER]
@@ -196,7 +201,7 @@ index 61a7a589cf..daa6e02a6b 100644
    );
  }
  
-@@ -1979,6 +2142,19 @@ function updateIsAtLeastAsOldAsReadyUpdate(update) {
+@@ -1979,6 +2147,19 @@ function updateIsAtLeastAsOldAsReadyUpdate(update) {
      update,
      lazy.UM.internal.readyUpdate.appVersion,
      lazy.UM.internal.readyUpdate.buildID
@@ -216,7 +221,7 @@ index 61a7a589cf..daa6e02a6b 100644
    );
  }
  
-@@ -2307,6 +2483,19 @@ class Update {
+@@ -2307,6 +2488,19 @@ class Update {
      "type",
      "unsupported",
      "platformVersion",
@@ -236,7 +241,7 @@ index 61a7a589cf..daa6e02a6b 100644
    ];
  
    /**
-@@ -2404,6 +2593,19 @@ class Update {
+@@ -2404,6 +2598,19 @@ class Update {
            case "statusText":
            case "type":
            case "platformVersion":
@@ -256,7 +261,7 @@ index 61a7a589cf..daa6e02a6b 100644
              this[attr.name] = attr.value;
              break;
            default:
-@@ -2548,6 +2750,23 @@ class Update {
+@@ -2548,6 +2755,23 @@ class Update {
      if (this.elevationFailure) {
        update.setAttribute("elevationFailure", this.elevationFailure);
      }
@@ -280,7 +285,7 @@ index 61a7a589cf..daa6e02a6b 100644
  
      for (let [name, value] of Object.entries(this._properties)) {
        if (value.present && !this._attrNames.includes(name)) {
-@@ -3775,6 +3994,18 @@ export class UpdateService {
+@@ -3775,6 +3999,18 @@ export class UpdateService {
            } else if (
              !update.unsupported &&
              vc.compare(majorUpdate.appVersion, update.appVersion) <= 0
@@ -299,7 +304,7 @@ index 61a7a589cf..daa6e02a6b 100644
            ) {
              majorUpdate = update;
            }
-@@ -3785,6 +4016,18 @@ export class UpdateService {
+@@ -3785,6 +4021,18 @@ export class UpdateService {
            } else if (
              !update.unsupported &&
              vc.compare(minorUpdate.appVersion, update.appVersion) <= 0

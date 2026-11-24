@@ -33,6 +33,16 @@ name: Common Build Workflow
         type: boolean
         required: false
         default: false
+      native-debug-artifacts:
+        description: 'Versioned Linux x64 native Debug artifact for first-party consumers'
+        type: boolean
+        required: false
+        default: false
+      native-debug-validation:
+        description: 'Nonpublishing proof on the single approved candidate branch'
+        type: boolean
+        required: false
+        default: false
       pgo:
         description: 'Enable Profile-Guided Optimization'
         type: boolean
@@ -65,6 +75,10 @@ name: Common Build Workflow
       expected-build-id:
         description: 'Validated build ID used for this build'
         value: ${{ jobs.build.outputs.expected-build-id }}
+      native-debug-artifact-id:
+        value: ${{ jobs.build.outputs.qa3-support-id }}
+      native-debug-artifact-digest:
+        value: ${{ jobs.build.outputs.qa3-support-digest }}
       qa3-consumer-verdict:
         description: 'Cold Debug harness result; never product or publication qualification'
         value: ${{ jobs.qa3-consumer.outputs.verdict }}
@@ -74,6 +88,9 @@ jobs:
     name: Build ${{ inputs.platform }}-${{ inputs.arch }}
     runs-on: ${{ inputs.qa3-debug-tests && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 360
+    env:
+      RUNTIME_NATIVE_DEBUG_VALIDATION: ${{ toJSON(inputs.native-debug-validation) }}
+      RUNTIME_NATIVE_DEBUG_ARTIFACTS: ${{ toJSON(inputs.native-debug-artifacts) }}
     outputs:
       artifact-name: ${{ steps.build-identity.outputs.artifact-name }}
       artifact-id: ${{ steps.upload-primary-artifact.outputs.artifact-id }}
@@ -109,6 +126,10 @@ jobs:
         with:
           submodules: >-
             ${{ inputs.platform == 'mac' && 'recursive' || 'true' }}
+
+      - name: Reject incomplete native Debug route
+        if: (inputs.native-debug-artifacts && !inputs.qa3-debug-tests) || (inputs.native-debug-validation && (!inputs.native-debug-artifacts || !inputs.qa3-debug-tests))
+        run: exit 1
 
       - name: Validate opt-in Debug test route
         if: inputs.qa3-debug-tests
@@ -199,6 +220,12 @@ jobs:
             SCCACHE_GHA_ENABLED: 'on'
             SCCACHE_MAX_FRAME_LENGTH: '1048576'
 
+      - name: Verify strict native Debug source policy
+        if: inputs.qa3-debug-tests && inputs.native-debug-artifacts
+        env:
+          MOZ_BUILD_DATE: ${{ inputs.MOZ_BUILD_DATE }}
+        run: python3.12 .github/workflows/scripts/runtime_native_debug.py verify --source "$GITHUB_WORKSPACE"
+
       - name: Check scoped Debug packaging Python before build
         if: inputs.qa3-debug-tests
         env:
@@ -247,13 +274,13 @@ jobs:
         id: qa3-support
         uses: actions/upload-artifact@v4
         with:
-          name: qa3-support-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ inputs.native-debug-artifacts && format('{0}-linux-x86_64-v2-{1}-{2}-{3}-{4}', inputs.native-debug-validation && 'native-debug-validation' || 'native-debug', github.sha, inputs.MOZ_BUILD_DATE, github.run_id, github.run_attempt) || format('qa3-support-{0}-{1}', github.run_id, github.run_attempt) }}
           path: |
             ${{ runner.temp }}/qa3-hosted-producer/runtime.tar.xz
             ${{ runner.temp }}/qa3-hosted-producer/test-support.tar.gz
             ${{ runner.temp }}/qa3-hosted-producer/producer.json
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ inputs.native-debug-artifacts && !inputs.native-debug-validation && 90 || 1 }}
           compression-level: 0
 
       - name: Preserve original Debug packaging diagnostics
@@ -292,7 +319,7 @@ jobs:
             ${{ format('~/output/floorp-{0}-{1}-moz-artifact-bundle',
             inputs.platform, inputs.arch) }}
           if-no-files-found: error
-          retention-days: ${{ inputs.qa3-debug-tests && 1 || 0 }}
+          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}
           overwrite: true
 
       - name: Upload PGO profile generation package (Windows)
@@ -344,7 +371,7 @@ jobs:
             ${{ format('~/output/floorp-{0}-{1}-moz-artifact-bundle/dist-host',
             inputs.platform, inputs.arch) }}
           if-no-files-found: error
-          retention-days: ${{ inputs.qa3-debug-tests && 1 || 0 }}
+          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}
           overwrite: true
 
       - name: Upload application.ini for MAR
@@ -355,13 +382,13 @@ jobs:
             ${{ format('~/output/floorp-{0}-{1}-moz-artifact-bundle/floorp-application.ini',
             inputs.platform, inputs.arch) }}
           if-no-files-found: error
-          retention-days: ${{ inputs.qa3-debug-tests && 1 || 0 }}
+          retention-days: ${{ inputs.qa3-debug-tests && (!inputs.native-debug-artifacts || inputs.native-debug-validation) && 1 || 0 }}
           overwrite: true
 
   qa3-consumer:
     name: Cold Linux x64 Debug harness
     needs: build
-    if: inputs.qa3-debug-tests
+    if: inputs.qa3-debug-tests && !inputs.native-debug-artifacts
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
