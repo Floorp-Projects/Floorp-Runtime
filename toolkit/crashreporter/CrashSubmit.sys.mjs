@@ -127,19 +127,16 @@ Submitter.prototype = {
   submitForm: function Submitter_submitForm() {
     this.submittedExtraKeyVals = {};
 
-    if (!("ServerURL" in this.extraKeyVals)) {
-      return false;
-    }
     let serverURL = this.extraKeyVals.ServerURL;
     delete this.extraKeyVals.ServerURL;
-    if (!serverURL) {
-      return false;
-    }
 
     // Override the submission URL from the environment
     let envOverride = Services.env.get("MOZ_CRASHREPORTER_URL");
     if (envOverride != "") {
       serverURL = envOverride;
+    }
+    if (!serverURL) {
+      return false;
     }
 
     let xhr = new XMLHttpRequest();
