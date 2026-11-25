@@ -132,3 +132,8 @@ the repaired kit's 130 host tests are recorded in the
 [separate kit review](https://github.com/Floorp-Projects/Floorp/blob/c6df42ba68074ea47b70be55980b426020a2641f/docs/qa/kit-v0.3.0-review-fixes/README.md).
 Those counts are separate from the hosted run's 104 contracts and four native
 cases, and do not establish production qualification.
+
+The hosted Linux Debug harness now runs on pull requests as the cold-consumer
+gate described in [hosted-debug-expansion.md](hosted-debug-expansion.md); the
+consumer verifies the tabs/sessionstore native cohort plus canary fixtures and
+rejects failing, skipped or missing results.
