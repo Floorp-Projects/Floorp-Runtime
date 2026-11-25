@@ -132,6 +132,9 @@ Submitter.prototype = {
     }
     let serverURL = this.extraKeyVals.ServerURL;
     delete this.extraKeyVals.ServerURL;
+    if (!serverURL) {
+      return false;
+    }
 
     // Override the submission URL from the environment
     let envOverride = Services.env.get("MOZ_CRASHREPORTER_URL");
@@ -385,9 +388,21 @@ Submitter.prototype = {
   },
 };
 
+function canSubmitCrashReports() {
+  if (Services.env.get("MOZ_CRASHREPORTER_URL") != "") {
+    return true;
+  }
+  try {
+    return !!Services.appinfo.serverURL?.spec;
+  } catch (e) {
+    return false;
+  }
+}
+
 // ===================================
 // External API goes here
 export var CrashSubmit = {
+  canSubmit: canSubmitCrashReports,
   // A set of strings representing how a user submitted a given crash
   SUBMITTED_FROM_AUTO: "Auto",
   SUBMITTED_FROM_INFOBAR: "Infobar",

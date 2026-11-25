@@ -47,7 +47,9 @@ EnableProfileMigrator=1
 #if MOZ_CRASHREPORTER
 [Crash Reporter]
 Enabled=1
+#ifdef MOZ_CRASHREPORTER_HAS_URL
 ServerURL=@MOZ_CRASHREPORTER_URL@/submit?id=@MOZ_APP_ID@&version=@MOZ_APP_VERSION@&buildid=@MOZ_BUILDID@
+#endif
 #endif
 
 #if MOZ_UPDATER

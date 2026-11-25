@@ -687,7 +687,7 @@ export var TabCrashHandler = {
     }
 
     let dumpID = this.getDumpID(browser);
-    if (!dumpID) {
+    if (!dumpID || !lazy.CrashSubmit.canSubmit()) {
       return {
         hasReport: false,
       };

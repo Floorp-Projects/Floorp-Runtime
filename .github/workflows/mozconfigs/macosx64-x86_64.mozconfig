@@ -5,7 +5,8 @@ ac_add_options --with-distribution-id=app.floorp
 # this implies disable geckodriver, and puppeteer seems using the geckodriver impl.
 # so you should not disable test
 ac_add_options --disable-tests
-ac_add_options --disable-crashreporter
+ac_add_options --enable-crashreporter
+ac_add_options --with-crashreporter-url=
 ac_add_options --enable-bootstrap
 ac_add_options --enable-rust-simd
 #? https://bugzilla.mozilla.org/show_bug.cgi?id=1617793
