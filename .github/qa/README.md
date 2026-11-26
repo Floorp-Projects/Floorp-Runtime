@@ -137,3 +137,5 @@ The hosted Linux Debug harness now runs on pull requests as the cold-consumer
 gate described in [hosted-debug-expansion.md](hosted-debug-expansion.md); the
 consumer verifies the tabs/sessionstore native cohort plus canary fixtures and
 rejects failing, skipped or missing results.
+
+Status checks for the hosted cold-consumer harness are enforced by branch protection on `nora-0.2.0`.
