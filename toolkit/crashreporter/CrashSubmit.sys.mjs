@@ -127,9 +127,6 @@ Submitter.prototype = {
   submitForm: function Submitter_submitForm() {
     this.submittedExtraKeyVals = {};
 
-    if (!("ServerURL" in this.extraKeyVals)) {
-      return false;
-    }
     let serverURL = this.extraKeyVals.ServerURL;
     delete this.extraKeyVals.ServerURL;
 
@@ -137,6 +134,9 @@ Submitter.prototype = {
     let envOverride = Services.env.get("MOZ_CRASHREPORTER_URL");
     if (envOverride != "") {
       serverURL = envOverride;
+    }
+    if (!serverURL) {
+      return false;
     }
 
     let xhr = new XMLHttpRequest();
@@ -385,9 +385,21 @@ Submitter.prototype = {
   },
 };
 
+function canSubmitCrashReports() {
+  if (Services.env.get("MOZ_CRASHREPORTER_URL") != "") {
+    return true;
+  }
+  try {
+    return !!Services.appinfo.serverURL?.spec;
+  } catch (e) {
+    return false;
+  }
+}
+
 // ===================================
 // External API goes here
 export var CrashSubmit = {
+  canSubmit: canSubmitCrashReports,
   // A set of strings representing how a user submitted a given crash
   SUBMITTED_FROM_AUTO: "Auto",
   SUBMITTED_FROM_INFOBAR: "Infobar",

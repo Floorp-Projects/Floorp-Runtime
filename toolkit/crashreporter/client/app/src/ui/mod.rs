@@ -234,6 +234,7 @@ impl ReportCrashUI {
 
         let progress_visible = submit_state.mapped(|s| s == &SubmitState::InProgress);
         let hardware_test_checkbox_visible = data::Synchronized::new(self.config.run_memtest);
+        let submission_ui_visible = config.report_url.is_some();
 
         let details_window = ui! {
             Window["crash-details-window"] title(config.string("crashreporter-view-report-title"))
@@ -264,8 +265,9 @@ impl ReportCrashUI {
                         label(config.string("crashreporter-checkbox-test-hardware"))
                         enabled(&input_enabled) visible(&hardware_test_checkbox_visible),
                     Checkbox["send"] checked(send_report) label(config.string("crashreporter-checkbox-send-report"))
-                        enabled(&input_enabled),
-                    VBox margin_start(20) spacing(5) halign(Alignment::Fill) valign(Alignment::Fill) {
+                        enabled(&input_enabled) visible(submission_ui_visible),
+                    VBox margin_start(20) spacing(5) halign(Alignment::Fill) valign(Alignment::Fill)
+                        visible(submission_ui_visible) {
                         Button["details"] enabled(&send_report_and_input_enabled) on_click(cc! { (config, details, show_details, logic) move || {
                                 // Immediately display the window to feel responsive, even if forming
                                 // the details string takes a little while (it really shouldn't

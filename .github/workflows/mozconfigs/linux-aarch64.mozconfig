@@ -8,7 +8,8 @@ ac_add_options --with-app-basename=Floorp
 ## We should not disable tests if we attempt pgo.
 ## https://searchfox.org/firefox-release/search?q=intl_compare_against_brokered_complex_line_breaks&path=&case=true&regexp=false
 # ac_add_options --disable-tests
-ac_add_options --disable-crashreporter
+ac_add_options --enable-crashreporter
+ac_add_options --with-crashreporter-url=
 ac_add_options --enable-bootstrap
 ac_add_options --enable-rust-simd
 #? https://bugzilla.mozilla.org/show_bug.cgi?id=1617793

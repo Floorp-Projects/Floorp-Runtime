@@ -209,7 +209,7 @@ impl Config {
             .filter(|s| !s.is_empty())
             .collect();
 
-        self.report_url = std::env::var_os(ekey!("URL"));
+        self.report_url = std::env::var_os(ekey!("URL")).filter(|url| !url.is_empty());
 
         let mut args = std::env::args_os()
             // skip program name
@@ -266,7 +266,7 @@ impl Config {
 
         // Set report url if not already set.
         if self.report_url.is_none() {
-            if let Some(url) = extra["ServerURL"].as_str() {
+            if let Some(url) = extra["ServerURL"].as_str().filter(|url| !url.is_empty()) {
                 self.report_url = Some(url.into());
             }
         }
